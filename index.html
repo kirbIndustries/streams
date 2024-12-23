@@ -590,6 +590,24 @@ const initDB = () => {
             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
 
+function isAudioFile(file) {
+    const allowedTypes = [
+        'audio/mpeg',
+        'audio/wav',
+        'audio/flac',
+        'audio/ogg',
+        'audio/opus',
+        'audio/x-m4a',
+        'audio/aac',
+        'audio/webm',
+        'audio/x-flac'
+    ];
+    
+    const allowedExtensions = /\.(mp3|wav|flac|ogg|opus|m4a|aac)$/i;
+    
+    return allowedTypes.includes(file.type) || file.name.match(allowedExtensions);
+}
+        
 function generateRandomGradient() {
     // Array of pleasant colors that work well together
     const colors = [
@@ -648,11 +666,15 @@ async function preloadSongs(files) {
     }
 
     for (const file of filesArray) {
-        await new Promise((resolve, reject) => {
-            const transaction = db.transaction(['musicFiles'], 'readwrite');
-            const store = transaction.objectStore('musicFiles');
+        try {
+            // Get the file data first
+            const arrayBuffer = await file.arrayBuffer();
             
-            file.arrayBuffer().then(arrayBuffer => {
+            // Then create the transaction and store the data
+            await new Promise((resolve, reject) => {
+                const transaction = db.transaction(['musicFiles'], 'readwrite');
+                const store = transaction.objectStore('musicFiles');
+                
                 const song = {
                     id: Date.now() + Math.random(),
                     file: arrayBuffer.slice(0)
@@ -668,58 +690,59 @@ async function preloadSongs(files) {
                     console.error('Failed to store song:', event.target.error);
                     reject(event.target.error);
                 };
+                
+                transaction.oncomplete = () => {
+                    console.log('Transaction completed successfully');
+                    resolve();
+                };
+                
+                transaction.onerror = (event) => {
+                    console.error('Transaction failed:', event.target.error);
+                    reject(event.target.error);
+                };
             });
-            
-            transaction.oncomplete = () => {
-                console.log('Transaction completed successfully');
-                resolve();
-            };
-            
-            transaction.onerror = (event) => {
-                console.error('Transaction failed:', event.target.error);
-                reject(event.target.error);
-            };
-        });
+        } catch (error) {
+            console.error('Error processing file:', error);
+        }
     }
     
     console.log('All songs processed and stored successfully');
 }
 
 async function loadSong(song) {
-    if (song.url) {
-        URL.revokeObjectURL(song.url); // Clean up old URL
-    }
+    const transaction = db.transaction(['musicFiles'], 'readonly');
+    const store = transaction.objectStore('musicFiles');
+    const request = store.get(song.id);
     
-    try {
-        const transaction = db.transaction(['musicFiles'], 'readonly');
-        const store = transaction.objectStore('musicFiles');
-        const request = store.get(song.id);
-        
-        request.onsuccess = (event) => {
-            if (request.result && request.result.file) {
-                const blob = new Blob([request.result.file]);
-                song.url = URL.createObjectURL(blob);
-                audioPlayer.src = song.url;
-                audioPlayer.currentTime = 0;
-                musicTitle.textContent = song.name;
-                musicArtist.textContent = song.artist;
-
-                const backgroundElement = document.querySelector('.background-blur');
-                backgroundElement.classList.add('changing');
-                backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-                albumArtImg.src = song.albumArt;
-
-                setTimeout(() => {
-                    backgroundElement.classList.remove('changing');
-                }, 500);
-
-                currentSongId = song.id;
-                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+    request.onsuccess = (event) => {
+        if (request.result && request.result.file) {
+            // Check if it's a valid audio file
+            if (!isAudioFile(request.result.file)) {
+                console.error('Invalid audio file type');
+                playNextSong(); // Skip to next song
+                return;
             }
-        };
-    } catch (error) {
-        console.error('Error loading song:', error);
-    }
+
+            // Continue with loading the song
+            song.url = URL.createObjectURL(request.result.file);
+            audioPlayer.src = song.url;
+            audioPlayer.currentTime = 0;
+            musicTitle.textContent = song.name;
+            musicArtist.textContent = song.artist;
+
+            const backgroundElement = document.querySelector('.background-blur');
+            backgroundElement.classList.add('changing');
+            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+            albumArtImg.src = song.albumArt;
+
+            setTimeout(() => {
+                backgroundElement.classList.remove('changing');
+            }, 500);
+
+            currentSongId = song.id;
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+        }
+    };
 }
         
 async function extractMetadata(file) {
@@ -770,6 +793,12 @@ async function extractMetadata(file) {
         
 async function addSongs(files) {
     for (let file of files) {
+        // Skip non-audio files
+        if (!isAudioFile(file)) {
+            console.log(`Skipping non-audio file: ${file.name}`);
+            continue;
+        }
+
         // Extract metadata without consuming the file
         const metadata = await extractMetadata(file);
 
@@ -780,13 +809,14 @@ async function addSongs(files) {
             album: metadata.album || 'Unknown Album',
             year: metadata.year,
             albumArt: metadata.albumArt,
-            trackNumber: metadata.trackNumber
+            trackNumber: metadata.trackNumber,
+            type: file.type // Store the file type
         };
 
-        // Store the song file in IndexedDB without consuming it
+        // Store the song file in IndexedDB
         const transaction = db.transaction(['musicFiles'], 'readwrite');
         const store = transaction.objectStore('musicFiles');
-        store.put({ id: song.id, file }); // Save the original file directly
+        store.put({ id: song.id, file }); 
 
         songs.unshift(song);
     }
@@ -799,7 +829,15 @@ async function addSongs(files) {
 
 async function loadSongsFromStorage() {
     const storedSongs = JSON.parse(localStorage.getItem('songs')) || [];
-    songs = storedSongs.map(song => ({
+    songs = storedSongs.filter(song => {
+        // If we have type information, use it to filter
+        if (song.type) {
+            const dummyFile = { type: song.type, name: song.name };
+            return isAudioFile(dummyFile);
+        }
+        // If no type information, assume it's valid (for backward compatibility)
+        return true;
+    }).map(song => ({
         ...song,
         album: song.album || 'Unknown Album',
         artist: song.artist || 'Unknown Artist',
@@ -814,7 +852,7 @@ async function loadSongsFromStorage() {
         const request = store.get(firstSong.id);
         
         request.onsuccess = (event) => {
-            if (request.result) {
+            if (request.result && isAudioFile(request.result.file)) {
                 firstSong.url = URL.createObjectURL(request.result.file);
                 currentSongId = firstSong.id;
                 loadSong(firstSong);
