@@ -620,37 +620,33 @@ function isAudioFile(file) {
 }
         
 function generateRandomGradient() {
-    // Array of pleasant colors that work well together
     const colors = [
         '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeead',
         '#d4a5a5', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71',
         '#f1c40f', '#1abc9c', '#e67e22', '#7f8c8d', '#2c3e50'
     ];
     
-    // Pick two different random colors
     const color1 = colors[Math.floor(Math.random() * colors.length)];
     let color2;
     do {
         color2 = colors[Math.floor(Math.random() * colors.length)];
     } while (color1 === color2);
     
-    // Generate random angle for gradient
     const angle = Math.floor(Math.random() * 360);
     
-    // Create gradient data URL
     const canvas = document.createElement('canvas');
-    canvas.width = 300;
-    canvas.height = 300;
+    canvas.width = 500;
+    canvas.height = 500;
     const ctx = canvas.getContext('2d');
     
-    const gradient = ctx.createLinearGradient(0, 0, 300, 300);
+    const gradient = ctx.createLinearGradient(0, 0, 500, 500);
     gradient.addColorStop(0, color1);
     gradient.addColorStop(1, color2);
     
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 300, 300);
+    ctx.fillRect(0, 0, 500, 500);
     
-    return canvas.toDataURL('image/jpeg');
+    return canvas.toDataURL('image/jpeg', 0.9);
 }
         
 async function preloadSongs(files) {
@@ -764,14 +760,51 @@ async function extractMetadata(file) {
                 onSuccess: function(tag) {
                     let albumArt;
                     
-                    if (tag.tags.picture) {
-                        const { data, format } = tag.tags.picture;
-                        const base64String = data.reduce((acc, curr) => acc + String.fromCharCode(curr), '');
-                        albumArt = `data:${format};base64,${btoa(base64String)}`;
-                    } else {
-                        // Generate random gradient if no album art
-                        albumArt = generateRandomGradient();
-                    }
+if (tag.tags.picture) {
+    const { data, format } = tag.tags.picture;
+    const base64String = data.reduce((acc, curr) => acc + String.fromCharCode(curr), '');
+    const tempImage = new Image();
+    tempImage.src = `data:${format};base64,${btoa(base64String)}`;
+    
+    // Create canvas to resize image
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 500;
+    canvas.height = 500;
+    
+    // Wait for image to load before resizing
+    await new Promise(resolve => {
+        tempImage.onload = () => {
+            // Draw image maintaining aspect ratio
+            const aspectRatio = tempImage.width / tempImage.height;
+            let drawWidth = 500;
+            let drawHeight = 500;
+            let offsetX = 0;
+            let offsetY = 0;
+            
+            if (aspectRatio > 1) {
+                drawHeight = 500 / aspectRatio;
+                offsetY = (500 - drawHeight) / 2;
+            } else {
+                drawWidth = 500 * aspectRatio;
+                offsetX = (500 - drawWidth) / 2;
+            }
+            
+            // Fill background with black to prevent transparency
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, 500, 500);
+            
+            // Draw resized image
+            ctx.drawImage(tempImage, offsetX, offsetY, drawWidth, drawHeight);
+            resolve();
+        };
+    });
+    
+    albumArt = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG format with 90% quality
+} else {
+    // Generate random gradient if no album art
+    albumArt = generateRandomGradient();
+}
 
                     // Extract track number if available
                     let trackNumber = null;
