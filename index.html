@@ -590,16 +590,68 @@ const initDB = () => {
             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
 
-async function preloadSongs(files) {
-    const filesArray = Array.from(files);
+function generateRandomGradient() {
+    // Array of pleasant colors that work well together
+    const colors = [
+        '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeead',
+        '#d4a5a5', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71',
+        '#f1c40f', '#1abc9c', '#e67e22', '#7f8c8d', '#2c3e50'
+    ];
     
+    // Pick two different random colors
+    const color1 = colors[Math.floor(Math.random() * colors.length)];
+    let color2;
+    do {
+        color2 = colors[Math.floor(Math.random() * colors.length)];
+    } while (color1 === color2);
+    
+    // Generate random angle for gradient
+    const angle = Math.floor(Math.random() * 360);
+    
+    // Create gradient data URL
+    const canvas = document.createElement('canvas');
+    canvas.width = 300;
+    canvas.height = 300;
+    const ctx = canvas.getContext('2d');
+    
+    const gradient = ctx.createLinearGradient(0, 0, 300, 300);
+    gradient.addColorStop(0, color1);
+    gradient.addColorStop(1, color2);
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 300, 300);
+    
+    return canvas.toDataURL('image/jpeg');
+}
+        
+async function preloadSongs(files) {
+    const allowedTypes = [
+        'audio/mpeg',        // MP3
+        'audio/wav',         // WAV
+        'audio/flac',        // FLAC
+        'audio/ogg',         // OGG
+        'audio/opus',        // OPUS
+        'audio/x-m4a',       // M4A
+        'audio/aac',         // AAC
+        'audio/webm',        // WEBM audio
+        'audio/x-flac'       // Alternative FLAC MIME type
+    ];
+
+    const filesArray = Array.from(files).filter(file => 
+        allowedTypes.includes(file.type) || 
+        file.name.match(/\.(mp3|wav|flac|ogg|opus|m4a|aac)$/i)
+    );
+    
+    if (filesArray.length === 0) {
+        console.warn('No valid audio files found');
+        return;
+    }
+
     for (const file of filesArray) {
-        // Process one file at a time with its own transaction
         await new Promise((resolve, reject) => {
             const transaction = db.transaction(['musicFiles'], 'readwrite');
             const store = transaction.objectStore('musicFiles');
             
-            // Read the file first
             file.arrayBuffer().then(arrayBuffer => {
                 const song = {
                     id: Date.now() + Math.random(),
@@ -676,12 +728,15 @@ async function extractMetadata(file) {
             .setTagsToRead(['title', 'artist', 'album', 'year', 'picture', 'track'])
             .read({
                 onSuccess: function(tag) {
-                    let albumArt = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+                    let albumArt;
                     
                     if (tag.tags.picture) {
                         const { data, format } = tag.tags.picture;
                         const base64String = data.reduce((acc, curr) => acc + String.fromCharCode(curr), '');
                         albumArt = `data:${format};base64,${btoa(base64String)}`;
+                    } else {
+                        // Generate random gradient if no album art
+                        albumArt = generateRandomGradient();
                     }
 
                     // Extract track number if available
@@ -705,7 +760,7 @@ async function extractMetadata(file) {
                         artist: 'Unknown Artist',
                         album: 'Unknown Album',
                         year: '',
-                        albumArt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+                        albumArt: generateRandomGradient(),
                         trackNumber: null
                     });
                 }
