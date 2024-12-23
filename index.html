@@ -1220,6 +1220,71 @@ function groupSongsByAlbum(songs) {
     return Object.values(albums).sort((a, b) => b.dateAdded - a.dateAdded);
 }
 
+if ('mediaSession' in navigator) {
+    function updateMediaSessionMetadata(song) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: song.name,
+            artist: song.artist,
+            album: song.album,
+            artwork: [
+                { src: song.albumArt, sizes: '512x512', type: 'image/jpeg' }
+            ]
+        });
+    }
+
+    function setupMediaSessionActions() {
+        navigator.mediaSession.setActionHandler('play', () => {
+            playPauseAudio();
+        });
+
+        navigator.mediaSession.setActionHandler('pause', () => {
+            playPauseAudio();
+        });
+
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+            playPreviousSong();
+        });
+
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+            playNextSong();
+        });
+
+        navigator.mediaSession.setActionHandler('seekto', (event) => {
+            if (event.fastSeek && 'fastSeek' in audioPlayer) {
+                audioPlayer.fastSeek(event.seekTime);
+            } else {
+                audioPlayer.currentTime = event.seekTime;
+            }
+        });
+
+        navigator.mediaSession.setActionHandler('stop', () => {
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+            updateMediaSessionPlaybackState('paused');
+        });
+    }
+
+    function updateMediaSessionPlaybackState(state) {
+        navigator.mediaSession.playbackState = state;
+    }
+
+    // Call setup once at startup
+    setupMediaSessionActions();
+
+    // Call updateMediaSessionMetadata() whenever you load a new song
+    audioPlayer.addEventListener('play', () => {
+        if (currentSongId) {
+            const currentSong = songs.find(song => song.id === currentSongId);
+            updateMediaSessionMetadata(currentSong);
+            updateMediaSessionPlaybackState('playing');
+        }
+    });
+
+    audioPlayer.addEventListener('pause', () => {
+        updateMediaSessionPlaybackState('paused');
+    });
+}
+        
 musicUpload.addEventListener('change', async (e) => {
     if (e.target.files.length > 0) {
         try {
