@@ -296,6 +296,34 @@
     min-width: 25px;
 }
 
+.album-actions {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+}
+
+.delete-album {
+    background: rgba(255, 0, 0, 0.8);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.delete-album:hover {
+    background: rgba(255, 0, 0, 1);
+}
+
+.album-header {
+    position: relative;
+}
+        
 .song-title {
     flex-grow: 1;
 }
@@ -857,7 +885,8 @@ async function addSongs(files) {
             year: metadata.year,
             albumArt: metadata.albumArt,
             trackNumber: metadata.trackNumber,
-            type: file.type // Store the file type
+            type: file.type,
+            dateAdded: Date.now() // Add this line
         };
 
         // Store the song file in IndexedDB
@@ -914,13 +943,13 @@ async function loadSongsFromStorage() {
 async function saveSongs() {
     const transaction = db.transaction(['songs'], 'readwrite');
     const store = transaction.objectStore('songs');
-    
+
     return new Promise((resolve, reject) => {
         transaction.onerror = () => reject(transaction.error);
-        
+
         // Clear existing songs
         const clearRequest = store.clear();
-        
+
         clearRequest.onsuccess = () => {
             // Add all songs
             songs.forEach(song => {
@@ -932,19 +961,19 @@ async function saveSongs() {
                     year: song.year,
                     albumArt: song.albumArt,
                     trackNumber: song.trackNumber,
-                    type: song.type
+                    type: song.type,
                 });
             });
         };
-        
+
         transaction.oncomplete = () => resolve();
     });
 }
 
-function renderSongs(songsToRender = songs) {
-    const albums = groupSongsByAlbum(songsToRender);
-    
-    if (songsToRender.length === 0) {
+function renderSongs() {
+    const albums = groupSongsByAlbum(songs);
+
+    if (songs.length === 0) {
         musicList.innerHTML = `
             <div class="no-results">
                 <span class="material-symbols-rounded">search_off</span>
@@ -952,8 +981,8 @@ function renderSongs(songsToRender = songs) {
             </div>`;
         return;
     }
-    
-    musicList.innerHTML = Object.values(albums).map(album => `
+
+    musicList.innerHTML = albums.map(album => `
         <div class="album-section">
             <div class="album-header">
                 <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
@@ -961,6 +990,11 @@ function renderSongs(songsToRender = songs) {
                     <div class="album-name">${album.name}</div>
                     <div class="album-artist">${album.artist}</div>
                     <div class="album-year">${album.year}</div>
+                </div>
+                <div class="album-actions" style="display: none;">
+                    <button class="delete-album" data-album="${album.name}">
+                        <span class="material-symbols-rounded">delete</span>
+                    </button>
                 </div>
             </div>
             <div class="album-songs">
@@ -977,17 +1011,63 @@ function renderSongs(songsToRender = songs) {
         </div>
     `).join('');
 
+    attachEventListeners();
+}
+
+function attachEventListeners() {
+    // Toggle album actions visibility with Shift key
+    document.addEventListener('keydown', (e) => {
+        if (e.shiftKey) {
+            document.querySelectorAll('.album-actions').forEach(el => {
+                el.style.display = 'block';
+            });
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (!e.shiftKey) {
+            document.querySelectorAll('.album-actions').forEach(el => {
+                el.style.display = 'none';
+            });
+        }
+    });
+
+    // Delete album functionality
+    document.querySelectorAll('.delete-album').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const albumName = button.dataset.album;
+
+            if (confirm(`Are you sure you want to delete the album "${albumName}"?`)) {
+                const albumSongs = songs.filter(song => song.album === albumName);
+
+                const transaction = db.transaction(['musicFiles', 'songs'], 'readwrite');
+                const fileStore = transaction.objectStore('musicFiles');
+                const songStore = transaction.objectStore('songs');
+
+                albumSongs.forEach(song => {
+                    fileStore.delete(song.id);
+                    if (song.url) URL.revokeObjectURL(song.url);
+                });
+
+                songs = songs.filter(song => song.album !== albumName);
+                await saveSongs();
+                renderSongs();
+            }
+        });
+    });
+
+    // Play song functionality
     document.querySelectorAll('.music-item').forEach(item => {
         item.addEventListener('click', async () => {
             const songId = parseFloat(item.dataset.id);
             const song = songs.find(s => s.id === songId);
-            
+
             if (song) {
                 const transaction = db.transaction(['musicFiles'], 'readonly');
                 const store = transaction.objectStore('musicFiles');
                 const request = store.get(songId);
-                
-                request.onsuccess = (event) => {
+
+                request.onsuccess = () => {
                     if (request.result) {
                         song.url = URL.createObjectURL(request.result.file);
                         currentSongId = song.id;
@@ -998,6 +1078,10 @@ function renderSongs(songsToRender = songs) {
                         document.querySelector('.background-blur').classList.add('rotating');
                         renderSongs();
                     }
+                };
+
+                request.onerror = () => {
+                    console.error(`Failed to load song with ID: ${songId}`);
                 };
             }
         });
@@ -1102,7 +1186,6 @@ function searchSongs(query) {
 }
         
 function groupSongsByAlbum(songs) {
-    // Group songs by album
     const albums = {};
     songs.forEach(song => {
         const albumName = song.album || 'Unknown Album';
@@ -1112,13 +1195,18 @@ function groupSongsByAlbum(songs) {
                 artist: song.artist,
                 year: song.year,
                 albumArt: song.albumArt,
-                songs: []
+                songs: [],
+                dateAdded: song.dateAdded // Add this line
             };
+        }
+        // Update dateAdded to the most recent song added to this album
+        if (song.dateAdded > albums[albumName].dateAdded) {
+            albums[albumName].dateAdded = song.dateAdded;
         }
         albums[albumName].songs.push(song);
     });
-    
-    // Sort songs within each album by track number if available
+
+    // Sort songs within each album by track number
     for (let albumName in albums) {
         albums[albumName].songs.sort((a, b) => {
             if (a.trackNumber && b.trackNumber) {
@@ -1127,8 +1215,9 @@ function groupSongsByAlbum(songs) {
             return 0;
         });
     }
-    
-    return albums;
+
+    // Convert to array and sort by dateAdded
+    return Object.values(albums).sort((a, b) => b.dateAdded - a.dateAdded);
 }
 
 musicUpload.addEventListener('change', async (e) => {
