@@ -311,23 +311,23 @@
 
 .background-blur {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-size: 200%;
-    background-position: center; /* Centers the background image */
-    filter: blur(50px) brightness(0.3); 
+    top: -20%;
+    left: -20%;
+    width: 140%;
+    height: 140%;
+    background-position: center;
+    background-size: cover;
+    filter: blur(50px) brightness(0.3);
     transition: background-image 0.5s ease;
     z-index: -1;
-    transform: scale(1.1); /* Prevent blur edges from showing */
+    transform: scale(1.1);
 }
-        
+
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
 }
-        
+
 .background-blur.changing {
     animation: fadeIn 0.5s ease;
 }
@@ -335,7 +335,7 @@
 .background-blur.rotating {
     animation: rotate 40s linear infinite;
 }
-   
+
 @keyframes rotate {
     from {
         transform: scale(1.1) rotate(0deg);
@@ -563,7 +563,7 @@ overlay.addEventListener('click', () => {
         
 const initDB = () => {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('musicDB', 1);
+        const request = indexedDB.open('musicDB', 2); // Increment version to trigger upgrade
         
         request.onerror = (event) => {
             console.error('IndexedDB error:', event.target.error);
@@ -572,8 +572,18 @@ const initDB = () => {
 
         request.onupgradeneeded = (event) => {
             db = event.target.result;
+            
+            // Create store for music files if it doesn't exist
             if (!db.objectStoreNames.contains('musicFiles')) {
                 db.createObjectStore('musicFiles', { keyPath: 'id' });
+            }
+            
+            // Create store for song metadata if it doesn't exist
+            if (!db.objectStoreNames.contains('songs')) {
+                const songStore = db.createObjectStore('songs', { keyPath: 'id' });
+                songStore.createIndex('name', 'name');
+                songStore.createIndex('artist', 'artist');
+                songStore.createIndex('album', 'album');
             }
         };
 
@@ -821,7 +831,7 @@ async function addSongs(files) {
 
         songs.unshift(song);
     }
-    saveSongs();
+    await saveSongs();
     renderSongs();
     if (songs.length === files.length) {
         loadSong(songs[0]);
@@ -829,50 +839,70 @@ async function addSongs(files) {
 }
 
 async function loadSongsFromStorage() {
-    const storedSongs = JSON.parse(localStorage.getItem('songs')) || [];
-    songs = storedSongs.filter(song => {
-        // If we have type information, use it to filter
-        if (song.type) {
-            const dummyFile = { type: song.type, name: song.name };
-            return isAudioFile(dummyFile);
-        }
-        // If no type information, assume it's valid (for backward compatibility)
-        return true;
-    }).map(song => ({
-        ...song,
-        album: song.album || 'Unknown Album',
-        artist: song.artist || 'Unknown Artist',
-        year: song.year || '',
-        trackNumber: song.trackNumber || null
-    }));
+    const transaction = db.transaction(['songs', 'musicFiles'], 'readonly');
+    const songStore = transaction.objectStore('songs');
     
-    if (songs.length > 0) {
-        const firstSong = songs[0];
-        const transaction = db.transaction(['musicFiles'], 'readonly');
-        const store = transaction.objectStore('musicFiles');
-        const request = store.get(firstSong.id);
+    try {
+        const songsRequest = songStore.getAll();
         
-        request.onsuccess = (event) => {
-            if (request.result && isAudioFile(request.result.file)) {
-                firstSong.url = URL.createObjectURL(request.result.file);
-                currentSongId = firstSong.id;
-                loadSong(firstSong);
+        const loadedSongs = await new Promise((resolve, reject) => {
+            songsRequest.onsuccess = () => resolve(songsRequest.result);
+            songsRequest.onerror = () => reject(songsRequest.error);
+        });
+        
+        songs = loadedSongs.map(song => ({
+            ...song,
+            album: song.album || 'Unknown Album',
+            artist: song.artist || 'Unknown Artist',
+            year: song.year || '',
+            trackNumber: song.trackNumber || null
+        })).filter(song => {
+            if (song.type) {
+                const dummyFile = { type: song.type, name: song.name };
+                return isAudioFile(dummyFile);
             }
-        };
+            return true;
+        });
+        
+        if (songs.length > 0) {
+            const firstSong = songs[0];
+            await loadSong(firstSong);
+        }
+        
+        renderSongs();
+    } catch (error) {
+        console.error('Error loading songs:', error);
     }
-    renderSongs();
 }
   
-function saveSongs() {
-    localStorage.setItem('songs', JSON.stringify(songs.map(s => ({
-        id: s.id,
-        name: s.name,
-        artist: s.artist,
-        album: s.album,
-        year: s.year,
-        albumArt: s.albumArt,
-        trackNumber: s.trackNumber
-    }))));
+async function saveSongs() {
+    const transaction = db.transaction(['songs'], 'readwrite');
+    const store = transaction.objectStore('songs');
+    
+    return new Promise((resolve, reject) => {
+        transaction.onerror = () => reject(transaction.error);
+        
+        // Clear existing songs
+        const clearRequest = store.clear();
+        
+        clearRequest.onsuccess = () => {
+            // Add all songs
+            songs.forEach(song => {
+                store.add({
+                    id: song.id,
+                    name: song.name,
+                    artist: song.artist,
+                    album: song.album,
+                    year: song.year,
+                    albumArt: song.albumArt,
+                    trackNumber: song.trackNumber,
+                    type: song.type
+                });
+            });
+        };
+        
+        transaction.oncomplete = () => resolve();
+    });
 }
 
 function renderSongs(songsToRender = songs) {
@@ -1075,20 +1105,19 @@ musicUpload.addEventListener('change', async (e) => {
     }
 });
 
-        audioPlayer.addEventListener('timeupdate', () => {
-            if (currentSongId) {
-                const song = songs.find(s => s.id === currentSongId);
-                if (song) {
-                    song.timestamp = audioPlayer.currentTime;
-                    saveSongs();
-                }
-
-                const percentage = (audioPlayer.currentTime / audioPlayer.duration) * 100;
-                progress.style.width = `${percentage}%`;
-                currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
-                durationDisplay.textContent = formatTime(audioPlayer.duration);
-            }
-        });
+audioPlayer.addEventListener('timeupdate', async () => {
+    if (currentSongId) {
+        const song = songs.find(s => s.id === currentSongId);
+        if (song) {
+            song.timestamp = audioPlayer.currentTime;
+            await saveSongs();
+        }
+        const percentage = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+        progress.style.width = `${percentage}%`;
+        currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
+        durationDisplay.textContent = formatTime(audioPlayer.duration);
+    }
+});
 
         audioPlayer.addEventListener('ended', playNextSong);
 
