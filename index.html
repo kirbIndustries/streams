@@ -242,20 +242,6 @@
             cursor: pointer;
         }
 
-.background-blur {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-size: cover;
-    background-position: center;
-    filter: blur(50px) brightness(0.3);
-    transition: background-image 0.5s ease;
-    z-index: -1;
-    transform: scale(1.1); /* Prevent blur edges from showing */
-}
-
 .album-section {
     margin-bottom: 30px;
     background: rgba(102, 102, 102, 0.1);
@@ -320,6 +306,20 @@
 .music-item.active {
     background: rgba(255, 255, 255, 0.1);
 }
+
+.background-blur {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(50px) brightness(0.3);
+    transition: background-image 0.5s ease;
+    z-index: -1;
+    transform: scale(1.1); /* Prevent blur edges from showing */
+}
         
 @keyframes fadeIn {
     from { opacity: 0; }
@@ -333,7 +333,7 @@
 .background-blur.rotating {
     animation: rotate 40s linear infinite;
 }
-
+   
 @keyframes rotate {
     from {
         transform: scale(1.1) rotate(0deg);
@@ -341,6 +341,40 @@
     to {
         transform: scale(1.1) rotate(360deg);
     }
+}
+
+.search-container {
+    position: relative;
+    margin-bottom: 10px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 10px 35px 10px 15px;
+    border-radius: 25px;
+    border: 2px solid #666666;
+    background: transparent;
+    color: white;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.search-input:focus {
+    border-color: #bdd6ff;
+}
+
+.search-input::placeholder {
+    color: #666666;
+}
+
+.search-icon {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #666666;
+    pointer-events: none;
 }
         
 .material-symbols-rounded {
@@ -351,6 +385,24 @@
   'opsz' 24
 }
 
+.no-results {
+    color: #666666;
+    text-align: center;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.no-results .material-symbols-rounded {
+    font-size: 48px;
+}
+
+.no-results p {
+    font-size: 14px;
+}
+        
 @media (max-width: 768px) {
     .sidebar {
         position: fixed;
@@ -414,11 +466,15 @@
 <body>
     <div class="background-blur"></div>
     <div class="sidebar">
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search songs..." class="search-input">
+            <span class="material-symbols-rounded search-icon">search</span>
+        </div>
+        <div class="music-list"></div>
         <label class="upload-btn">
             <span class="material-symbols-rounded">add</span> Add Music
             <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple>
         </label>
-        <div class="music-list"></div>
     </div>
     <div class="main-content">
         <div class="album-art">
@@ -571,18 +627,16 @@ async function extractMetadata(file) {
         
 async function addSongs(files) {
     for (let file of files) {
-        console.log('Processing file:', file); // Debug log
         const metadata = await extractMetadata(file);
-        console.log('Processed metadata:', metadata); // Debug log
         
         const song = {
             id: Date.now() + Math.random(),
             name: metadata.title,
             artist: metadata.artist,
-            albumArt: metadata.albumArt,
-            album: metadata.album,
+            album: metadata.album || 'Unknown Album',
             year: metadata.year,
-            timestamp: 0
+            albumArt: metadata.albumArt,
+            trackNumber: metadata.trackNumber
         };
 
         // Store the song file in IndexedDB
@@ -601,10 +655,15 @@ async function addSongs(files) {
 
 async function loadSongsFromStorage() {
     const storedSongs = JSON.parse(localStorage.getItem('songs')) || [];
-    songs = storedSongs;
+    songs = storedSongs.map(song => ({
+        ...song,
+        album: song.album || 'Unknown Album',
+        artist: song.artist || 'Unknown Artist',
+        year: song.year || '',
+        trackNumber: song.trackNumber || null
+    }));
     
     if (songs.length > 0) {
-        // Load the first song
         const firstSong = songs[0];
         const transaction = db.transaction(['musicFiles'], 'readonly');
         const store = transaction.objectStore('musicFiles');
@@ -626,12 +685,24 @@ function saveSongs() {
         id: s.id,
         name: s.name,
         artist: s.artist,
-        albumArt: s.albumArt
+        album: s.album,
+        year: s.year,
+        albumArt: s.albumArt,
+        trackNumber: s.trackNumber
     }))));
 }
 
-function renderSongs() {
-    const albums = groupSongsByAlbum(songs);
+function renderSongs(songsToRender = songs) {
+    const albums = groupSongsByAlbum(songsToRender);
+    
+    if (songsToRender.length === 0) {
+        musicList.innerHTML = `
+            <div class="no-results">
+                <span class="material-symbols-rounded">search_off</span>
+                <p>No songs found</p>
+            </div>`;
+        return;
+    }
     
     musicList.innerHTML = Object.values(albums).map(album => `
         <div class="album-section">
@@ -672,6 +743,10 @@ function renderSongs() {
                         song.url = URL.createObjectURL(request.result.file);
                         currentSongId = song.id;
                         loadSong(song);
+                        audioPlayer.play();
+                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                        playPauseBtn.classList.add('playing');
+                        document.querySelector('.background-blur').classList.add('rotating');
                         renderSongs();
                     }
                 };
@@ -679,7 +754,7 @@ function renderSongs() {
         });
     });
 }
-        
+ 
 function loadSong(song) {
     audioPlayer.src = song.url;
     audioPlayer.currentTime = 0; // Always start from beginning
@@ -756,25 +831,42 @@ function playPreviousSong() {
     }
 }
 
+function searchSongs(query) {
+    if (!query) {
+        renderSongs(songs);
+        return;
+    }
+    
+    query = query.toLowerCase();
+    const filteredSongs = songs.filter(song => 
+        song.name.toLowerCase().includes(query) ||
+        song.artist.toLowerCase().includes(query) ||
+        song.album.toLowerCase().includes(query)
+    );
+    
+    renderSongs(filteredSongs);
+}
+        
 function groupSongsByAlbum(songs) {
     // Group songs by album
     const albums = {};
     songs.forEach(song => {
-        if (!albums[song.album]) {
-            albums[song.album] = {
-                name: song.album,
+        const albumName = song.album || 'Unknown Album';
+        if (!albums[albumName]) {
+            albums[albumName] = {
+                name: albumName,
                 artist: song.artist,
                 year: song.year,
                 albumArt: song.albumArt,
                 songs: []
             };
         }
-        albums[song.album].songs.push(song);
+        albums[albumName].songs.push(song);
     });
-
+    
     // Sort songs within each album by track number if available
-    for (let album in albums) {
-        albums[album].songs.sort((a, b) => {
+    for (let albumName in albums) {
+        albums[albumName].songs.sort((a, b) => {
             if (a.trackNumber && b.trackNumber) {
                 return a.trackNumber - b.trackNumber;
             }
@@ -845,6 +937,18 @@ volumeSlider.addEventListener('input', (e) => {
 
 audioPlayer.addEventListener('play', () => {
     document.querySelector('.background-blur').classList.add('rotating');
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('searchInput');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            searchSongs(e.target.value.trim());
+        }, 300); // Debounce search for better performance
+    });
 });
 
         renderSongs();
