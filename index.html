@@ -1025,7 +1025,7 @@ function loadSong(song) {
         
 function playNextSong() {
     const currentIndex = songs.findIndex(s => s.id === currentSongId);
-    const nextIndex = (currentIndex + 1) % songs.length;
+    const nextIndex = (currentIndex + 1) % songs.length; // Moving forward
     const nextSong = songs[nextIndex];
     
     const transaction = db.transaction(['musicFiles'], 'readonly');
@@ -1047,14 +1047,15 @@ function playNextSong() {
 }
 
 function playPreviousSong() {
+    const currentIndex = songs.findIndex(s => s.id === currentSongId);
+    
     if (audioPlayer.currentTime > 3) {
-        // If more than 5 seconds have played, restart current song
+        // If more than 3 seconds have played, restart current song
         audioPlayer.currentTime = 0;
         audioPlayer.play();
     } else {
-        // Go to previous song
-        const currentIndex = songs.findIndex(s => s.id === currentSongId);
-        const prevIndex = (currentIndex - 1 + songs.length) % songs.length;
+        // Calculate previous index, ensuring it wraps around correctly
+        const prevIndex = currentIndex === 0 ? songs.length - 1 : currentIndex - 1;
         const prevSong = songs[prevIndex];
         
         const transaction = db.transaction(['musicFiles'], 'readonly');
@@ -1174,11 +1175,30 @@ playPauseBtn.addEventListener('click', () => {
         nextBtn.addEventListener('click', playNextSong);
         prevBtn.addEventListener('click', playPreviousSong);
 
-        progressBar.addEventListener('click', (e) => {
-            const rect = progressBar.getBoundingClientRect();
-            const pos = (e.clientX - rect.left) / rect.width;
-            audioPlayer.currentTime = pos * audioPlayer.duration;
-        });
+progressBar.addEventListener('click', (e) => {
+    const rect = progressBar.getBoundingClientRect();
+    const clickPosition = e.clientX - rect.left;
+    const totalWidth = rect.width;
+    const seekPercentage = clickPosition / totalWidth;
+    
+    // Ensure the percentage is between 0 and 1
+    const clampedPercentage = Math.max(0, Math.min(1, seekPercentage));
+    
+    // Calculate the new time
+    const newTime = clampedPercentage * audioPlayer.duration;
+    
+    // Update the audio player time
+    if (isFinite(newTime)) {
+        audioPlayer.currentTime = newTime;
+        
+        // Update the progress bar visually
+        const percentage = (newTime / audioPlayer.duration) * 100;
+        progress.style.width = `${percentage}%`;
+        
+        // Update the time display
+        currentTimeDisplay.textContent = formatTime(newTime);
+    }
+});
 
 volumeSlider.addEventListener('input', (e) => {
     const volume = e.target.value / 100;
