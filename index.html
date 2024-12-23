@@ -600,6 +600,18 @@ const initDB = () => {
             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
 
+function updatePageTitle() {
+    if (currentSongId) {
+        const song = songs.find(s => s.id === currentSongId);
+        if (song) {
+            const currentTime = formatTime(audioPlayer.currentTime);
+            document.title = `${currentTime} • ${song.name} by ${song.artist}`;
+        }
+    } else {
+        document.title = 'Music Player'; // Default title when no song is playing
+    }
+}
+        
 function isAudioFile(file) {
     const allowedTypes = [
         'audio/mpeg',
@@ -719,6 +731,7 @@ async function loadSong(song) {
     const transaction = db.transaction(['musicFiles'], 'readonly');
     const store = transaction.objectStore('musicFiles');
     const request = store.get(song.id);
+    document.title = `${song.name} by ${song.artist}`;
     
     request.onsuccess = (event) => {
         if (request.result && request.result.file) {
@@ -1139,6 +1152,7 @@ audioPlayer.addEventListener('timeupdate', async () => {
         progress.style.width = `${percentage}%`;
         currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
         durationDisplay.textContent = formatTime(audioPlayer.duration);
+        updatePageTitle(); // Add this line
     }
 });
 
@@ -1181,6 +1195,15 @@ volumeSlider.addEventListener('input', (e) => {
 
 audioPlayer.addEventListener('play', () => {
     document.querySelector('.background-blur').classList.add('rotating');
+});
+
+audioPlayer.addEventListener('ended', () => {
+    document.title = 'Music Player';
+    playNextSong();
+});
+
+audioPlayer.addEventListener('pause', () => {
+    document.title = 'Music Player';
 });
 
 document.addEventListener('DOMContentLoaded', () => {
