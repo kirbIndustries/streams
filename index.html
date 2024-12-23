@@ -473,8 +473,8 @@
         </div>
         <div class="music-list"></div>
         <label class="upload-btn">
-            <span class="material-symbols-rounded">folder_open</span> Add Folder
-            <input type="file" webkitdirectory directory style="display: none" id="musicFolderUpload">
+            <span class="material-symbols-rounded">add</span> Add Music
+            <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple>
         </label>
     </div>
     <div class="main-content">
@@ -516,7 +516,7 @@
 
     <script>
         const musicList = document.querySelector('.music-list');
-        const musicFolderUpload = document.getElementById('musicFolderUpload');
+        const musicUpload = document.getElementById('musicUpload');
         const audioPlayer = new Audio();
         const playPauseBtn = document.getElementById('playPauseBtn');
         const prevBtn = document.getElementById('prevBtn');
@@ -541,27 +541,6 @@
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
 
-// Function for Directory Picker (File System API)
-async function requestPersistentAccess() {
-    try {
-        const directoryHandle = await window.showDirectoryPicker();
-        const files = [];
-
-        for await (const entry of directoryHandle.values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.mp3')) {
-                const file = await entry.getFile();
-                files.push(file);
-            }
-        }
-
-        if (files.length > 0) {
-            await addSongs(files);
-        }
-    } catch (err) {
-        console.error('Error accessing directory:', err);
-    }
-}
-        
 const overlay = document.createElement('div');
 overlay.className = 'overlay';
 
@@ -577,7 +556,7 @@ overlay.addEventListener('click', () => {
     document.querySelector('.sidebar').classList.remove('open');
     overlay.classList.remove('active');
 });
-
+        
 const initDB = () => {
     const request = indexedDB.open('musicDB', 1);
     
@@ -647,11 +626,10 @@ async function extractMetadata(file) {
     });
 }
         
-// Function to Load Songs into IndexedDB
 async function addSongs(files) {
     for (let file of files) {
         const metadata = await extractMetadata(file);
-
+        
         const song = {
             id: Date.now() + Math.random(),
             name: metadata.title,
@@ -665,11 +643,10 @@ async function addSongs(files) {
         // Store the song file in IndexedDB
         const transaction = db.transaction(['musicFiles'], 'readwrite');
         const store = transaction.objectStore('musicFiles');
-        await store.put({ id: song.id, file });
+        await store.put({ id: song.id, file: file });
 
         songs.unshift(song);
     }
-
     saveSongs();
     renderSongs();
     if (songs.length === files.length) {
@@ -727,7 +704,7 @@ function renderSongs(songsToRender = songs) {
             </div>`;
         return;
     }
-
+    
     musicList.innerHTML = Object.values(albums).map(album => `
         <div class="album-section">
             <div class="album-header">
@@ -901,9 +878,11 @@ function groupSongsByAlbum(songs) {
     return albums;
 }
 
-document.querySelector('.upload-btn').addEventListener('click', async () => {
-    await requestPersistentAccess();
-});
+        musicUpload.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                addSongs(e.target.files);
+            }
+        });
 
         audioPlayer.addEventListener('timeupdate', () => {
             if (currentSongId) {
@@ -973,13 +952,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-musicFolderUpload.addEventListener('change', async (e) => {
-    if (e.target.files.length > 0) {
-        const files = Array.from(e.target.files).filter(file => file.type.startsWith('audio/'));
-        await addSongs(files);
-    }
-});
-        
         renderSongs();
         initDB();
     </script>
