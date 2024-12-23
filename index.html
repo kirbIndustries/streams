@@ -29,7 +29,6 @@
         .sidebar {
             width: 300px;
             padding: 20px;
-            border-right: 2px solid #666666;
             display: flex;
             flex-direction: column;
             gap: 20px;
@@ -139,12 +138,12 @@
 }
 
 .music-artist {
-    color: #666666;
+    color: #f9f9f9;
     margin-bottom: 5px;
 }
 
 .music-album {
-    color: #666666;
+    color: #f9f9f9;
     font-size: 0.9em;
 }
         
@@ -210,7 +209,7 @@
         .time-info {
             display: flex;
             justify-content: space-between;
-            color: #666666;
+            color: #f9f9f9;
             font-size: 0.9rem;
         }
 
@@ -276,7 +275,7 @@
 }
 
 .album-artist, .album-year {
-    color: #666666;
+    color: #f9f9f9;
     font-size: 0.9em;
 }
 
@@ -293,7 +292,7 @@
 }
 
 .track-number {
-    color: #666666;
+    color: #f9f9f9;
     min-width: 25px;
 }
 
@@ -355,8 +354,8 @@
     width: 100%;
     padding: 10px 15px 10px 35px;
     border-radius: 25px;
-    border: 2px solid #666666;
-    background:  #666666;
+    border: none;
+    background: rgba(102, 102, 102, .4);
     color: white;
     font-size: 14px;
     outline: none;
@@ -365,7 +364,7 @@
 }
 
 .search-input:focus {
-    border-color: #f9f9f9;
+    border-color: rgba(102, 102, 102, .8);
 }
 
 .search-input::placeholder {
@@ -391,7 +390,7 @@
 }
 
 .no-results {
-    color: #666666;
+    color: #f9f9f9;
     text-align: center;
     padding: 20px;
     display: flex;
@@ -757,61 +756,52 @@ async function extractMetadata(file) {
         new jsmediatags.Reader(file)
             .setTagsToRead(['title', 'artist', 'album', 'year', 'picture', 'track'])
             .read({
-                onSuccess: function(tag) {
+                onSuccess: async function(tag) {  // Mark this callback as async
                     let albumArt;
+                    if (tag.tags.picture) {
+                        const { data, format } = tag.tags.picture;
+                        const base64String = data.reduce((acc, curr) => acc + String.fromCharCode(curr), '');
+                        const tempImage = new Image();
+                        tempImage.src = `data:${format};base64,${btoa(base64String)}`;
+                        
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = 500;
+                        canvas.height = 500;
+                        
+                        await new Promise(resolve => {
+                            tempImage.onload = () => {
+                                const aspectRatio = tempImage.width / tempImage.height;
+                                let drawWidth = 500;
+                                let drawHeight = 500;
+                                let offsetX = 0;
+                                let offsetY = 0;
+                                
+                                if (aspectRatio > 1) {
+                                    drawHeight = 500 / aspectRatio;
+                                    offsetY = (500 - drawHeight) / 2;
+                                } else {
+                                    drawWidth = 500 * aspectRatio;
+                                    offsetX = (500 - drawWidth) / 2;
+                                }
+                                
+                                ctx.fillStyle = '#000000';
+                                ctx.fillRect(0, 0, 500, 500);
+                                ctx.drawImage(tempImage, offsetX, offsetY, drawWidth, drawHeight);
+                                resolve();
+                            };
+                        });
+                        
+                        albumArt = canvas.toDataURL('image/jpeg', 0.9);
+                    } else {
+                        albumArt = generateRandomGradient();
+                    }
                     
-if (tag.tags.picture) {
-    const { data, format } = tag.tags.picture;
-    const base64String = data.reduce((acc, curr) => acc + String.fromCharCode(curr), '');
-    const tempImage = new Image();
-    tempImage.src = `data:${format};base64,${btoa(base64String)}`;
-    
-    // Create canvas to resize image
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 500;
-    canvas.height = 500;
-    
-    // Wait for image to load before resizing
-    await new Promise(resolve => {
-        tempImage.onload = () => {
-            // Draw image maintaining aspect ratio
-            const aspectRatio = tempImage.width / tempImage.height;
-            let drawWidth = 500;
-            let drawHeight = 500;
-            let offsetX = 0;
-            let offsetY = 0;
-            
-            if (aspectRatio > 1) {
-                drawHeight = 500 / aspectRatio;
-                offsetY = (500 - drawHeight) / 2;
-            } else {
-                drawWidth = 500 * aspectRatio;
-                offsetX = (500 - drawWidth) / 2;
-            }
-            
-            // Fill background with black to prevent transparency
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, 500, 500);
-            
-            // Draw resized image
-            ctx.drawImage(tempImage, offsetX, offsetY, drawWidth, drawHeight);
-            resolve();
-        };
-    });
-    
-    albumArt = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG format with 90% quality
-} else {
-    // Generate random gradient if no album art
-    albumArt = generateRandomGradient();
-}
-
-                    // Extract track number if available
                     let trackNumber = null;
                     if (tag.tags.track) {
                         trackNumber = parseInt(tag.tags.track.split('/')[0]) || null;
                     }
-
+                    
                     resolve({
                         title: tag.tags.title || file.name.replace(/\.[^/.]+$/, ""),
                         artist: tag.tags.artist || 'Unknown Artist',
