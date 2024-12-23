@@ -558,23 +558,27 @@ overlay.addEventListener('click', () => {
 });
         
 const initDB = () => {
-    const request = indexedDB.open('musicDB', 1);
-    
-    request.onerror = (event) => {
-        console.error('IndexedDB error:', event.target.error);
-    };
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('musicDB', 1);
+        
+        request.onerror = (event) => {
+            console.error('IndexedDB error:', event.target.error);
+            reject(event.target.error);
+        };
 
-    request.onupgradeneeded = (event) => {
-        db = event.target.result;
-        if (!db.objectStoreNames.contains('musicFiles')) {
-            db.createObjectStore('musicFiles', { keyPath: 'id' });
-        }
-    };
+        request.onupgradeneeded = (event) => {
+            db = event.target.result;
+            if (!db.objectStoreNames.contains('musicFiles')) {
+                db.createObjectStore('musicFiles', { keyPath: 'id' });
+            }
+        };
 
-    request.onsuccess = (event) => {
-        db = event.target.result;
-        loadSongsFromStorage();
-    };
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            loadSongsFromStorage();
+            resolve();
+        };
+    });
 };
 
         function formatTime(seconds) {
@@ -583,6 +587,106 @@ const initDB = () => {
             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
 
+async function preloadSongs(files) {
+    // Convert FileList or any iterable into an array
+    const filesArray = Array.from(files);
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['musicFiles'], 'readwrite');
+        const store = transaction.objectStore('musicFiles');
+
+        transaction.oncomplete = () => {
+            console.log('Transaction completed successfully.');
+            resolve();
+        };
+
+        transaction.onerror = (event) => {
+            console.error('Transaction failed:', event.target.error);
+            reject(event.target.error);
+        };
+
+        transaction.onabort = (event) => {
+            console.error('Transaction aborted:', event.target.error);
+            reject(event.target.error);
+        };
+
+        // Process files one by one and ensure the transaction remains active
+        let promises = filesArray.map(async (file) => {
+            try {
+                const arrayBuffer = await file.arrayBuffer(); // Read file data
+                const song = {
+                    id: Date.now() + Math.random(),
+                    file: arrayBuffer.slice(0), // Clone the ArrayBuffer
+                };
+
+                // Use a promise to ensure the 'put' operation happens while the transaction is active
+                return new Promise((resolve, reject) => {
+                    const request = store.put(song);
+
+                    request.onsuccess = () => {
+                        resolve();
+                    };
+
+                    request.onerror = (event) => {
+                        console.error('Failed to store song:', event.target.error);
+                        reject(event.target.error);
+                    };
+                });
+            } catch (error) {
+                console.error('Failed to process file:', error);
+                reject(error);
+            }
+        });
+
+        // Wait for all promises to resolve before completing the transaction
+        Promise.all(promises)
+            .then(() => {
+                console.log('All songs processed and stored successfully');
+                resolve();
+            })
+            .catch((error) => {
+                reject(error);
+            });
+    });
+}
+
+async function loadSong(song) {
+    if (song.url) {
+        URL.revokeObjectURL(song.url); // Clean up old URL
+    }
+    
+    try {
+        const transaction = db.transaction(['musicFiles'], 'readonly');
+        const store = transaction.objectStore('musicFiles');
+        const request = store.get(song.id);
+        
+        request.onsuccess = (event) => {
+            if (request.result && request.result.file) {
+                const blob = new Blob([request.result.file]);
+                song.url = URL.createObjectURL(blob);
+                audioPlayer.src = song.url;
+                audioPlayer.currentTime = 0;
+                musicTitle.textContent = song.name;
+                musicArtist.textContent = song.artist;
+
+                const backgroundElement = document.querySelector('.background-blur');
+                backgroundElement.classList.add('changing');
+                backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+                albumArtImg.src = song.albumArt;
+
+                setTimeout(() => {
+                    backgroundElement.classList.remove('changing');
+                }, 500);
+
+                currentSongId = song.id;
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+            }
+        };
+    } catch (error) {
+        console.error('Error loading song:', error);
+    }
+}
+        
 async function extractMetadata(file) {
     return new Promise((resolve) => {
         new jsmediatags.Reader(file)
@@ -628,8 +732,9 @@ async function extractMetadata(file) {
         
 async function addSongs(files) {
     for (let file of files) {
+        // Extract metadata without consuming the file
         const metadata = await extractMetadata(file);
-        
+
         const song = {
             id: Date.now() + Math.random(),
             name: metadata.title,
@@ -640,10 +745,10 @@ async function addSongs(files) {
             trackNumber: metadata.trackNumber
         };
 
-        // Store the song file in IndexedDB
+        // Store the song file in IndexedDB without consuming it
         const transaction = db.transaction(['musicFiles'], 'readwrite');
         const store = transaction.objectStore('musicFiles');
-        await store.put({ id: song.id, file: file });
+        store.put({ id: song.id, file }); // Save the original file directly
 
         songs.unshift(song);
     }
@@ -757,20 +862,16 @@ function renderSongs(songsToRender = songs) {
 }
  
 function loadSong(song) {
-    audioPlayer.src = song.url;
-    audioPlayer.currentTime = 0; // Always start from beginning
+    audioPlayer.src = song.url; // Use preloaded Blob URL
+    audioPlayer.currentTime = 0; // Always start from the beginning
     musicTitle.textContent = song.name;
     musicArtist.textContent = song.artist;
-    
-    // Update album art and background
+
     const backgroundElement = document.querySelector('.background-blur');
     backgroundElement.classList.add('changing');
-    
-    // Set the background image to the album art
     backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
     albumArtImg.src = song.albumArt;
-    
-    // Remove the animation class after transition
+
     setTimeout(() => {
         backgroundElement.classList.remove('changing');
     }, 500);
@@ -832,6 +933,14 @@ function playPreviousSong() {
     }
 }
 
+function cleanupBlobs() {
+    songs.forEach(song => {
+        if (song.url) {
+            URL.revokeObjectURL(song.url); // Revoke Blob URL
+        }
+    });
+}
+        
 function searchSongs(query) {
     if (!query) {
         renderSongs(songs);
@@ -878,11 +987,16 @@ function groupSongsByAlbum(songs) {
     return albums;
 }
 
-        musicUpload.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                addSongs(e.target.files);
-            }
-        });
+musicUpload.addEventListener('change', async (e) => {
+    if (e.target.files.length > 0) {
+        try {
+            await preloadSongs(e.target.files);
+            await addSongs(e.target.files); // Add this line to process the metadata
+        } catch (error) {
+            console.error('Error uploading songs:', error);
+        }
+    }
+});
 
         audioPlayer.addEventListener('timeupdate', () => {
             if (currentSongId) {
@@ -950,6 +1064,26 @@ document.addEventListener('DOMContentLoaded', () => {
             searchSongs(e.target.value.trim());
         }, 300); // Debounce search for better performance
     });
+});
+
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        await initDB();
+        
+        const searchInput = document.getElementById('searchInput');
+        let searchTimeout;
+
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchSongs(e.target.value.trim());
+            }, 300);
+        });
+        
+        renderSongs();
+    } catch (error) {
+        console.error('Failed to initialize application:', error);
+    }
 });
 
         renderSongs();
