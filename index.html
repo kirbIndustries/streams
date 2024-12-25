@@ -1271,6 +1271,29 @@ if ('mediaSession' in navigator) {
     // Call setup once at startup
     setupMediaSessionActions();
 
+window.addEventListener("beforeunload", () => {
+    if (currentSongId !== null) {
+        const currentProgress = audioPlayer.currentTime;
+        localStorage.setItem("currentSong", JSON.stringify({
+            id: currentSongId,
+            progress: currentProgress
+        }));
+    }
+});
+
+window.addEventListener("load", async () => {
+    const savedData = JSON.parse(localStorage.getItem("currentSong"));
+    if (savedData && savedData.id) {
+        const song = songs.find(s => s.id === savedData.id);
+        if (song) {
+            await loadSong(song); // Assuming loadSong sets the audioPlayer's `src`
+            audioPlayer.currentTime = savedData.progress || 0; // Set the saved progress
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+            audioPlayer.play(); // Auto-play the song at saved progress
+        }
+    }
+});
+    
     // Call updateMediaSessionMetadata() whenever you load a new song
     audioPlayer.addEventListener('play', () => {
         if (currentSongId) {
