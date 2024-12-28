@@ -780,40 +780,41 @@ async function preloadSongs(files) {
 }
 
 async function loadSong(song) {
-    const transaction = db.transaction(['musicFiles'], 'readonly');
-    const store = transaction.objectStore('musicFiles');
-    const request = store.get(song.id);
-    document.title = `${song.name} by ${song.artist}`;
-    
-    request.onsuccess = (event) => {
-        if (request.result && request.result.file) {
-            // Check if it's a valid audio file
-            if (!isAudioFile(request.result.file)) {
-                console.error('Invalid audio file type');
-                playNextSong(); // Skip to next song
-                return;
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['musicFiles'], 'readonly');
+        const store = transaction.objectStore('musicFiles');
+        const request = store.get(song.id);
+        
+        request.onsuccess = (event) => {
+            if (request.result && request.result.file) {
+                // Create blob URL from the stored file
+                const blob = new Blob([request.result.file], { type: song.type || 'audio/mpeg' });
+                song.url = URL.createObjectURL(blob);
+                
+                audioPlayer.src = song.url;
+                audioPlayer.currentTime = 0;
+                musicTitle.textContent = song.name;
+                musicArtist.textContent = song.artist;
+
+                const backgroundElement = document.querySelector('.background-blur');
+                backgroundElement.classList.add('changing');
+                backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+                albumArtImg.src = song.albumArt;
+
+                setTimeout(() => {
+                    backgroundElement.classList.remove('changing');
+                }, 500);
+
+                currentSongId = song.id;
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                resolve();
+            } else {
+                reject(new Error('Song file not found in database'));
             }
+        };
 
-            // Continue with loading the song
-            song.url = URL.createObjectURL(request.result.file);
-            audioPlayer.src = song.url;
-            audioPlayer.currentTime = 0;
-            musicTitle.textContent = song.name;
-            musicArtist.textContent = song.artist;
-
-            const backgroundElement = document.querySelector('.background-blur');
-            backgroundElement.classList.add('changing');
-            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-            albumArtImg.src = song.albumArt;
-
-            setTimeout(() => {
-                backgroundElement.classList.remove('changing');
-            }, 500);
-
-            currentSongId = song.id;
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-        }
-    };
+        request.onerror = () => reject(request.error);
+    });
 }
         
 async function extractMetadata(file) {
@@ -892,13 +893,11 @@ async function extractMetadata(file) {
         
 async function addSongs(files) {
     for (let file of files) {
-        // Skip non-audio files
         if (!isAudioFile(file)) {
             console.log(`Skipping non-audio file: ${file.name}`);
             continue;
         }
 
-        // Extract metadata without consuming the file
         const metadata = await extractMetadata(file);
 
         const song = {
@@ -909,21 +908,22 @@ async function addSongs(files) {
             year: metadata.year,
             albumArt: metadata.albumArt,
             trackNumber: metadata.trackNumber,
-            type: file.type,
-            dateAdded: Date.now() // Add this line
+            type: file.type, // Make sure to store the file type
+            dateAdded: Date.now()
         };
 
-        // Store the song file in IndexedDB
+        // Store the file as ArrayBuffer
+        const arrayBuffer = await file.arrayBuffer();
         const transaction = db.transaction(['musicFiles'], 'readwrite');
         const store = transaction.objectStore('musicFiles');
-        store.put({ id: song.id, file }); 
+        store.put({ id: song.id, file: arrayBuffer }); 
 
         songs.unshift(song);
     }
     await saveSongs();
     renderSongs();
     if (songs.length === files.length) {
-        loadSong(songs[0]);
+        await loadSong(songs[0]);
     }
 }
 
@@ -1306,15 +1306,22 @@ window.addEventListener("beforeunload", () => {
 });
 
 window.addEventListener("load", async () => {
-    const savedData = JSON.parse(localStorage.getItem("currentSong"));
-    if (savedData && savedData.id) {
-        const song = songs.find(s => s.id === savedData.id);
-        if (song) {
-            await loadSong(song); // Assuming loadSong sets the audioPlayer's `src`
-            audioPlayer.currentTime = savedData.progress || 0; // Set the saved progress
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            audioPlayer.play(); // Auto-play the song at saved progress
+    try {
+        await initDB(); // Make sure DB is initialized first
+        
+        const savedData = JSON.parse(localStorage.getItem("currentSong"));
+        if (savedData && savedData.id) {
+            const song = songs.find(s => s.id === savedData.id);
+            if (song) {
+                await loadSong(song);
+                audioPlayer.currentTime = savedData.progress || 0;
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                audioPlayer.play()
+                    .catch(error => console.error('Error playing audio:', error));
+            }
         }
+    } catch (error) {
+        console.error('Error loading saved song:', error);
     }
 });
     
