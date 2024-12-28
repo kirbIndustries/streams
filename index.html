@@ -1129,9 +1129,25 @@ function loadSong(song) {
         
 async function playNextSong() {
     const currentIndex = songs.findIndex(s => s.id === currentSongId);
-    const nextIndex = (currentIndex + 1) % songs.length; // Moving forward
+    const nextIndex = (currentIndex + 1) % songs.length;
     const nextSong = songs[nextIndex];
-    await playSong(nextSong);
+    
+    const transaction = db.transaction(['musicFiles'], 'readonly');
+    const store = transaction.objectStore('musicFiles');
+    const request = store.get(nextSong.id);
+    
+    request.onsuccess = (event) => {
+        if (request.result) {
+            nextSong.url = URL.createObjectURL(request.result.file);
+            loadSong(nextSong);
+            audioPlayer.currentTime = 0;
+            audioPlayer.play();
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+            playPauseBtn.classList.add('playing');
+            document.querySelector('.background-blur').classList.add('rotating');
+            renderSongs();
+        }
+    };
 }
 
 async function playPreviousSong() {
@@ -1145,7 +1161,23 @@ async function playPreviousSong() {
         // Calculate previous index, ensuring it wraps around correctly
         const prevIndex = currentIndex === 0 ? songs.length - 1 : currentIndex - 1;
         const prevSong = songs[prevIndex];
-        await playSong(prevSong);
+        
+        const transaction = db.transaction(['musicFiles'], 'readonly');
+        const store = transaction.objectStore('musicFiles');
+        const request = store.get(prevSong.id);
+        
+        request.onsuccess = (event) => {
+            if (request.result) {
+                prevSong.url = URL.createObjectURL(request.result.file);
+                loadSong(prevSong);
+                audioPlayer.currentTime = 0;
+                audioPlayer.play();
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                playPauseBtn.classList.add('playing');
+                document.querySelector('.background-blur').classList.add('rotating');
+                renderSongs();
+            }
+        };
     }
 }
 
