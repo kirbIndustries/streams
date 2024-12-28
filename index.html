@@ -956,11 +956,6 @@ async function loadSongsFromStorage() {
             return true;
         });
         
-        if (songs.length > 0) {
-            const firstSong = songs[0];
-            await loadSong(firstSong);
-        }
-        
         renderSongs();
     } catch (error) {
         console.error('Error loading songs:', error);
@@ -1471,6 +1466,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         await initDB();
         
+        // Set up search functionality
         const searchInput = document.getElementById('searchInput');
         let searchTimeout;
 
@@ -1481,14 +1477,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             }, 300);
         });
         
+        // First render the songs
         renderSongs();
+
+        // Then check for saved song
+        const savedData = localStorage.getItem("currentSong");
+        if (savedData) {
+            const parsedData = JSON.parse(savedData);
+            const song = songs.find(s => s.id === parsedData.id);
+            if (song) {
+                try {
+                    await loadSong(song);
+                    if (parsedData.progress) {
+                        audioPlayer.currentTime = parsedData.progress;
+                    }
+                } catch (error) {
+                    console.error('Error loading saved song:', error);
+                }
+            }
+        }
     } catch (error) {
         console.error('Failed to initialize application:', error);
     }
 });
-
-        renderSongs();
-        initDB();
     </script>
 </body>
 </html>
