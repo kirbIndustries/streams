@@ -16,11 +16,6 @@
             font-family: 'Inter', sans-serif;
         }
 
-:root {
-    --dynamic-color: rgba(102, 102, 102, 0.8);
-    --dynamic-color-light: rgba(102, 102, 102, 0.4);
-}
-        
         body {
             background-color: #1c1c1c;
             min-height: 100vh;
@@ -101,9 +96,9 @@
             transition: border-color 0.2s;
         }
 
-.music-item.active {
-    background-color: var(--dynamic-color) !important;
-}
+        .music-item.active {
+            background-color: rgba(102, 102, 102, .8) !important;
+        }
 
         .music-item:hover {
             background-color: rgba(102, 102, 102, .6);
@@ -182,7 +177,7 @@
 }
 
 .control-btn.play-pause {
-    background-color: var(--dynamic-color);
+    background-color: rgba(102, 102, 102, .8);
     width: 60px;
     height: 60px;
     font-size: 1.5rem;
@@ -194,10 +189,6 @@
     line-height: 0; /* Ensures icon isn't pushed out */
 }
 
-.control-btn.play-pause:hover {
-    background-color: var(--dynamic-color-light) !important;
-}
-        
 .control-btn.play-pause.playing {
     border-radius: 20px; /* Rounded square when playing */
 }
@@ -390,7 +381,7 @@
 }
 
 .background-blur.rotating {
-    animation: rotate var(--rotation-duration) linear infinite forwards;
+    animation: rotate 40s linear infinite;
 }
 
 @keyframes rotate {
@@ -601,29 +592,6 @@
         let currentSongId = null;
         let db;
 
-const existingStyle = document.getElementById('rotation-style');
-if (existingStyle) {
-    existingStyle.remove();
-}
-        
-const style = document.createElement('style');
-style.id = 'rotation-style';
-style.textContent = `
-    @keyframes rotateBackground {
-        from {
-            transform: translate(-50%, -50%) scale(1.42) rotate(0deg);
-        }
-        to {
-            transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
-        }
-    }
-
-    .background-blur.rotating {
-        animation: rotateBackground var(--rotation-duration) linear infinite forwards !important;
-    }
-`;
-document.head.appendChild(style);
-        
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
 
@@ -816,7 +784,7 @@ async function loadSong(song) {
     const request = store.get(song.id);
     document.title = `${song.name} by ${song.artist}`;
     
-    request.onsuccess = async (event) => {
+    request.onsuccess = (event) => {
         if (request.result && request.result.file) {
             // Check if it's a valid audio file
             if (!isAudioFile(request.result.file)) {
@@ -825,59 +793,25 @@ async function loadSong(song) {
                 return;
             }
 
-            try {
-                // Create AudioContext for BPM detection
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const fileBuffer = await request.result.file.arrayBuffer();
-    const audioBuffer = await audioContext.decodeAudioData(fileBuffer);
-    const bpm = await detectBPM(audioBuffer);
+            // Continue with loading the song
+            song.url = URL.createObjectURL(request.result.file);
+            audioPlayer.src = song.url;
+            audioPlayer.currentTime = 0;
+            musicTitle.textContent = song.name;
+            musicArtist.textContent = song.artist;
 
-    // Calculate rotation duration and log for debugging
-    const rotationDuration = `${240000 / bpm}ms`;
-    console.log('BPM:', bpm, 'Rotation Duration:', rotationDuration);
-    
-    // Apply the rotation duration
-    document.documentElement.style.setProperty('--rotation-duration', rotationDuration);
+            const backgroundElement = document.querySelector('.background-blur');
+            backgroundElement.classList.add('changing');
+            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+            albumArtImg.src = song.albumArt;
 
-                // Continue with loading the song
-                song.url = URL.createObjectURL(request.result.file);
-                audioPlayer.src = song.url;
-                audioPlayer.currentTime = 0;
-                musicTitle.textContent = song.name;
-                musicArtist.textContent = song.artist;
-                
-                const backgroundElement = document.querySelector('.background-blur');
-                backgroundElement.classList.add('changing');
-                backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-                albumArtImg.src = song.albumArt;
-
-                // Extract and apply dominant color
-                const dominantColor = await getDominantColor(song.albumArt);
-                const rgbaColor = `rgba(${dominantColor.r}, ${dominantColor.g}, ${dominantColor.b}, 0.8)`;
-                const rgbaColorLight = `rgba(${dominantColor.r}, ${dominantColor.g}, ${dominantColor.b}, 0.4)`;
-                
-                // Update CSS variables
-                document.documentElement.style.setProperty('--dynamic-color', rgbaColor);
-                document.documentElement.style.setProperty('--dynamic-color-light', rgbaColorLight);
-            } catch (error) {
-                console.error('Error:', error);
-                // Fallback to default colors and rotation speed
-                document.documentElement.style.setProperty('--dynamic-color', 'rgba(102, 102, 102, 0.8)');
-                document.documentElement.style.setProperty('--dynamic-color-light', 'rgba(102, 102, 102, 0.4)');
-                console.error('Error in BPM detection:', error);
-                document.documentElement.style.setProperty('--rotation-duration', '40s');
-            }
-            
             setTimeout(() => {
                 backgroundElement.classList.remove('changing');
             }, 500);
-            
+
             currentSongId = song.id;
             playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
         }
-    };
-    request.onerror = (error) => {
-        console.error('Error loading song:', error);
     };
 }
         
@@ -1357,112 +1291,6 @@ if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = state;
     }
 
-function getDominantColor(imageSrc) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.src = imageSrc;
-        
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            
-            ctx.drawImage(img, 0, 0);
-            
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            const colorCounts = {};
-            let dominantColor = { r: 0, g: 0, b: 0, count: 0 };
-            
-            // Sample every 4th pixel for performance
-            for (let i = 0; i < imageData.length; i += 16) {
-                const r = imageData[i];
-                const g = imageData[i + 1];
-                const b = imageData[i + 2];
-                const rgb = `${r},${g},${b}`;
-                
-                if (!colorCounts[rgb]) {
-                    colorCounts[rgb] = 0;
-                }
-                colorCounts[rgb]++;
-                
-                if (colorCounts[rgb] > dominantColor.count) {
-                    dominantColor = { r, g, b, count: colorCounts[rgb] };
-                }
-            }
-            
-            resolve(dominantColor);
-        };
-    });
-}
-
-function detectBPM(audioBuffer) {
-    return new Promise((resolve) => {
-        const channelData = audioBuffer.getChannelData(0);
-        const sampleRate = audioBuffer.sampleRate;
-        
-        // Work with a smaller sample for performance
-        const samples = Math.min(channelData.length, sampleRate * 30); // 30 seconds max
-        const data = channelData.slice(0, samples);
-        
-        // Normalize and get energy over time
-        let energyValues = [];
-        const windowSize = Math.floor(sampleRate / 10); // 100ms windows
-        
-        for (let i = 0; i < data.length; i += windowSize) {
-            let energy = 0;
-            for (let j = 0; j < windowSize && (i + j) < data.length; j++) {
-                energy += Math.abs(data[i + j]);
-            }
-            energyValues.push(energy);
-        }
-        
-        // Find peaks in energy
-        let peaks = [];
-        const minPeakDistance = 3; // Minimum distance between peaks
-        for (let i = 1; i < energyValues.length - 1; i++) {
-            if (energyValues[i] > energyValues[i - 1] && 
-                energyValues[i] > energyValues[i + 1]) {
-                
-                // Check if it's the highest peak in the vicinity
-                let isHighest = true;
-                for (let j = Math.max(0, i - minPeakDistance); 
-                     j < Math.min(energyValues.length, i + minPeakDistance); j++) {
-                    if (j !== i && energyValues[j] > energyValues[i]) {
-                        isHighest = false;
-                        break;
-                    }
-                }
-                
-                if (isHighest) {
-                    peaks.push(i);
-                }
-            }
-        }
-        
-        // Calculate intervals between peaks
-        let intervals = [];
-        for (let i = 1; i < peaks.length; i++) {
-            intervals.push(peaks[i] - peaks[i - 1]);
-        }
-        
-        if (intervals.length > 0) {
-            // Convert intervals to BPM
-            const averageInterval = intervals.reduce((a, b) => a + b) / intervals.length;
-            const bpm = Math.round(60 / (averageInterval * windowSize / sampleRate));
-            
-            // Constrain to reasonable BPM range
-            const finalBPM = Math.min(Math.max(bpm, 60), 180);
-            console.log('Detected BPM:', finalBPM); // Debug output
-            resolve(finalBPM);
-        } else {
-            console.log('Failed to detect BPM, using default'); // Debug output
-            resolve(120); // Default BPM
-        }
-    });
-}
-
     // Call setup once at startup
     setupMediaSessionActions();
 
@@ -1495,13 +1323,11 @@ window.addEventListener("load", async () => {
             const currentSong = songs.find(song => song.id === currentSongId);
             updateMediaSessionMetadata(currentSong);
             updateMediaSessionPlaybackState('playing');
-            document.querySelector('.background-blur').classList.add('rotating');
         }
     });
 
     audioPlayer.addEventListener('pause', () => {
         updateMediaSessionPlaybackState('paused');
-        document.querySelector('.background-blur').classList.remove('rotating');
     });
 }
         
