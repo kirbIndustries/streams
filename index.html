@@ -601,6 +601,23 @@
         let currentSongId = null;
         let db;
 
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes rotateBackground {
+        from {
+            transform: translate(-50%, -50%) scale(1.42) rotate(0deg);
+        }
+        to {
+            transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
+        }
+    }
+
+    .background-blur.rotating {
+        animation: rotateBackground var(--rotation-duration, 40s) linear infinite;
+    }
+`;
+document.head.appendChild(style);
+        
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
 
@@ -1372,28 +1389,48 @@ function getDominantColor(imageSrc) {
 
 function detectBPM(audioBuffer) {
     return new Promise((resolve) => {
-        // Get audio data
         const channelData = audioBuffer.getChannelData(0);
         const sampleRate = audioBuffer.sampleRate;
+        const peaks = [];
         
-        // Variables for BPM calculation
-        const intervals = [];
-        let prevPeak = 0;
-        let threshold = 0.7; // Adjustable threshold for peak detection
-        
-        // Find peaks in the waveform
-        for (let i = 1; i < channelData.length - 1; i++) {
-            if (channelData[i] > threshold && 
-                channelData[i] > channelData[i-1] && 
-                channelData[i] > channelData[i+1]) {
-                
-                const interval = (i - prevPeak) / sampleRate;
-                if (interval > 0.2) { // Ignore peaks too close together
-                    intervals.push(interval);
-                    prevPeak = i;
-                }
+        // Find peaks in audio data
+        let max = 0;
+        for (let i = 1024; i < channelData.length - 1024; i += 1024) {
+            let sum = 0;
+            for (let j = 0; j < 1024; j++) {
+                sum += Math.abs(channelData[i + j]);
             }
+            const average = sum / 1024;
+            max = Math.max(max, average);
+            peaks.push(average);
         }
+        
+        // Calculate intervals between peaks
+        const threshold = max * 0.75;
+        const intervals = [];
+        let lastPeak = 0;
+        
+        peaks.forEach((peak, index) => {
+            if (peak > threshold && index - lastPeak > 1) {
+                if (lastPeak !== 0) {
+                    intervals.push(index - lastPeak);
+                }
+                lastPeak = index;
+            }
+        });
+        
+        // Calculate BPM
+        if (intervals.length > 2) {
+            const averageInterval = intervals.reduce((a, b) => a + b) / intervals.length;
+            const bpm = Math.round(60 / (averageInterval * 1024 / sampleRate));
+            
+            // Limit BPM to reasonable range (60-180)
+            resolve(Math.min(Math.max(bpm, 60), 180));
+        } else {
+            resolve(120); // Default BPM if detection fails
+        }
+    });
+}
         
         // Calculate average interval between peaks
         if (intervals.length > 0) {
@@ -1441,11 +1478,13 @@ window.addEventListener("load", async () => {
             const currentSong = songs.find(song => song.id === currentSongId);
             updateMediaSessionMetadata(currentSong);
             updateMediaSessionPlaybackState('playing');
+            document.querySelector('.background-blur').classList.add('rotating');
         }
     });
 
     audioPlayer.addEventListener('pause', () => {
         updateMediaSessionPlaybackState('paused');
+        document.querySelector('.background-blur').classList.remove('rotating');
     });
 }
         
