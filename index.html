@@ -645,11 +645,12 @@ const initDB = () => {
     });
 };
 
-        function formatTime(seconds) {
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = Math.floor(seconds % 60);
-            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-        }
+function formatTime(seconds) {
+    if (isNaN(seconds)) return '0:00';
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
 
 function updatePageTitle() {
     if (currentSongId) {
@@ -1342,8 +1343,15 @@ musicUpload.addEventListener('change', async (e) => {
     }
 });
 
-audioPlayer.addEventListener('timeupdate', async () => {
+audioPlayer.addEventListener('loadedmetadata', () => {
     if (currentSongId) {
+        durationDisplay.textContent = formatTime(audioPlayer.duration);
+        currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
+    }
+});
+        
+audioPlayer.addEventListener('timeupdate', async () => {
+    if (currentSongId && !isNaN(audioPlayer.duration)) {
         const song = songs.find(s => s.id === currentSongId);
         if (song) {
             song.timestamp = audioPlayer.currentTime;
@@ -1353,7 +1361,7 @@ audioPlayer.addEventListener('timeupdate', async () => {
         progress.style.width = `${percentage}%`;
         currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
         durationDisplay.textContent = formatTime(audioPlayer.duration);
-        updatePageTitle(); // Add this line
+        updatePageTitle();
     }
 });
 
