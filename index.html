@@ -787,19 +787,25 @@ async function loadSong(song) {
         
         request.onsuccess = (event) => {
             if (request.result && request.result.file) {
-                // Create blob from ArrayBuffer
-                const blob = new Blob([request.result.file], { type: song.type || 'audio/mpeg' });
+                // Create blob with proper MIME type
+                const blob = new Blob([request.result.file], { 
+                    type: song.type || 'audio/mpeg' 
+                });
                 
                 // Revoke previous URL if it exists
                 if (song.url) {
                     URL.revokeObjectURL(song.url);
                 }
                 
+                // Create new URL from blob
                 song.url = URL.createObjectURL(blob);
+                
+                // Set the audio source and metadata
                 audioPlayer.src = song.url;
                 musicTitle.textContent = song.name;
                 musicArtist.textContent = song.artist;
 
+                // Update background
                 const backgroundElement = document.querySelector('.background-blur');
                 backgroundElement.classList.add('changing');
                 backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
@@ -810,7 +816,6 @@ async function loadSong(song) {
                 }, 500);
 
                 currentSongId = song.id;
-                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
                 resolve(song);
             } else {
                 reject(new Error('Song file not found in database'));
@@ -819,6 +824,19 @@ async function loadSong(song) {
 
         request.onerror = () => reject(request.error);
     });
+}
+
+async function playSong(song) {
+    try {
+        await loadSong(song);
+        await audioPlayer.play();
+        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+        playPauseBtn.classList.add('playing');
+        document.querySelector('.background-blur').classList.add('rotating');
+        renderSongs();
+    } catch (error) {
+        console.error('Error playing song:', error);
+    }
 }
         
 async function extractMetadata(file) {
@@ -1079,37 +1097,17 @@ function attachEventListeners() {
     });
 
     // Play song functionality
-    document.querySelectorAll('.music-item').forEach(item => {
-        item.addEventListener('click', async () => {
-            const songId = parseFloat(item.dataset.id);
-            const song = songs.find(s => s.id === songId);
-
-            if (song) {
-                const transaction = db.transaction(['musicFiles'], 'readonly');
-                const store = transaction.objectStore('musicFiles');
-                const request = store.get(songId);
-
-                request.onsuccess = () => {
-                    if (request.result) {
-                        song.url = URL.createObjectURL(request.result.file);
-                        currentSongId = song.id;
-                        loadSong(song);
-                        audioPlayer.play();
-                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                        playPauseBtn.classList.add('playing');
-                        document.querySelector('.background-blur').classList.add('rotating');
-                        renderSongs();
-                    }
-                };
-
-                request.onerror = () => {
-                    console.error(`Failed to load song with ID: ${songId}`);
-                };
-            }
-        });
+   document.querySelectorAll('.music-item').forEach(item => {
+    item.addEventListener('click', async () => {
+        const songId = parseFloat(item.dataset.id);
+        const song = songs.find(s => s.id === songId);
+        if (song) {
+            await playSong(song);
+        }
     });
+});
 }
- 
+
 function loadSong(song) {
     audioPlayer.src = song.url; // Use preloaded Blob URL
     audioPlayer.currentTime = 0; // Always start from the beginning
@@ -1129,30 +1127,14 @@ function loadSong(song) {
     playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
 }
         
-function playNextSong() {
+async function playNextSong() {
     const currentIndex = songs.findIndex(s => s.id === currentSongId);
     const nextIndex = (currentIndex + 1) % songs.length; // Moving forward
     const nextSong = songs[nextIndex];
-    
-    const transaction = db.transaction(['musicFiles'], 'readonly');
-    const store = transaction.objectStore('musicFiles');
-    const request = store.get(nextSong.id);
-    
-    request.onsuccess = (event) => {
-        if (request.result) {
-            nextSong.url = URL.createObjectURL(request.result.file);
-            loadSong(nextSong);
-            audioPlayer.currentTime = 0;
-            audioPlayer.play();
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            playPauseBtn.classList.add('playing');
-            document.querySelector('.background-blur').classList.add('rotating');
-            renderSongs();
-        }
-    };
+    await playSong(nextSong);
 }
 
-function playPreviousSong() {
+async function playPreviousSong() {
     const currentIndex = songs.findIndex(s => s.id === currentSongId);
     
     if (audioPlayer.currentTime > 3) {
@@ -1163,23 +1145,7 @@ function playPreviousSong() {
         // Calculate previous index, ensuring it wraps around correctly
         const prevIndex = currentIndex === 0 ? songs.length - 1 : currentIndex - 1;
         const prevSong = songs[prevIndex];
-        
-        const transaction = db.transaction(['musicFiles'], 'readonly');
-        const store = transaction.objectStore('musicFiles');
-        const request = store.get(prevSong.id);
-        
-        request.onsuccess = (event) => {
-            if (request.result) {
-                prevSong.url = URL.createObjectURL(request.result.file);
-                loadSong(prevSong);
-                audioPlayer.currentTime = 0;
-                audioPlayer.play();
-                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                playPauseBtn.classList.add('playing');
-                document.querySelector('.background-blur').classList.add('rotating');
-                renderSongs();
-            }
-        };
+        await playSong(prevSong);
     }
 }
 
@@ -1443,7 +1409,7 @@ audioPlayer.addEventListener('play', () => {
 
 audioPlayer.addEventListener('ended', () => {
     document.title = 'Music Player';
-    playNextSong();
+    playNextSong().catch(error => console.error('Error playing next song:', error));
 });
 
 audioPlayer.addEventListener('pause', () => {
