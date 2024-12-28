@@ -787,16 +787,12 @@ async function loadSong(song) {
         
         request.onsuccess = (event) => {
             if (request.result && request.result.file) {
-                // Create blob from ArrayBuffer
+                // Create blob URL from the stored file
                 const blob = new Blob([request.result.file], { type: song.type || 'audio/mpeg' });
-                
-                // Revoke previous URL if it exists
-                if (song.url) {
-                    URL.revokeObjectURL(song.url);
-                }
-                
                 song.url = URL.createObjectURL(blob);
+                
                 audioPlayer.src = song.url;
+                audioPlayer.currentTime = 0;
                 musicTitle.textContent = song.name;
                 musicArtist.textContent = song.artist;
 
@@ -811,7 +807,7 @@ async function loadSong(song) {
 
                 currentSongId = song.id;
                 playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-                resolve(song);
+                resolve();
             } else {
                 reject(new Error('Song file not found in database'));
             }
@@ -903,7 +899,6 @@ async function addSongs(files) {
         }
 
         const metadata = await extractMetadata(file);
-        const arrayBuffer = await file.arrayBuffer();
 
         const song = {
             id: Date.now() + Math.random(),
@@ -913,13 +908,15 @@ async function addSongs(files) {
             year: metadata.year,
             albumArt: metadata.albumArt,
             trackNumber: metadata.trackNumber,
-            type: file.type,
+            type: file.type, // Make sure to store the file type
             dateAdded: Date.now()
         };
 
+        // Store the file as ArrayBuffer
+        const arrayBuffer = await file.arrayBuffer();
         const transaction = db.transaction(['musicFiles'], 'readwrite');
         const store = transaction.objectStore('musicFiles');
-        store.put({ id: song.id, file: arrayBuffer });
+        store.put({ id: song.id, file: arrayBuffer }); 
 
         songs.unshift(song);
     }
@@ -1312,30 +1309,19 @@ window.addEventListener("load", async () => {
     try {
         await initDB(); // Make sure DB is initialized first
         
-        const savedData = localStorage.getItem("currentSong");
-        if (savedData) {
-            const parsedData = JSON.parse(savedData);
-            const song = songs.find(s => s.id === parsedData.id);
+        const savedData = JSON.parse(localStorage.getItem("currentSong"));
+        if (savedData && savedData.id) {
+            const song = songs.find(s => s.id === savedData.id);
             if (song) {
-                try {
-                    await loadSong(song);
-                    if (parsedData.progress) {
-                        audioPlayer.currentTime = parsedData.progress;
-                    }
-                    audioPlayer.play()
-                        .then(() => {
-                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                            playPauseBtn.classList.add('playing');
-                            document.querySelector('.background-blur').classList.add('rotating');
-                        })
-                        .catch(error => console.error('Error playing audio:', error));
-                } catch (error) {
-                    console.error('Error loading song:', error);
-                }
+                await loadSong(song);
+                audioPlayer.currentTime = savedData.progress || 0;
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                audioPlayer.play()
+                    .catch(error => console.error('Error playing audio:', error));
             }
         }
     } catch (error) {
-        console.error('Error during load:', error);
+        console.error('Error loading saved song:', error);
     }
 });
     
@@ -1447,12 +1433,12 @@ audioPlayer.addEventListener('play', () => {
 });
 
 audioPlayer.addEventListener('ended', () => {
-    document.title = 'Music';
+    document.title = 'Music Player';
     playNextSong();
 });
 
 audioPlayer.addEventListener('pause', () => {
-    document.title = 'Music';
+    document.title = 'Music Player';
 });
 
 document.addEventListener('DOMContentLoaded', () => {
