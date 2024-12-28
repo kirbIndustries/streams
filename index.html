@@ -390,7 +390,7 @@
 }
 
 .background-blur.rotating {
-    animation: rotate var(--rotation-duration) linear infinite;
+    animation: rotate var(--rotation-duration) linear infinite forwards;
 }
 
 @keyframes rotate {
@@ -601,7 +601,13 @@
         let currentSongId = null;
         let db;
 
+const existingStyle = document.getElementById('rotation-style');
+if (existingStyle) {
+    existingStyle.remove();
+}
+        
 const style = document.createElement('style');
+style.id = 'rotation-style';
 style.textContent = `
     @keyframes rotateBackground {
         from {
@@ -613,7 +619,7 @@ style.textContent = `
     }
 
     .background-blur.rotating {
-        animation: rotateBackground var(--rotation-duration, 40s) linear infinite;
+        animation: rotateBackground var(--rotation-duration) linear infinite forwards !important;
     }
 `;
 document.head.appendChild(style);
@@ -821,15 +827,18 @@ async function loadSong(song) {
 
             try {
                 // Create AudioContext for BPM detection
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const fileBuffer = await request.result.file.arrayBuffer();
-                const audioBuffer = await audioContext.decodeAudioData(fileBuffer);
-                const bpm = await detectBPM(audioBuffer);
-                
-                // Set rotation speed based on BPM (adjust multiplier as needed)
-                const rotationDuration = `${240000 / bpm}ms`;
-                document.documentElement.style.setProperty('--rotation-duration', rotationDuration);
-                
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const fileBuffer = await request.result.file.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(fileBuffer);
+    const bpm = await detectBPM(audioBuffer);
+
+    // Calculate rotation duration and log for debugging
+    const rotationDuration = `${240000 / bpm}ms`;
+    console.log('BPM:', bpm, 'Rotation Duration:', rotationDuration);
+    
+    // Apply the rotation duration
+    document.documentElement.style.setProperty('--rotation-duration', rotationDuration);
+
                 // Continue with loading the song
                 song.url = URL.createObjectURL(request.result.file);
                 audioPlayer.src = song.url;
@@ -855,6 +864,11 @@ async function loadSong(song) {
                 // Fallback to default colors and rotation speed
                 document.documentElement.style.setProperty('--dynamic-color', 'rgba(102, 102, 102, 0.8)');
                 document.documentElement.style.setProperty('--dynamic-color-light', 'rgba(102, 102, 102, 0.4)');
+                document.documentElement.style.setProperty('--rotation-duration', '40s');
+            }
+
+            } catch (error) {
+                console.error('Error in BPM detection:', error);
                 document.documentElement.style.setProperty('--rotation-duration', '40s');
             }
 
@@ -1391,43 +1405,64 @@ function detectBPM(audioBuffer) {
     return new Promise((resolve) => {
         const channelData = audioBuffer.getChannelData(0);
         const sampleRate = audioBuffer.sampleRate;
-        const peaks = [];
         
-        // Find peaks in audio data
-        let max = 0;
-        for (let i = 1024; i < channelData.length - 1024; i += 1024) {
-            let sum = 0;
-            for (let j = 0; j < 1024; j++) {
-                sum += Math.abs(channelData[i + j]);
+        // Work with a smaller sample for performance
+        const samples = Math.min(channelData.length, sampleRate * 30); // 30 seconds max
+        const data = channelData.slice(0, samples);
+        
+        // Normalize and get energy over time
+        let energyValues = [];
+        const windowSize = Math.floor(sampleRate / 10); // 100ms windows
+        
+        for (let i = 0; i < data.length; i += windowSize) {
+            let energy = 0;
+            for (let j = 0; j < windowSize && (i + j) < data.length; j++) {
+                energy += Math.abs(data[i + j]);
             }
-            const average = sum / 1024;
-            max = Math.max(max, average);
-            peaks.push(average);
+            energyValues.push(energy);
+        }
+        
+        // Find peaks in energy
+        let peaks = [];
+        const minPeakDistance = 3; // Minimum distance between peaks
+        for (let i = 1; i < energyValues.length - 1; i++) {
+            if (energyValues[i] > energyValues[i - 1] && 
+                energyValues[i] > energyValues[i + 1]) {
+                
+                // Check if it's the highest peak in the vicinity
+                let isHighest = true;
+                for (let j = Math.max(0, i - minPeakDistance); 
+                     j < Math.min(energyValues.length, i + minPeakDistance); j++) {
+                    if (j !== i && energyValues[j] > energyValues[i]) {
+                        isHighest = false;
+                        break;
+                    }
+                }
+                
+                if (isHighest) {
+                    peaks.push(i);
+                }
+            }
         }
         
         // Calculate intervals between peaks
-        const threshold = max * 0.75;
-        const intervals = [];
-        let lastPeak = 0;
+        let intervals = [];
+        for (let i = 1; i < peaks.length; i++) {
+            intervals.push(peaks[i] - peaks[i - 1]);
+        }
         
-        peaks.forEach((peak, index) => {
-            if (peak > threshold && index - lastPeak > 1) {
-                if (lastPeak !== 0) {
-                    intervals.push(index - lastPeak);
-                }
-                lastPeak = index;
-            }
-        });
-        
-        // Calculate BPM
-        if (intervals.length > 2) {
+        if (intervals.length > 0) {
+            // Convert intervals to BPM
             const averageInterval = intervals.reduce((a, b) => a + b) / intervals.length;
-            const bpm = Math.round(60 / (averageInterval * 1024 / sampleRate));
+            const bpm = Math.round(60 / (averageInterval * windowSize / sampleRate));
             
-            // Limit BPM to reasonable range (60-180)
-            resolve(Math.min(Math.max(bpm, 60), 180));
+            // Constrain to reasonable BPM range
+            const finalBPM = Math.min(Math.max(bpm, 60), 180);
+            console.log('Detected BPM:', finalBPM); // Debug output
+            resolve(finalBPM);
         } else {
-            resolve(120); // Default BPM if detection fails
+            console.log('Failed to detect BPM, using default'); // Debug output
+            resolve(120); // Default BPM
         }
     });
 }
