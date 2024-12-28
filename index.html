@@ -838,10 +838,6 @@ async function loadSong(song) {
     
     // Apply the rotation duration
     document.documentElement.style.setProperty('--rotation-duration', rotationDuration);
-            } catch (error) {
-                console.error('Error in BPM detection:', error);
-                document.documentElement.style.setProperty('--rotation-duration', '40s');
-            }
 
                 // Continue with loading the song
                 song.url = URL.createObjectURL(request.result.file);
@@ -868,6 +864,7 @@ async function loadSong(song) {
                 // Fallback to default colors and rotation speed
                 document.documentElement.style.setProperty('--dynamic-color', 'rgba(102, 102, 102, 0.8)');
                 document.documentElement.style.setProperty('--dynamic-color-light', 'rgba(102, 102, 102, 0.4)');
+                console.error('Error in BPM detection:', error);
                 document.documentElement.style.setProperty('--rotation-duration', '40s');
             }
             
