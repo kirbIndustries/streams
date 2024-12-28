@@ -900,14 +900,30 @@ async function addSongs(files) {
         // Extract metadata without consuming the file
         const metadata = await extractMetadata(file);
 
+        let bpm = null;
+
         const arrayBuffer = await file.arrayBuffer();
         const audioContext = new AudioContext();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
         // Analyze BPM
-        const bpm = await new Promise((resolve) => {
-            analyzeBPM(audioContext, audioBuffer, resolve);
-        });
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const audioContext = new AudioContext();
+
+            // Attempt to decode the audio data
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+            // Analyze BPM if decoding succeeds
+            bpm = await new Promise((resolve) => {
+                analyzeBPM(audioContext, audioBuffer, resolve);
+            });
+        } catch (error) {
+            console.error(`Failed to decode or analyze audio for file: ${file.name}`, error);
+
+            // Fallback: Try to extract BPM from the title if decoding fails
+            bpm = extractBPMFromTitle(metadata.title);
+        }
 
         const song = {
             id: Date.now() + Math.random(),
@@ -917,7 +933,7 @@ async function addSongs(files) {
             year: metadata.year,
             albumArt: metadata.albumArt,
             trackNumber: metadata.trackNumber,
-            bpm: bpm, // Save the estimated BPM
+            bpm: bpm || 'Unknown', // Save the estimated BPM
             type: file.type,
             dateAdded: Date.now()
         };
@@ -1068,6 +1084,14 @@ function adjustBackgroundRotation(bpm) {
     // Update the animation's CSS duration dynamically
     const background = document.querySelector('.background-blur');
     background.style.animationDuration = `${duration}s`;
+}
+
+function extractBPMFromTitle(title) {
+    const bpmMatch = title.match(/\[BPM:(\d+)\]/i); // Match "BPM:XXX" in brackets
+    if (bpmMatch && bpmMatch[1]) {
+        return parseInt(bpmMatch[1], 10); // Return the extracted BPM as a number
+    }
+    return null; // Return null if no BPM is found
 }
         
 function renderSongs() {
