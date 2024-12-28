@@ -660,7 +660,7 @@ function updatePageTitle() {
             document.title = `${currentTime} • ${song.name} by ${song.artist}`;
         }
     } else {
-        document.title = 'Music'; // Default title when no song is playing
+        document.title = 'Music Player'; // Default title when no song is playing
     }
 }
         
@@ -787,25 +787,19 @@ async function loadSong(song) {
         
         request.onsuccess = (event) => {
             if (request.result && request.result.file) {
-                // Create blob with proper MIME type
-                const blob = new Blob([request.result.file], { 
-                    type: song.type || 'audio/mpeg' 
-                });
+                // Create blob from ArrayBuffer
+                const blob = new Blob([request.result.file], { type: song.type || 'audio/mpeg' });
                 
                 // Revoke previous URL if it exists
                 if (song.url) {
                     URL.revokeObjectURL(song.url);
                 }
                 
-                // Create new URL from blob
                 song.url = URL.createObjectURL(blob);
-                
-                // Set the audio source and metadata
                 audioPlayer.src = song.url;
                 musicTitle.textContent = song.name;
                 musicArtist.textContent = song.artist;
 
-                // Update background
                 const backgroundElement = document.querySelector('.background-blur');
                 backgroundElement.classList.add('changing');
                 backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
@@ -816,6 +810,7 @@ async function loadSong(song) {
                 }, 500);
 
                 currentSongId = song.id;
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
                 resolve(song);
             } else {
                 reject(new Error('Song file not found in database'));
@@ -824,19 +819,6 @@ async function loadSong(song) {
 
         request.onerror = () => reject(request.error);
     });
-}
-
-async function playSong(song) {
-    try {
-        await loadSong(song);
-        await audioPlayer.play();
-        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-        playPauseBtn.classList.add('playing');
-        document.querySelector('.background-blur').classList.add('rotating');
-        renderSongs();
-    } catch (error) {
-        console.error('Error playing song:', error);
-    }
 }
         
 async function extractMetadata(file) {
@@ -974,6 +956,11 @@ async function loadSongsFromStorage() {
             return true;
         });
         
+        if (songs.length > 0) {
+            const firstSong = songs[0];
+            await loadSong(firstSong);
+        }
+        
         renderSongs();
     } catch (error) {
         console.error('Error loading songs:', error);
@@ -1097,17 +1084,37 @@ function attachEventListeners() {
     });
 
     // Play song functionality
-   document.querySelectorAll('.music-item').forEach(item => {
-    item.addEventListener('click', async () => {
-        const songId = parseFloat(item.dataset.id);
-        const song = songs.find(s => s.id === songId);
-        if (song) {
-            await playSong(song);
-        }
-    });
-});
-}
+    document.querySelectorAll('.music-item').forEach(item => {
+        item.addEventListener('click', async () => {
+            const songId = parseFloat(item.dataset.id);
+            const song = songs.find(s => s.id === songId);
 
+            if (song) {
+                const transaction = db.transaction(['musicFiles'], 'readonly');
+                const store = transaction.objectStore('musicFiles');
+                const request = store.get(songId);
+
+                request.onsuccess = () => {
+                    if (request.result) {
+                        song.url = URL.createObjectURL(request.result.file);
+                        currentSongId = song.id;
+                        loadSong(song);
+                        audioPlayer.play();
+                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                        playPauseBtn.classList.add('playing');
+                        document.querySelector('.background-blur').classList.add('rotating');
+                        renderSongs();
+                    }
+                };
+
+                request.onerror = () => {
+                    console.error(`Failed to load song with ID: ${songId}`);
+                };
+            }
+        });
+    });
+}
+ 
 function loadSong(song) {
     audioPlayer.src = song.url; // Use preloaded Blob URL
     audioPlayer.currentTime = 0; // Always start from the beginning
@@ -1129,7 +1136,7 @@ function loadSong(song) {
         
 function playNextSong() {
     const currentIndex = songs.findIndex(s => s.id === currentSongId);
-    const nextIndex = (currentIndex + 1) % songs.length;
+    const nextIndex = (currentIndex + 1) % songs.length; // Moving forward
     const nextSong = songs[nextIndex];
     
     const transaction = db.transaction(['musicFiles'], 'readonly');
@@ -1137,9 +1144,8 @@ function playNextSong() {
     const request = store.get(nextSong.id);
     
     request.onsuccess = (event) => {
-        if (request.result && request.result.file) {
-            const blob = new Blob([request.result.file], { type: nextSong.type || 'audio/mpeg' });
-            nextSong.url = URL.createObjectURL(blob);
+        if (request.result) {
+            nextSong.url = URL.createObjectURL(request.result.file);
             loadSong(nextSong);
             audioPlayer.currentTime = 0;
             audioPlayer.play();
@@ -1155,9 +1161,11 @@ function playPreviousSong() {
     const currentIndex = songs.findIndex(s => s.id === currentSongId);
     
     if (audioPlayer.currentTime > 3) {
+        // If more than 3 seconds have played, restart current song
         audioPlayer.currentTime = 0;
         audioPlayer.play();
     } else {
+        // Calculate previous index, ensuring it wraps around correctly
         const prevIndex = currentIndex === 0 ? songs.length - 1 : currentIndex - 1;
         const prevSong = songs[prevIndex];
         
@@ -1166,9 +1174,8 @@ function playPreviousSong() {
         const request = store.get(prevSong.id);
         
         request.onsuccess = (event) => {
-            if (request.result && request.result.file) {
-                const blob = new Blob([request.result.file], { type: prevSong.type || 'audio/mpeg' });
-                prevSong.url = URL.createObjectURL(blob);
+            if (request.result) {
+                prevSong.url = URL.createObjectURL(request.result.file);
                 loadSong(prevSong);
                 audioPlayer.currentTime = 0;
                 audioPlayer.play();
@@ -1440,12 +1447,12 @@ audioPlayer.addEventListener('play', () => {
 });
 
 audioPlayer.addEventListener('ended', () => {
-    document.title = 'Music Player';
-    playNextSong().catch(error => console.error('Error playing next song:', error));
+    document.title = 'Music';
+    playNextSong();
 });
 
 audioPlayer.addEventListener('pause', () => {
-    document.title = 'Music Player';
+    document.title = 'Music';
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1464,7 +1471,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         await initDB();
         
-        // Set up search functionality
         const searchInput = document.getElementById('searchInput');
         let searchTimeout;
 
@@ -1475,29 +1481,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             }, 300);
         });
         
-        // First render the songs
         renderSongs();
-
-        // Then check for saved song
-        const savedData = localStorage.getItem("currentSong");
-        if (savedData) {
-            const parsedData = JSON.parse(savedData);
-            const song = songs.find(s => s.id === parsedData.id);
-            if (song) {
-                try {
-                    await loadSong(song);
-                    if (parsedData.progress) {
-                        audioPlayer.currentTime = parsedData.progress;
-                    }
-                } catch (error) {
-                    console.error('Error loading saved song:', error);
-                }
-            }
-        }
     } catch (error) {
         console.error('Failed to initialize application:', error);
     }
 });
+
+        renderSongs();
+        initDB();
     </script>
 </body>
 </html>
