@@ -345,18 +345,29 @@
     background: rgba(255, 255, 255, 0.1);
 }
 
+.background-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
 .background-blur {
     position: fixed;
-    top: -20%;
-    left: -20%;
-    width: 140%;
-    height: 140%;
+    top: 50%;
+    left: 50%;
+    /* Make it larger to account for rotation */
+    width: 150%;
+    height: 150%;
     background-position: center;
     background-size: cover;
-    filter: blur(50px) brightness(0.45);
+    filter: blur(50px) brightness(0.6);
     transition: background-image 0.5s ease;
     z-index: -1;
-    transform: scale(1.1);
+    /* Center the element and scale up enough to cover during rotation */
+    transform: translate(-50%, -50%) scale(1.42);
 }
 
 @keyframes fadeIn {
@@ -374,10 +385,10 @@
 
 @keyframes rotate {
     from {
-        transform: scale(1.1) rotate(0deg);
+        transform: translate(-50%, -50%) scale(1.42) rotate(0deg);
     }
     to {
-        transform: scale(1.1) rotate(360deg);
+        transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
     }
 }
 
@@ -505,7 +516,9 @@
     </style>
 </head>
 <body>
+<div class="background-container">
     <div class="background-blur"></div>
+</div>
     <div class="sidebar">
         <div class="search-container">
             <span class="material-symbols-rounded search-icon">search</span>
