@@ -900,31 +900,6 @@ async function addSongs(files) {
         // Extract metadata without consuming the file
         const metadata = await extractMetadata(file);
 
-        let bpm = null;
-
-        const arrayBuffer = await file.arrayBuffer();
-        const audioContext = new AudioContext();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-        // Analyze BPM
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            const audioContext = new AudioContext();
-
-            // Attempt to decode the audio data
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-            // Analyze BPM if decoding succeeds
-            bpm = await new Promise((resolve) => {
-                analyzeBPM(audioContext, audioBuffer, resolve);
-            });
-        } catch (error) {
-            console.error(`Failed to decode or analyze audio for file: ${file.name}`, error);
-
-            // Fallback: Try to extract BPM from the title if decoding fails
-            bpm = extractBPMFromTitle(metadata.title);
-        }
-
         const song = {
             id: Date.now() + Math.random(),
             name: metadata.title,
@@ -933,15 +908,14 @@ async function addSongs(files) {
             year: metadata.year,
             albumArt: metadata.albumArt,
             trackNumber: metadata.trackNumber,
-            bpm: bpm || 'Unknown', // Save the estimated BPM
             type: file.type,
-            dateAdded: Date.now()
+            dateAdded: Date.now() // Add this line
         };
 
         // Store the song file in IndexedDB
         const transaction = db.transaction(['musicFiles'], 'readwrite');
         const store = transaction.objectStore('musicFiles');
-        store.put({ id: song.id, file });
+        store.put({ id: song.id, file }); 
 
         songs.unshift(song);
     }
@@ -1010,7 +984,6 @@ async function saveSongs() {
                     year: song.year,
                     albumArt: song.albumArt,
                     trackNumber: song.trackNumber,
-                    bpm: song.bpm, // Save BPM here
                     type: song.type,
                 });
             });
@@ -1020,80 +993,6 @@ async function saveSongs() {
     });
 }
 
-async function analyzeBPM(audioContext, audioBuffer, callback) {
-    const offlineContext = new OfflineAudioContext(
-        audioBuffer.numberOfChannels,
-        audioBuffer.length,
-        audioBuffer.sampleRate
-    );
-
-    const source = offlineContext.createBufferSource();
-    source.buffer = audioBuffer;
-
-    const analyser = offlineContext.createAnalyser();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
-    analyser.connect(offlineContext.destination);
-
-    await offlineContext.startRendering();
-
-    const bpm = estimateBPM(analyser);
-    callback(bpm); // Resolve the BPM value
-}
-
-function estimateBPM(analyser) {
-    const sampleRate = analyser.context.sampleRate;
-    const bufferLength = analyser.fftSize;
-    const dataArray = new Float32Array(bufferLength);
-
-    analyser.getFloatTimeDomainData(dataArray);
-
-    // Detect zero crossings to identify peaks
-    let peaks = [];
-    for (let i = 1; i < bufferLength; i++) {
-        if (dataArray[i - 1] <= 0 && dataArray[i] > 0) {
-            peaks.push(i);
-        }
-    }
-
-    if (peaks.length < 2) {
-        console.warn("Not enough peaks detected to estimate BPM");
-        return 0; // No clear BPM found
-    }
-
-    // Calculate intervals between peaks
-    const intervals = [];
-    for (let i = 1; i < peaks.length; i++) {
-        intervals.push(peaks[i] - peaks[i - 1]);
-    }
-
-    // Convert intervals to BPM
-    const averageInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
-    const bpm = Math.round((sampleRate / averageInterval) * 60);
-
-    return bpm;
-}
-
-function adjustBackgroundRotation(bpm) {
-    const baseDuration = 40; // Base duration for 1 rotation in seconds
-    const minDuration = 5;   // Minimum duration (faster spin)
-
-    // Calculate duration based on BPM, clamping between min and base duration
-    const duration = Math.max(minDuration, baseDuration - bpm / 10);
-
-    // Update the animation's CSS duration dynamically
-    const background = document.querySelector('.background-blur');
-    background.style.animationDuration = `${duration}s`;
-}
-
-function extractBPMFromTitle(title) {
-    const bpmMatch = title.match(/\[BPM:(\d+)\]/i); // Match "BPM:XXX" in brackets
-    if (bpmMatch && bpmMatch[1]) {
-        return parseInt(bpmMatch[1], 10); // Return the extracted BPM as a number
-    }
-    return null; // Return null if no BPM is found
-}
-        
 function renderSongs() {
     const albums = groupSongsByAlbum(songs);
 
@@ -1435,21 +1334,10 @@ window.addEventListener("load", async () => {
 musicUpload.addEventListener('change', async (e) => {
     if (e.target.files.length > 0) {
         try {
-            const file = e.target.files[0]; // Process the first uploaded file
-            const arrayBuffer = await file.arrayBuffer();
-
-            // Decode the audio data
-            const audioContext = new AudioContext();
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-            // Analyze BPM
-            analyzeBPM(audioContext, audioBuffer);
-
-            // Process the file normally (preloading and adding songs)
             await preloadSongs(e.target.files);
-            await addSongs(e.target.files);
+            await addSongs(e.target.files); // Add this line to process the metadata
         } catch (error) {
-            console.error('Error uploading or processing songs:', error);
+            console.error('Error uploading songs:', error);
         }
     }
 });
