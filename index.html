@@ -1431,21 +1431,7 @@ function detectBPM(audioBuffer) {
         }
     });
 }
-        
-        // Calculate average interval between peaks
-        if (intervals.length > 0) {
-            const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
-            const bpm = Math.round(60 / avgInterval);
-            
-            // Limit BPM to reasonable range
-            const limitedBPM = Math.min(Math.max(bpm, 60), 180);
-            resolve(limitedBPM);
-        } else {
-            resolve(120); // Default BPM if detection fails
-        }
-    });
-}
-    
+
     // Call setup once at startup
     setupMediaSessionActions();
 
