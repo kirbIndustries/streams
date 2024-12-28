@@ -1127,7 +1127,7 @@ function loadSong(song) {
     playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
 }
         
-async function playNextSong() {
+function playNextSong() {
     const currentIndex = songs.findIndex(s => s.id === currentSongId);
     const nextIndex = (currentIndex + 1) % songs.length;
     const nextSong = songs[nextIndex];
@@ -1137,8 +1137,9 @@ async function playNextSong() {
     const request = store.get(nextSong.id);
     
     request.onsuccess = (event) => {
-        if (request.result) {
-            nextSong.url = URL.createObjectURL(request.result.file);
+        if (request.result && request.result.file) {
+            const blob = new Blob([request.result.file], { type: nextSong.type || 'audio/mpeg' });
+            nextSong.url = URL.createObjectURL(blob);
             loadSong(nextSong);
             audioPlayer.currentTime = 0;
             audioPlayer.play();
@@ -1150,15 +1151,13 @@ async function playNextSong() {
     };
 }
 
-async function playPreviousSong() {
+function playPreviousSong() {
     const currentIndex = songs.findIndex(s => s.id === currentSongId);
     
     if (audioPlayer.currentTime > 3) {
-        // If more than 3 seconds have played, restart current song
         audioPlayer.currentTime = 0;
         audioPlayer.play();
     } else {
-        // Calculate previous index, ensuring it wraps around correctly
         const prevIndex = currentIndex === 0 ? songs.length - 1 : currentIndex - 1;
         const prevSong = songs[prevIndex];
         
@@ -1167,8 +1166,9 @@ async function playPreviousSong() {
         const request = store.get(prevSong.id);
         
         request.onsuccess = (event) => {
-            if (request.result) {
-                prevSong.url = URL.createObjectURL(request.result.file);
+            if (request.result && request.result.file) {
+                const blob = new Blob([request.result.file], { type: prevSong.type || 'audio/mpeg' });
+                prevSong.url = URL.createObjectURL(blob);
                 loadSong(prevSong);
                 audioPlayer.currentTime = 0;
                 audioPlayer.play();
