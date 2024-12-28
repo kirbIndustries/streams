@@ -16,6 +16,11 @@
             font-family: 'Inter', sans-serif;
         }
 
+:root {
+    --dynamic-color: rgba(102, 102, 102, 0.8);
+    --dynamic-color-light: rgba(102, 102, 102, 0.4);
+}
+        
         body {
             background-color: #1c1c1c;
             min-height: 100vh;
@@ -96,9 +101,9 @@
             transition: border-color 0.2s;
         }
 
-        .music-item.active {
-            background-color: rgba(102, 102, 102, .8) !important;
-        }
+.music-item.active {
+    background-color: var(--dynamic-color) !important;
+}
 
         .music-item:hover {
             background-color: rgba(102, 102, 102, .6);
@@ -177,7 +182,7 @@
 }
 
 .control-btn.play-pause {
-    background-color: rgba(102, 102, 102, .8);
+    background-color: var(--dynamic-color);
     width: 60px;
     height: 60px;
     font-size: 1.5rem;
@@ -189,6 +194,10 @@
     line-height: 0; /* Ensures icon isn't pushed out */
 }
 
+.control-btn.play-pause:hover {
+    background-color: var(--dynamic-color-light) !important;
+}
+        
 .control-btn.play-pause.playing {
     border-radius: 20px; /* Rounded square when playing */
 }
@@ -784,7 +793,7 @@ async function loadSong(song) {
     const request = store.get(song.id);
     document.title = `${song.name} by ${song.artist}`;
     
-    request.onsuccess = (event) => {
+    request.onsuccess = async (event) => {
         if (request.result && request.result.file) {
             // Check if it's a valid audio file
             if (!isAudioFile(request.result.file)) {
@@ -805,6 +814,22 @@ async function loadSong(song) {
             backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
             albumArtImg.src = song.albumArt;
 
+            // Extract and apply dominant color
+            try {
+                const dominantColor = await getDominantColor(song.albumArt);
+                const rgbaColor = `rgba(${dominantColor.r}, ${dominantColor.g}, ${dominantColor.b}, 0.8)`;
+                const rgbaColorLight = `rgba(${dominantColor.r}, ${dominantColor.g}, ${dominantColor.b}, 0.4)`;
+
+                // Update CSS variables
+                document.documentElement.style.setProperty('--dynamic-color', rgbaColor);
+                document.documentElement.style.setProperty('--dynamic-color-light', rgbaColorLight);
+            } catch (error) {
+                console.error('Error extracting dominant color:', error);
+                // Fallback to default colors if extraction fails
+                document.documentElement.style.setProperty('--dynamic-color', 'rgba(102, 102, 102, 0.8)');
+                document.documentElement.style.setProperty('--dynamic-color-light', 'rgba(102, 102, 102, 0.4)');
+            }
+
             setTimeout(() => {
                 backgroundElement.classList.remove('changing');
             }, 500);
@@ -812,6 +837,10 @@ async function loadSong(song) {
             currentSongId = song.id;
             playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
         }
+    };
+
+    request.onerror = (error) => {
+        console.error('Error loading song:', error);
     };
 }
         
@@ -1291,6 +1320,46 @@ if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = state;
     }
 
+function getDominantColor(imageSrc) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.src = imageSrc;
+        
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            ctx.drawImage(img, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            const colorCounts = {};
+            let dominantColor = { r: 0, g: 0, b: 0, count: 0 };
+            
+            // Sample every 4th pixel for performance
+            for (let i = 0; i < imageData.length; i += 16) {
+                const r = imageData[i];
+                const g = imageData[i + 1];
+                const b = imageData[i + 2];
+                const rgb = `${r},${g},${b}`;
+                
+                if (!colorCounts[rgb]) {
+                    colorCounts[rgb] = 0;
+                }
+                colorCounts[rgb]++;
+                
+                if (colorCounts[rgb] > dominantColor.count) {
+                    dominantColor = { r, g, b, count: colorCounts[rgb] };
+                }
+            }
+            
+            resolve(dominantColor);
+        };
+    });
+}
+    
     // Call setup once at startup
     setupMediaSessionActions();
 
