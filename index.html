@@ -1650,6 +1650,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+document.querySelectorAll('.switch-btn').forEach(button => {
+    button.addEventListener('click', () => {
+        document.querySelectorAll('.switch-btn').forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        currentView = button.dataset.view;
+        renderSongs();
+    });
+})  
+
         renderSongs();
         initDB();
     </script>
