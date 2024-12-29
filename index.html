@@ -433,6 +433,37 @@
     color: #c2c2c2;
     pointer-events: none;
 }
+
+.view-switcher {
+    display: flex;
+    background: rgba(102, 102, 102, .4);
+    border-radius: 25px;
+    padding: 4px;
+    margin-bottom: 20px;
+}
+
+.switch-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.switch-btn.active {
+    background: rgba(102, 102, 102, .8);
+}
+
+.switch-btn:hover:not(.active) {
+    background: rgba(102, 102, 102, .2);
+}
         
 .material-symbols-rounded {
   font-variation-settings:
@@ -529,6 +560,14 @@
             <span class="material-symbols-rounded search-icon">search</span>
             <input type="text" id="searchInput" placeholder="Search Songs" class="search-input">
         </div>
+<div class="view-switcher">
+    <button class="switch-btn active" data-view="albums">
+        <span class="material-symbols-rounded">album</span> Albums
+    </button>
+    <button class="switch-btn" data-view="queue">
+        <span class="material-symbols-rounded">queue_music</span> Queue
+    </button>
+</div>
         <div class="music-list"></div>
         <label class="upload-btn">
             <span class="material-symbols-rounded">add</span> Add Music
@@ -595,6 +634,8 @@
         let songs = JSON.parse(localStorage.getItem('songs')) || [];
         let currentSongId = null;
         let db;
+        let queue = [];
+        let currentView = 'albums';
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
@@ -998,45 +1039,70 @@ async function saveSongs() {
 }
 
 function renderSongs() {
-    const albums = groupSongsByAlbum(songs);
+    if (currentView === 'queue') {
+        if (queue.length === 0) {
+            musicList.innerHTML = `
+                <div class="no-results">
+                    <span class="material-symbols-rounded">queue_music</span>
+                    <p>Queue is empty</p>
+                </div>`;
+            return;
+        }
 
-    if (songs.length === 0) {
-        musicList.innerHTML = `
-            <div class="no-results">
-                <span class="material-symbols-rounded">search_off</span>
-                <p>No songs found</p>
-            </div>`;
-        return;
-    }
-
-    musicList.innerHTML = albums.map(album => `
-        <div class="album-section">
-            <div class="album-header">
-                <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
-                <div class="album-info">
-                    <div class="album-name">${album.name}</div>
-                    <div class="album-artist">${album.artist}</div>
-                    <div class="album-year">${album.year}</div>
+        musicList.innerHTML = queue.map((song, index) => `
+            <div class="music-item ${song.id === currentSongId ? 'active' : ''}" 
+                 data-id="${song.id}">
+                <div class="song-info">
+                    <span class="song-title">${song.name}</span>
+                    <span class="song-artist">${song.artist}</span>
                 </div>
-                <div class="album-actions" style="display: none;">
-                    <button class="delete-album" data-album="${album.name}">
-                        <span class="material-symbols-rounded">delete</span>
-                    </button>
-                </div>
+                <button class="remove-from-queue" data-index="${index}">
+                    <span class="material-symbols-rounded">remove_circle</span>
+                </button>
             </div>
-            <div class="album-songs">
-                ${album.songs.map(song => `
-                    <div class="music-item ${song.id === currentSongId ? 'active' : ''}" 
-                         data-id="${song.id}">
-                        <div class="song-info">
-                            ${song.trackNumber ? `<span class="track-number">${song.trackNumber}.</span>` : ''}
-                            <span class="song-title">${song.name}</span>
-                        </div>
+        `).join('');
+    } else {
+        // Original album view logic
+        const albums = groupSongsByAlbum(songs);
+
+        if (songs.length === 0) {
+            musicList.innerHTML = `
+                <div class="no-results">
+                    <span class="material-symbols-rounded">search_off</span>
+                    <p>No songs found</p>
+                </div>`;
+            return;
+        }
+
+        musicList.innerHTML = albums.map(album => `
+            <div class="album-section">
+                <div class="album-header">
+                    <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
+                    <div class="album-info">
+                        <div class="album-name">${album.name}</div>
+                        <div class="album-artist">${album.artist}</div>
+                        <div class="album-year">${album.year}</div>
                     </div>
-                `).join('')}
+                    <div class="album-actions" style="display: none;">
+                        <button class="delete-album" data-album="${album.name}">
+                            <span class="material-symbols-rounded">delete</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="album-songs">
+                    ${album.songs.map(song => `
+                        <div class="music-item ${song.id === currentSongId ? 'active' : ''}" 
+                             data-id="${song.id}">
+                            <div class="song-info">
+                                ${song.trackNumber ? `<span class="track-number">${song.trackNumber}.</span>` : ''}
+                                <span class="song-title">${song.name}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
             </div>
-        </div>
-    `).join('');
+        `).join('');
+    }
 
     attachEventListeners();
 }
@@ -1085,11 +1151,19 @@ function attachEventListeners() {
 
     // Play song functionality
     document.querySelectorAll('.music-item').forEach(item => {
+        // Regular click to play
         item.addEventListener('click', async () => {
             const songId = parseFloat(item.dataset.id);
-            const song = songs.find(s => s.id === songId);
-
+            const song = currentView === 'queue' ? 
+                        queue.find(s => s.id === songId) : 
+                        songs.find(s => s.id === songId);
+            
             if (song) {
+                if (currentView === 'queue') {
+                    // Remove played song from queue
+                    queue = queue.filter(s => s.id !== songId);
+                }
+                
                 const transaction = db.transaction(['musicFiles'], 'readonly');
                 const store = transaction.objectStore('musicFiles');
                 const request = store.get(songId);
@@ -1106,13 +1180,58 @@ function attachEventListeners() {
                         renderSongs();
                     }
                 };
+            }
+        });
 
-                request.onerror = () => {
-                    console.error(`Failed to load song with ID: ${songId}`);
-                };
+            item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const songId = parseFloat(item.dataset.id);
+            const song = songs.find(s => s.id === songId);
+            if (song && currentView === 'albums') {
+                queue.push({...song});
+                showToast('Added to queue');
             }
         });
     });
+
+        document.querySelectorAll('.remove-from-queue').forEach(button => {
+        button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const index = parseInt(e.currentTarget.dataset.index);
+            queue.splice(index, 1);
+            renderSongs();
+        });
+    });
+}
+
+function showToast(message) {
+    const popup = document.createElement('div');
+    popup.style.position = 'fixed';
+    popup.style.top = '20px';
+    popup.style.left = '50%';
+    popup.style.transform = 'translateX(-50%)';
+    popup.style.backgroundColor = 'rgba(51, 51, 51, 0.9)';
+    popup.style.color = 'white';
+    popup.style.padding = '20px';
+    popup.style.borderRadius = '30px';
+    popup.style.zIndex = '1000';
+    popup.style.transition = 'opacity 0.5s';
+    popup.textContent = message;
+
+    const lastPopup = document.querySelector('.popup');
+    const topPosition = lastPopup ? lastPopup.offsetTop + lastPopup.offsetHeight + 10 : 20;
+
+    popup.style.top = `${topPosition}px`;
+    popup.classList.add('popup');
+
+    document.body.appendChild(popup);
+
+    setTimeout(() => {
+        popup.style.opacity = '0';
+        setTimeout(() => {
+            document.body.removeChild(popup);
+        }, 500);
+    }, 3000);
 }
  
 function loadSong(song) {
@@ -1135,26 +1254,34 @@ function loadSong(song) {
 }
         
 function playNextSong() {
-    const currentIndex = songs.findIndex(s => s.id === currentSongId);
-    const nextIndex = (currentIndex + 1) % songs.length; // Moving forward
-    const nextSong = songs[nextIndex];
-    
-    const transaction = db.transaction(['musicFiles'], 'readonly');
-    const store = transaction.objectStore('musicFiles');
-    const request = store.get(nextSong.id);
-    
-    request.onsuccess = (event) => {
-        if (request.result) {
-            nextSong.url = URL.createObjectURL(request.result.file);
-            loadSong(nextSong);
-            audioPlayer.currentTime = 0;
-            audioPlayer.play();
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            playPauseBtn.classList.add('playing');
-            document.querySelector('.background-blur').classList.add('rotating');
-            renderSongs();
-        }
-    };
+    if (queue.length > 0) {
+        // Play next song from queue
+        const nextSong = queue.shift();
+        loadSong(nextSong);
+        audioPlayer.play();
+        renderSongs();
+    } else {
+        // Play next song from album if queue is empty
+        const currentIndex = songs.findIndex(s => s.id === currentSongId);
+        const nextIndex = (currentIndex + 1) % songs.length;
+        const nextSong = songs[nextIndex];
+        
+        const transaction = db.transaction(['musicFiles'], 'readonly');
+        const store = transaction.objectStore('musicFiles');
+        const request = store.get(nextSong.id);
+        
+        request.onsuccess = (event) => {
+            if (request.result) {
+                nextSong.url = URL.createObjectURL(request.result.file);
+                loadSong(nextSong);
+                audioPlayer.play();
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                playPauseBtn.classList.add('playing');
+                document.querySelector('.background-blur').classList.add('rotating');
+                renderSongs();
+            }
+        };
+    }
 }
 
 function playPreviousSong() {
@@ -1201,7 +1328,7 @@ function searchSongs(query) {
         renderSongs(songs);
         return;
     }
-    
+
     query = query.toLowerCase();
     const filteredSongs = songs.filter(song => 
         song.name.toLowerCase().includes(query) ||
@@ -1210,6 +1337,67 @@ function searchSongs(query) {
     );
     
     renderSongs(filteredSongs);
+}
+
+function addToQueue(song) {
+    queue.push(song);
+    if (currentView === 'queue') {
+        renderQueue();
+    }
+}
+
+function removeFromQueue(index) {
+    queue.splice(index, 1);
+    if (currentView === 'queue') {
+        renderQueue();
+    }
+}
+
+function renderQueue() {
+    musicList.innerHTML = `
+        <div class="queue-container">
+            ${queue.length === 0 ? 
+                `<div class="no-results">
+                    <span class="material-symbols-rounded">queue_music</span>
+                    <p>Queue is empty</p>
+                </div>` :
+                queue.map((song, index) => `
+                    <div class="music-item ${song.id === currentSongId ? 'active' : ''}" 
+                         data-id="${song.id}">
+                        <div class="song-info">
+                            <span class="song-title">${song.name}</span>
+                            <span class="song-artist">${song.artist}</span>
+                        </div>
+                        <button class="remove-from-queue" data-index="${index}">
+                            <span class="material-symbols-rounded">remove_circle</span>
+                        </button>
+                    </div>
+                `).join('')}
+        </div>
+    `;
+    
+    attachQueueEventListeners();
+}
+
+function attachQueueEventListeners() {
+    document.querySelectorAll('.remove-from-queue').forEach(button => {
+        button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const index = parseInt(e.currentTarget.dataset.index);
+            removeFromQueue(index);
+        });
+    });
+    
+    document.querySelectorAll('.music-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const songId = parseFloat(item.dataset.id);
+            const song = queue.find(s => s.id === songId);
+            if (song) {
+                loadSong(song);
+                audioPlayer.play();
+            }
+        });
+    });
 }
         
 function groupSongsByAlbum(songs) {
