@@ -616,6 +616,7 @@
         let repeatMode = 'none'; // 'none', 'all', or 'one'
         let playQueue = [];
         let currentQueueIndex = -1;
+        let searchTimeout;
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
@@ -1735,12 +1736,12 @@ audioPlayer.addEventListener('ended', () => {
     }
 });
 
-        searchInput.addEventListener('input', (e) => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                searchSongs(e.target.value.trim());
-            }, 300);
-        });
+searchInput.addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        searchSongs(e.target.value.trim());
+    }, 300);
+});
 
 document.addEventListener('DOMContentLoaded', async () => {
     try {
