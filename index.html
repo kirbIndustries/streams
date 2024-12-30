@@ -1154,6 +1154,62 @@ function renderSongs() {
     attachEventListeners();
 }
 
+function renderSongs(filteredSongs = null) {
+    // Use filteredSongs if provided, otherwise use all songs
+    const songsToRender = filteredSongs || songs;
+    const albums = groupSongsByAlbum(songsToRender);
+
+    if (songsToRender.length === 0) {
+        musicList.innerHTML = `
+            <div class="no-results">
+                <span class="material-symbols-rounded">search_off</span>
+                <p>No songs found</p>
+            </div>`;
+        return;
+    }
+
+    albums.sort((a, b) => {
+        const aFirstSong = a.songs[0];
+        const bFirstSong = b.songs[0];
+        return aFirstSong.dateAdded - bFirstSong.dateAdded;
+    });
+
+    musicList.innerHTML = albums.map(album => `
+        <div class="album-section">
+            <div class="album-header">
+                <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
+                <div class="album-info">
+                    <div class="album-name">${album.name}</div>
+                    <div class="album-artist">${album.artist}</div>
+                    <div class="album-year">${album.year}</div>
+                </div>
+                <div class="album-actions" style="display: none;">
+                    <button class="delete-album" data-album="${album.name}">
+                        <span class="material-symbols-rounded">delete</span>
+                    </button>
+                </div>
+            </div>
+            <div class="album-songs">
+                ${album.songs.map(song => `
+                    <div class="music-item ${song.id === currentSongId ? 'active' : ''}" 
+                         data-id="${song.id}">
+                        <div class="song-info">
+                            ${song.trackNumber ? `<span class="track-number">${song.trackNumber}.</span>` : ''}
+                            <span class="song-title">${song.name}</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    if (playQueue.length === 0) {
+        updatePlayQueue();
+    }
+    
+    attachEventListeners();
+}
+        
 function attachEventListeners() {
     // Toggle album actions visibility with Shift key
     document.addEventListener('keydown', (e) => {
