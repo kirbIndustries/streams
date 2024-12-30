@@ -1595,6 +1595,8 @@ if ('mediaSession' in navigator) {
     setupMediaSessionActions();
 }
 
+
+        
 window.addEventListener("beforeunload", () => {
     if (currentSongId !== null) {
         const currentProgress = audioPlayer.currentTime;
@@ -1607,69 +1609,21 @@ window.addEventListener("beforeunload", () => {
 
 window.addEventListener("load", async () => {
     try {
-        await initDB(); // Wait for DB initialization
-        const savedData = localStorage.getItem("currentSong");
+        await initDB();
+        // Add a delay to ensure DB is fully ready
+        await new Promise(resolve => setTimeout(resolve, 100));
         
+        const savedData = localStorage.getItem("currentSong");
         if (!savedData) return;
         
         const songData = JSON.parse(savedData);
         if (!songData || !songData.id) return;
         
-        // Find the song metadata
+        // Use loadAndPlaySong function that's already working
         const song = songs.find(s => s.id === songData.id);
-        if (!song) return;
-
-        // Create a Promise to handle the file loading
-        const loadFile = new Promise((resolve, reject) => {
-            const transaction = db.transaction(['musicFiles'], 'readonly');
-            const store = transaction.objectStore('musicFiles');
-            
-            const request = store.get(songData.id);
-            
-            request.onsuccess = (event) => {
-                if (event.target.result && event.target.result.file) {
-                    // Create Blob and URL
-                    const blob = new Blob([event.target.result.file]);
-                    song.url = URL.createObjectURL(blob);
-                    resolve(song);
-                } else {
-                    reject(new Error('File not found in IndexedDB'));
-                }
-            };
-            
-            request.onerror = () => reject(request.error);
-        });
-
-        // Wait for file to load before setting up audio player
-        const loadedSong = await loadFile;
-        
-        // Set up audio player only after file is loaded
-        audioPlayer.src = loadedSong.url;
-        await audioPlayer.load(); // Ensure media is loaded
-        
-        audioPlayer.currentTime = songData.progress || 0;
-        
-        // Update UI elements
-        musicTitle.textContent = loadedSong.name;
-        musicArtist.textContent = loadedSong.artist;
-        albumArtImg.src = loadedSong.albumArt;
-        
-        const backgroundElement = document.querySelector('.background-blur');
-        backgroundElement.style.backgroundImage = `url('${loadedSong.albumArt}')`;
-        
-        currentSongId = loadedSong.id;
-        
-        // Try to play only after everything is properly loaded
-        try {
-            await audioPlayer.play();
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            playPauseBtn.classList.add('playing');
-            document.querySelector('.background-blur').classList.add('rotating');
-        } catch (playError) {
-            console.error('Error playing audio:', playError);
+        if (song) {
+            loadAndPlaySong(song);
         }
-        
-        renderSongs();
 
     } catch (error) {
         console.error('Error loading saved song:', error);
