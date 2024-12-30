@@ -1615,45 +1615,20 @@ window.addEventListener("load", async () => {
         const songData = JSON.parse(savedData);
         if (!songData || !songData.id) return;
         
-        // First find the song metadata
+        // Find the song metadata
         const song = songs.find(s => s.id === songData.id);
         if (!song) return;
+
+        // Use the same loading function that works for skipping songs
+        loadAndPlaySong(song);
         
-        // Get the actual audio file from IndexedDB
-        const transaction = db.transaction(['musicFiles'], 'readonly');
-        const store = transaction.objectStore('musicFiles');
-        
-        store.get(songData.id).onsuccess = function(event) {
-            const fileData = event.target.result;
-            if (!fileData || !fileData.file) return;
-            
-            // Create a blob URL for the audio file
-            const blob = new Blob([fileData.file]);
-            song.url = URL.createObjectURL(blob);
-            
-            // Set up audio player
-            audioPlayer.src = song.url;
-            audioPlayer.currentTime = songData.progress || 0;
-            currentSongId = song.id;
-            
-            // Update UI
-            musicTitle.textContent = song.name;
-            musicArtist.textContent = song.artist;
-            albumArtImg.src = song.albumArt;
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            playPauseBtn.classList.add('playing');
-            
-            // Update background
-            const backgroundElement = document.querySelector('.background-blur');
-            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-            backgroundElement.classList.add('rotating');
-            
-            // Play the audio
-            audioPlayer.play();
-            
-            // Update the display
-            renderSongs();
-        };
+        // Restore the saved progress after a small delay to ensure audio is loaded
+        setTimeout(() => {
+            if (songData.progress) {
+                audioPlayer.currentTime = songData.progress;
+            }
+        }, 100);
+
     } catch (error) {
         console.error('Error loading saved song:', error);
     }
