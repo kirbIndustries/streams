@@ -1606,50 +1606,56 @@ window.addEventListener("beforeunload", () => {
 });
 
 window.addEventListener("load", async () => {
-    await initDB(); // Make sure DB is initialized first
-    
-    const savedData = JSON.parse(localStorage.getItem("currentSong"));
-    if (savedData && savedData.id) {
-        const song = songs.find(s => s.id === savedData.id);
-        if (song) {
-            // Load the audio file from IndexedDB first
-            const transaction = db.transaction(['musicFiles'], 'readonly');
-            const store = transaction.objectStore('musicFiles');
-            const request = store.get(savedData.id);
+    try {
+        await initDB(); // Wait for DB initialization
+        const savedData = localStorage.getItem("currentSong");
+        
+        if (!savedData) return;
+        
+        const songData = JSON.parse(savedData);
+        if (!songData || !songData.id) return;
+        
+        // First find the song metadata
+        const song = songs.find(s => s.id === songData.id);
+        if (!song) return;
+        
+        // Get the actual audio file from IndexedDB
+        const transaction = db.transaction(['musicFiles'], 'readonly');
+        const store = transaction.objectStore('musicFiles');
+        
+        store.get(songData.id).onsuccess = function(event) {
+            const fileData = event.target.result;
+            if (!fileData || !fileData.file) return;
             
-            request.onsuccess = () => {
-                if (request.result) {
-                    // Create blob URL from the file data
-                    song.url = URL.createObjectURL(request.result.file);
-                    
-                    // Now load and play the song
-                    audioPlayer.src = song.url;
-                    audioPlayer.currentTime = savedData.progress || 0;
-                    
-                    // Update UI
-                    musicTitle.textContent = song.name;
-                    musicArtist.textContent = song.artist;
-                    albumArtImg.src = song.albumArt;
-                    
-                    // Update background
-                    const backgroundElement = document.querySelector('.background-blur');
-                    backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-                    
-                    currentSongId = song.id;
-                    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                    playPauseBtn.classList.add('playing');
-                    
-                    // Play the audio
-                    audioPlayer.play().then(() => {
-                        document.querySelector('.background-blur').classList.add('rotating');
-                    }).catch(console.error);
-                }
-            };
+            // Create a blob URL for the audio file
+            const blob = new Blob([fileData.file]);
+            song.url = URL.createObjectURL(blob);
             
-            request.onerror = (error) => {
-                console.error('Error loading saved song:', error);
-            };
-        }
+            // Set up audio player
+            audioPlayer.src = song.url;
+            audioPlayer.currentTime = songData.progress || 0;
+            currentSongId = song.id;
+            
+            // Update UI
+            musicTitle.textContent = song.name;
+            musicArtist.textContent = song.artist;
+            albumArtImg.src = song.albumArt;
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+            playPauseBtn.classList.add('playing');
+            
+            // Update background
+            const backgroundElement = document.querySelector('.background-blur');
+            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+            backgroundElement.classList.add('rotating');
+            
+            // Play the audio
+            audioPlayer.play();
+            
+            // Update the display
+            renderSongs();
+        };
+    } catch (error) {
+        console.error('Error loading saved song:', error);
     }
 });
         
