@@ -1725,8 +1725,6 @@ audioPlayer.addEventListener('timeupdate', async () => {
     }
 });
 
-        audioPlayer.addEventListener('ended', playNextSong);
-
 playPauseBtn.addEventListener('click', () => {
     if (audioPlayer.paused) {
         audioPlayer.play();
