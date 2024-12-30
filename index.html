@@ -1619,10 +1619,38 @@ window.addEventListener("load", async () => {
         const songData = JSON.parse(savedData);
         if (!songData || !songData.id) return;
         
-        // Use loadAndPlaySong function that's already working
         const song = songs.find(s => s.id === songData.id);
         if (song) {
-            loadAndPlaySong(song);
+            // Load song without playing
+            const transaction = db.transaction(['musicFiles'], 'readonly');
+            const store = transaction.objectStore('musicFiles');
+            const request = store.get(song.id);
+            
+            request.onsuccess = () => {
+                if (request.result) {
+                    song.url = URL.createObjectURL(request.result.file);
+                    
+                    // Set up audio player without playing
+                    audioPlayer.src = song.url;
+                    audioPlayer.currentTime = songData.progress || 0;
+                    
+                    // Update UI elements
+                    musicTitle.textContent = song.name;
+                    musicArtist.textContent = song.artist;
+                    albumArtImg.src = song.albumArt;
+                    
+                    const backgroundElement = document.querySelector('.background-blur');
+                    backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+                    
+                    currentSongId = song.id;
+                    
+                    // Set play button to play state
+                    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                    playPauseBtn.classList.remove('playing');
+                    
+                    renderSongs();
+                }
+            };
         }
 
     } catch (error) {
