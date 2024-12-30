@@ -1619,41 +1619,57 @@ window.addEventListener("load", async () => {
         const song = songs.find(s => s.id === songData.id);
         if (!song) return;
 
-        // Load the file from IndexedDB first, similar to how it works in song navigation
-        const transaction = db.transaction(['musicFiles'], 'readonly');
-        const store = transaction.objectStore('musicFiles');
+        // Create a Promise to handle the file loading
+        const loadFile = new Promise((resolve, reject) => {
+            const transaction = db.transaction(['musicFiles'], 'readonly');
+            const store = transaction.objectStore('musicFiles');
+            
+            const request = store.get(songData.id);
+            
+            request.onsuccess = (event) => {
+                if (event.target.result && event.target.result.file) {
+                    // Create Blob and URL
+                    const blob = new Blob([event.target.result.file]);
+                    song.url = URL.createObjectURL(blob);
+                    resolve(song);
+                } else {
+                    reject(new Error('File not found in IndexedDB'));
+                }
+            };
+            
+            request.onerror = () => reject(request.error);
+        });
+
+        // Wait for file to load before setting up audio player
+        const loadedSong = await loadFile;
         
-        store.get(songData.id).onsuccess = function(event) {
-            if (event.target.result && event.target.result.file) {
-                // Create the URL only after we have the file
-                song.url = URL.createObjectURL(new Blob([event.target.result.file]));
-                
-                // Now load the song
-                audioPlayer.src = song.url;
-                audioPlayer.currentTime = songData.progress || 0;
-                
-                // Update UI elements
-                musicTitle.textContent = song.name;
-                musicArtist.textContent = song.artist;
-                albumArtImg.src = song.albumArt;
-                
-                const backgroundElement = document.querySelector('.background-blur');
-                backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-                
-                currentSongId = song.id;
-                
-                // Play only after everything is set up
-                audioPlayer.play().then(() => {
-                    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                    playPauseBtn.classList.add('playing');
-                    document.querySelector('.background-blur').classList.add('rotating');
-                }).catch(error => {
-                    console.error('Error playing audio:', error);
-                });
-                
-                renderSongs();
-            }
-        };
+        // Set up audio player only after file is loaded
+        audioPlayer.src = loadedSong.url;
+        await audioPlayer.load(); // Ensure media is loaded
+        
+        audioPlayer.currentTime = songData.progress || 0;
+        
+        // Update UI elements
+        musicTitle.textContent = loadedSong.name;
+        musicArtist.textContent = loadedSong.artist;
+        albumArtImg.src = loadedSong.albumArt;
+        
+        const backgroundElement = document.querySelector('.background-blur');
+        backgroundElement.style.backgroundImage = `url('${loadedSong.albumArt}')`;
+        
+        currentSongId = loadedSong.id;
+        
+        // Try to play only after everything is properly loaded
+        try {
+            await audioPlayer.play();
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+            playPauseBtn.classList.add('playing');
+            document.querySelector('.background-blur').classList.add('rotating');
+        } catch (playError) {
+            console.error('Error playing audio:', playError);
+        }
+        
+        renderSongs();
 
     } catch (error) {
         console.error('Error loading saved song:', error);
