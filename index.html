@@ -438,6 +438,33 @@
     color: #bdd6ff;
 }
 
+/* Make shuffle and repeat buttons transparent by default */
+#shuffleBtn, #repeatBtn {
+    background: transparent;
+    border: none;
+    color: #f9f9f9;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: all 0.3s ease;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    line-height: 0;
+}
+
+/* When active, use the same background as other control buttons */
+#shuffleBtn.active, #repeatBtn.active {
+    background: rgba(102, 102, 102, .4);
+}
+
+#shuffleBtn:hover, #repeatBtn:hover {
+    background-color: #f9f9f9 !important;
+    color: #1c1c1c;
+}
+        
 .sidebar-title {
     color: white;
     font-size: 24px;
@@ -673,29 +700,26 @@ const initDB = () => {
 
 function createPlayQueue() {
     if (isShuffleEnabled) {
-        let newQueue = [];
-        let available = [...songs];
+        // Create a new array of all songs except current
+        let availableSongs = [...songs];
+        let currentSong = null;
         
-        // If there's a current song, keep it in its position
         if (currentSongId) {
-            const currentIndex = available.findIndex(s => s.id === currentSongId);
-            if (currentIndex !== -1) {
-                const [current] = available.splice(currentIndex, 1);
-                newQueue.push(current);
-            }
+            currentSong = availableSongs.find(s => s.id === currentSongId);
+            availableSongs = availableSongs.filter(s => s.id !== currentSongId);
         }
         
-        // Shuffle remaining songs
-        while (available.length) {
-            const randomIndex = Math.floor(Math.random() * available.length);
-            newQueue.push(available.splice(randomIndex, 1)[0]);
+        // Fisher-Yates shuffle algorithm
+        for (let i = availableSongs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [availableSongs[i], availableSongs[j]] = [availableSongs[j], availableSongs[i]];
         }
         
-        return newQueue;
-    } else {
-        // When shuffle is off, use the original songs array order
-        return [...songs];
+        // Put current song at the start if it exists
+        return currentSong ? [currentSong, ...availableSongs] : availableSongs;
     }
+    
+    return [...songs];
 }
 
 function resetPlayer() {
@@ -1308,57 +1332,75 @@ function loadSong(song) {
 }
         
 function playNextSong() {
-    // Ensure playQueue and currentQueueIndex are initialized
-    if (!playQueue.length || currentQueueIndex === -1) {
+    if (!playQueue.length) {
         playQueue = createPlayQueue();
-        currentQueueIndex = -1; // Reset index
     }
-
+    
     if (repeatMode === 'one') {
-        // Handle repeat mode for one song
         audioPlayer.currentTime = 0;
         audioPlayer.play();
         return;
     }
-
-    // Increment currentQueueIndex for next song
+    
     currentQueueIndex++;
-
-    if (currentQueueIndex >= playQueue.length) {
-        if (repeatMode === 'all') {
-            currentQueueIndex = 0; // Loop back to start of queue
-        } else {
-            resetPlayer(); // End playback if no repeat mode
+    
+    // Get current album
+    const currentSong = playQueue[currentQueueIndex - 1];
+    const currentAlbum = currentSong ? currentSong.album : null;
+    
+    if (currentQueueIndex >= playQueue.length || 
+        (repeatMode === 'album' && currentAlbum && 
+         playQueue[currentQueueIndex]?.album !== currentAlbum)) {
+        
+        if (repeatMode === 'album' && currentAlbum) {
+            // Find the first song of the current album
+            currentQueueIndex = playQueue.findIndex(song => song.album === currentAlbum);
+        } else if (repeatMode === 'none') {
+            resetPlayer();
             return;
+        } else {
+            currentQueueIndex = 0;
         }
     }
-
-    // Get the next song from playQueue
+    
     const nextSong = playQueue[currentQueueIndex];
-
     if (nextSong) {
-        const transaction = db.transaction(['musicFiles'], 'readonly');
-        const store = transaction.objectStore('musicFiles');
-        const request = store.get(nextSong.id);
+        loadAndPlaySong(nextSong);
+    }
+}
 
-        request.onsuccess = (event) => {
-            if (request.result) {
-                // Prepare the next song for playback
-                nextSong.url = URL.createObjectURL(request.result.file);
-                loadSong(nextSong);
-                audioPlayer.currentTime = 0;
-                audioPlayer.play();
-
-                // Update UI elements
-                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                playPauseBtn.classList.add('playing');
-                document.querySelector('.background-blur').classList.add('rotating');
-                renderSongs();
-            }
-        };
-    } else {
-        // Reset the player if no next song
-        resetPlayer();
+function playPreviousSong() {
+    if (!playQueue.length) {
+        playQueue = createPlayQueue();
+    }
+    
+    if (audioPlayer.currentTime > 3) {
+        audioPlayer.currentTime = 0;
+        return;
+    }
+    
+    currentQueueIndex--;
+    
+    // Get current album
+    const currentSong = playQueue[currentQueueIndex + 1];
+    const currentAlbum = currentSong ? currentSong.album : null;
+    
+    if (currentQueueIndex < 0 || 
+        (repeatMode === 'album' && currentAlbum && 
+         playQueue[currentQueueIndex]?.album !== currentAlbum)) {
+        
+        if (repeatMode === 'album' && currentAlbum) {
+            // Find the last song of the current album
+            const albumSongs = playQueue.filter(song => song.album === currentAlbum);
+            currentQueueIndex = playQueue.indexOf(albumSongs[albumSongs.length - 1]);
+        } else {
+            currentQueueIndex = 0;
+        }
+    }
+    
+    const prevSong = playQueue[currentQueueIndex];
+    if (prevSong) {
+        loadAndPlaySong(prevSong);
     }
 }
 
@@ -1446,29 +1488,23 @@ function toggleShuffle() {
     const shuffleBtn = document.getElementById('shuffleBtn');
     shuffleBtn.classList.toggle('active');
     
-    // Store current song
+    // Create new shuffled queue immediately
     const currentSong = currentSongId ? songs.find(s => s.id === currentSongId) : null;
-    
-    // Recreate queue with new shuffle state
     playQueue = createPlayQueue();
     
-    // Restore current song position in queue
-    if (currentSong) {
-        currentQueueIndex = playQueue.findIndex(s => s.id === currentSong.id);
-    } else {
-        currentQueueIndex = -1;
-    }
+    // Find the current song's position in the new queue
+    currentQueueIndex = currentSong ? playQueue.findIndex(s => s.id === currentSong.id) : 0;
 }
-
+        
 function toggleRepeat() {
     const repeatBtn = document.getElementById('repeatBtn');
     switch(repeatMode) {
         case 'none':
-            repeatMode = 'all';
+            repeatMode = 'album';  // Changed from 'all' to 'album'
             repeatBtn.innerHTML = '<span class="material-symbols-rounded">repeat</span>';
             repeatBtn.classList.add('active');
             break;
-        case 'all':
+        case 'album':
             repeatMode = 'one';
             repeatBtn.innerHTML = '<span class="material-symbols-rounded">repeat_one</span>';
             repeatBtn.classList.add('active');
@@ -1483,20 +1519,25 @@ function toggleRepeat() {
 
 function updatePlayQueue() {
     if (isShuffleEnabled) {
-        // Create a new shuffled array excluding the current song
-        const remainingSongs = songs.filter(song => song.id !== currentSongId);
-        const shuffledSongs = remainingSongs.sort(() => Math.random() - 0.5);
+        // Create a copy of all songs excluding the current song
+        let availableSongs = songs.filter(song => song.id !== currentSongId);
         
-        // If there's a current song, put it at the beginning
+        // Shuffle the available songs
+        availableSongs = availableSongs.sort(() => Math.random() - 0.5);
+        
+        // If there's a current song, add it at the beginning
         if (currentSongId) {
             const currentSong = songs.find(song => song.id === currentSongId);
-            playQueue = currentSong ? [currentSong, ...shuffledSongs] : shuffledSongs;
+            playQueue = currentSong ? [currentSong, ...availableSongs] : availableSongs;
         } else {
-            playQueue = shuffledSongs;
+            playQueue = availableSongs;
         }
     } else {
+        // In non-shuffle mode, maintain the original order
         playQueue = [...songs];
     }
+    
+    // Update the current queue index
     currentQueueIndex = playQueue.findIndex(song => song.id === currentSongId);
     if (currentQueueIndex === -1) currentQueueIndex = 0;
 }
