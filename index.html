@@ -1619,15 +1619,41 @@ window.addEventListener("load", async () => {
         const song = songs.find(s => s.id === songData.id);
         if (!song) return;
 
-        // Use the same loading function that works for skipping songs
-        loadAndPlaySong(song);
+        // Load the file from IndexedDB first, similar to how it works in song navigation
+        const transaction = db.transaction(['musicFiles'], 'readonly');
+        const store = transaction.objectStore('musicFiles');
         
-        // Restore the saved progress after a small delay to ensure audio is loaded
-        setTimeout(() => {
-            if (songData.progress) {
-                audioPlayer.currentTime = songData.progress;
+        store.get(songData.id).onsuccess = function(event) {
+            if (event.target.result && event.target.result.file) {
+                // Create the URL only after we have the file
+                song.url = URL.createObjectURL(new Blob([event.target.result.file]));
+                
+                // Now load the song
+                audioPlayer.src = song.url;
+                audioPlayer.currentTime = songData.progress || 0;
+                
+                // Update UI elements
+                musicTitle.textContent = song.name;
+                musicArtist.textContent = song.artist;
+                albumArtImg.src = song.albumArt;
+                
+                const backgroundElement = document.querySelector('.background-blur');
+                backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+                
+                currentSongId = song.id;
+                
+                // Play only after everything is set up
+                audioPlayer.play().then(() => {
+                    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                    playPauseBtn.classList.add('playing');
+                    document.querySelector('.background-blur').classList.add('rotating');
+                }).catch(error => {
+                    console.error('Error playing audio:', error);
+                });
+                
+                renderSongs();
             }
-        }, 100);
+        };
 
     } catch (error) {
         console.error('Error loading saved song:', error);
