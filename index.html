@@ -1605,31 +1605,52 @@ window.addEventListener("beforeunload", () => {
 });
 
 window.addEventListener("load", async () => {
+    await initDB(); // Make sure DB is initialized first
+    
     const savedData = JSON.parse(localStorage.getItem("currentSong"));
     if (savedData && savedData.id) {
         const song = songs.find(s => s.id === savedData.id);
         if (song) {
-            await loadSong(song); // Assuming loadSong sets the audioPlayer's `src`
-            audioPlayer.currentTime = savedData.progress || 0; // Set the saved progress
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            audioPlayer.play(); // Auto-play the song at saved progress
+            // Load the audio file from IndexedDB first
+            const transaction = db.transaction(['musicFiles'], 'readonly');
+            const store = transaction.objectStore('musicFiles');
+            const request = store.get(savedData.id);
+            
+            request.onsuccess = () => {
+                if (request.result) {
+                    // Create blob URL from the file data
+                    song.url = URL.createObjectURL(request.result.file);
+                    
+                    // Now load and play the song
+                    audioPlayer.src = song.url;
+                    audioPlayer.currentTime = savedData.progress || 0;
+                    
+                    // Update UI
+                    musicTitle.textContent = song.name;
+                    musicArtist.textContent = song.artist;
+                    albumArtImg.src = song.albumArt;
+                    
+                    // Update background
+                    const backgroundElement = document.querySelector('.background-blur');
+                    backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+                    
+                    currentSongId = song.id;
+                    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                    playPauseBtn.classList.add('playing');
+                    
+                    // Play the audio
+                    audioPlayer.play().then(() => {
+                        document.querySelector('.background-blur').classList.add('rotating');
+                    }).catch(console.error);
+                }
+            };
+            
+            request.onerror = (error) => {
+                console.error('Error loading saved song:', error);
+            };
         }
     }
 });
-    
-    // Call updateMediaSessionMetadata() whenever you load a new song
-    audioPlayer.addEventListener('play', () => {
-        if (currentSongId) {
-            const currentSong = songs.find(song => song.id === currentSongId);
-            updateMediaSessionMetadata(currentSong);
-            updateMediaSessionPlaybackState('playing');
-        }
-    });
-
-    audioPlayer.addEventListener('pause', () => {
-        updateMediaSessionPlaybackState('paused');
-    });
-}
         
 musicUpload.addEventListener('change', async (e) => {
     if (e.target.files.length > 0) {
