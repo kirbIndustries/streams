@@ -1598,11 +1598,16 @@ if ('mediaSession' in navigator) {
 
     function setupMediaSessionActions() {
         navigator.mediaSession.setActionHandler('play', () => {
-            playPauseAudio();
+            audioPlayer.play();
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+            playPauseBtn.classList.add('playing');
+            document.querySelector('.background-blur').classList.add('rotating');
         });
 
         navigator.mediaSession.setActionHandler('pause', () => {
-            playPauseAudio();
+            audioPlayer.pause();
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+            playPauseBtn.classList.remove('playing');
         });
 
         navigator.mediaSession.setActionHandler('previoustrack', () => {
@@ -1623,6 +1628,8 @@ if ('mediaSession' in navigator) {
 
         navigator.mediaSession.setActionHandler('stop', () => {
             audioPlayer.pause();
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+            playPauseBtn.classList.remove('playing');
             audioPlayer.currentTime = 0;
             updateMediaSessionPlaybackState('paused');
         });
@@ -1635,8 +1642,6 @@ if ('mediaSession' in navigator) {
     // Call setup once at startup
     setupMediaSessionActions();
 }
-
-
         
 window.addEventListener("beforeunload", () => {
     if (currentSongId !== null) {
