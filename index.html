@@ -841,33 +841,6 @@ function generateRandomGradient() {
     
     return canvas.toDataURL('image/jpeg', 0.9);
 }
-
-function updateFavicon(imageUrl) {
-    // Create a link element if it doesn't exist
-    let favicon = document.querySelector("link[rel='icon']");
-    if (!favicon) {
-        favicon = document.createElement('link');
-        favicon.rel = 'icon';
-        document.head.appendChild(favicon);
-    }
-
-    // Create a temporary canvas to resize the image
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 32;  // Standard favicon size
-    canvas.height = 32;
-
-    // Create a temporary image to load the album art
-    const img = new Image();
-    img.crossOrigin = 'anonymous';  // Handle CORS if needed
-    img.onload = function() {
-        // Draw and resize the image to 32x32
-        ctx.drawImage(img, 0, 0, 32, 32);
-        // Convert to favicon URL
-        favicon.href = canvas.toDataURL('image/png');
-    };
-    img.src = imageUrl;
-}
         
 async function preloadSongs(files) {
     const allowedTypes = [
@@ -944,25 +917,20 @@ async function loadSong(song) {
     
     // Function to update favicon
     function updateFavicon(imageUrl) {
-        let favicon = document.querySelector("link[rel='icon']");
-        if (!favicon) {
-            favicon = document.createElement('link');
-            favicon.rel = 'icon';
-            document.head.appendChild(favicon);
+        // Remove existing favicon
+        const existingFavicon = document.querySelector("link[rel='icon']");
+        if (existingFavicon) {
+            existingFavicon.remove();
         }
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = 32;
-        canvas.height = 32;
+        // Create new favicon link element
+        const link = document.createElement('link');
+        link.type = 'image/x-icon';
+        link.rel = 'icon';
+        link.href = imageUrl;
 
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = function() {
-            ctx.drawImage(img, 0, 0, 32, 32);
-            favicon.href = canvas.toDataURL('image/png');
-        };
-        img.src = imageUrl;
+        // Add to document head
+        document.head.appendChild(link);
     }
     
     request.onsuccess = (event) => {
