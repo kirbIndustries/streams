@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music</title>
-    <link id="favicon" rel="icon" type="image/x-icon" href="favicon.png">
+    <link id="favicon" rel="icon" type="image/jpeg" href="favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,700,1,0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
@@ -941,23 +941,33 @@ async function preloadSongs(files) {
 }
 
 function updateFavicon(albumArt) {
-  // Helper: remove all existing favicon links
+  // Determine the favicon URL.
+  // For data URLs, don't add a cache-busting query string.
+  const faviconURL = albumArt.startsWith('data:') 
+    ? albumArt 
+    : albumArt + '?' + new Date().getTime();
+
+  // Remove any existing favicon links.
   const removeFavicons = () => {
-    const favicons = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
-    favicons.forEach(link => link.parentNode.removeChild(link));
+    const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
+    links.forEach(link => link.parentNode.removeChild(link));
   };
-
-  // Helper: add a cache-busting query parameter
-  const bustCache = url => url + '?' + new Date().getTime();
-
-  // Remove old favicons
   removeFavicons();
 
-  // Create a new favicon link element
+  // Create a new favicon link element.
   const newFavicon = document.createElement('link');
   newFavicon.rel = 'icon';
-  newFavicon.type = 'image/png';
-  newFavicon.href = bustCache(albumArt);
+
+  // Set the MIME type based on the Base64 data.
+  if (albumArt.startsWith('data:image/jpeg')) {
+    newFavicon.type = 'image/jpeg';
+  } else if (albumArt.startsWith('data:image/png')) {
+    newFavicon.type = 'image/png';
+  } else {
+    newFavicon.type = 'image/png'; // Default fallback.
+  }
+
+  newFavicon.href = faviconURL;
   document.head.appendChild(newFavicon);
 }
 
