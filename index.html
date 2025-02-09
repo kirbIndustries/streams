@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music</title>
-    <link id="dynamic-favicon" rel="shortcut icon" href="favicon.png">
+    <link id="favicon" rel="icon" type="image/x-icon" href="favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,700,1,0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
@@ -964,29 +964,44 @@ async function preloadSongs(files) {
     console.log('All songs processed and stored successfully');
 }
 
+function updateFavicon(albumArt) {
+    // Create a canvas element
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+
+    // Create an image element
+    const img = new Image();
+    
+    // When the image loads, draw it to the canvas and update favicon
+    img.onload = function() {
+        // Draw image to canvas
+        ctx.drawImage(img, 0, 0, 16, 16);
+        
+        // Get the favicon element
+        const favicon = document.getElementById('favicon');
+        if (favicon) {
+            // Convert canvas to blob and create URL
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                favicon.href = url;
+                
+                // Clean up old blob URL after a delay
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            });
+        }
+    };
+
+    // Set image source to album art
+    img.src = albumArt;
+}
+
 async function loadSong(song) {
     const transaction = db.transaction(['musicFiles'], 'readonly');
     const store = transaction.objectStore('musicFiles');
     const request = store.get(song.id);
     document.title = `${song.name} by ${song.artist}`;
-    
-    function setFavicon() {
-        const link = document.createElement('link');
-        const oldLink = document.querySelector("link[rel='icon']");
-        
-        link.id = 'dynamic-favicon';
-        link.rel = 'shortcut icon';
-        link.href = song.albumArt;
-        
-        if (oldLink) {
-            document.head.removeChild(oldLink);
-        }
-        
-        document.head.appendChild(link);
-        
-        // Force browser to acknowledge favicon change
-        document.title = document.title;
-    }
     
     request.onsuccess = (event) => {
         if (request.result && request.result.file) {
@@ -1009,8 +1024,8 @@ async function loadSong(song) {
             backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
             albumArtImg.src = song.albumArt;
             
-            // Update favicon with album art
-            setFavicon();
+            // Update favicon
+            updateFavicon(song.albumArt);
 
             setTimeout(() => {
                 backgroundElement.classList.remove('changing');
