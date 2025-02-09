@@ -915,22 +915,22 @@ async function loadSong(song) {
     const request = store.get(song.id);
     document.title = `${song.name} by ${song.artist}`;
     
-    // Function to update favicon
-    function updateFavicon(imageUrl) {
-        // Remove existing favicon
-        const existingFavicon = document.querySelector("link[rel='icon']");
-        if (existingFavicon) {
-            existingFavicon.remove();
-        }
-
-        // Create new favicon link element
+    function setFavicon() {
         const link = document.createElement('link');
-        link.type = 'image/x-icon';
-        link.rel = 'icon';
-        link.href = imageUrl;
-
-        // Add to document head
+        const oldLink = document.querySelector("link[rel='icon']");
+        
+        link.id = 'dynamic-favicon';
+        link.rel = 'shortcut icon';
+        link.href = song.albumArt;
+        
+        if (oldLink) {
+            document.head.removeChild(oldLink);
+        }
+        
         document.head.appendChild(link);
+        
+        // Force browser to acknowledge favicon change
+        document.title = document.title;
     }
     
     request.onsuccess = (event) => {
@@ -955,7 +955,7 @@ async function loadSong(song) {
             albumArtImg.src = song.albumArt;
             
             // Update favicon with album art
-            updateFavicon(song.albumArt);
+            setFavicon();
 
             setTimeout(() => {
                 backgroundElement.classList.remove('changing');
