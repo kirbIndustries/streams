@@ -936,58 +936,24 @@ async function preloadSongs(files) {
 }
 
 function updateFavicon(albumArt) {
-  // Create a 16x16 canvas
-  const canvas = document.createElement('canvas');
-  canvas.width = 16;
-  canvas.height = 16;
-  const ctx = canvas.getContext('2d');
-
-  // Create an image with crossOrigin set to avoid tainted canvas issues
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-
-  img.onload = function() {
-    // Draw the album art onto the canvas
-    ctx.drawImage(img, 0, 0, 16, 16);
-    
-    // Function to remove the old favicon element if it exists
-    const removeOldFavicon = () => {
-      const oldFavicon = document.getElementById('favicon');
-      if (oldFavicon) {
-        oldFavicon.parentNode.removeChild(oldFavicon);
-      }
-    };
-
-    // Prefer using toBlob if available, otherwise fallback to toDataURL
-    if (canvas.toBlob) {
-      canvas.toBlob(function(blob) {
-        const url = URL.createObjectURL(blob);
-        removeOldFavicon();
-
-        // Create a new favicon element
-        const favicon = document.createElement('link');
-        favicon.id = 'favicon';
-        favicon.rel = 'icon';
-        favicon.href = url;
-        document.head.appendChild(favicon);
-
-        // Delay revoking the blob URL (5 seconds is safer than 1 second)
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-      }, 'image/png');
-    } else {
-      const dataURL = canvas.toDataURL('image/png');
-      removeOldFavicon();
-
-      const favicon = document.createElement('link');
-      favicon.id = 'favicon';
-      favicon.rel = 'icon';
-      favicon.href = dataURL;
-      document.head.appendChild(favicon);
-    }
+  // Helper: remove all existing favicon links
+  const removeFavicons = () => {
+    const favicons = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
+    favicons.forEach(link => link.parentNode.removeChild(link));
   };
 
-  // Start loading the image
-  img.src = albumArt;
+  // Helper: add a cache-busting query parameter
+  const bustCache = url => url + '?' + new Date().getTime();
+
+  // Remove old favicons
+  removeFavicons();
+
+  // Create a new favicon link element
+  const newFavicon = document.createElement('link');
+  newFavicon.rel = 'icon';
+  newFavicon.type = 'image/png';
+  newFavicon.href = bustCache(albumArt);
+  document.head.appendChild(newFavicon);
 }
 
 async function loadSong(song) {
