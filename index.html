@@ -942,33 +942,47 @@ function updateFavicon(albumArt) {
   canvas.height = 16;
   const ctx = canvas.getContext('2d');
 
-  // Create an image and set crossOrigin so we don’t get a tainted canvas
+  // Create an image with crossOrigin set to avoid tainted canvas issues
   const img = new Image();
   img.crossOrigin = 'anonymous';
-  
+
   img.onload = function() {
-    // Draw the image onto the canvas
+    // Draw the album art onto the canvas
     ctx.drawImage(img, 0, 0, 16, 16);
     
-    // Get the favicon element; if missing, create one and append it to the head
-    let favicon = document.getElementById('favicon');
-    if (!favicon) {
-      favicon = document.createElement('link');
-      favicon.id = 'favicon';
-      favicon.rel = 'icon';
-      document.head.appendChild(favicon);
-    }
-    
-    // Prefer using toBlob if available, otherwise fall back to toDataURL
+    // Function to remove the old favicon element if it exists
+    const removeOldFavicon = () => {
+      const oldFavicon = document.getElementById('favicon');
+      if (oldFavicon) {
+        oldFavicon.parentNode.removeChild(oldFavicon);
+      }
+    };
+
+    // Prefer using toBlob if available, otherwise fallback to toDataURL
     if (canvas.toBlob) {
       canvas.toBlob(function(blob) {
         const url = URL.createObjectURL(blob);
+        removeOldFavicon();
+
+        // Create a new favicon element
+        const favicon = document.createElement('link');
+        favicon.id = 'favicon';
+        favicon.rel = 'icon';
         favicon.href = url;
-        // Revoke the URL after a short delay to avoid memory leaks
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        document.head.appendChild(favicon);
+
+        // Delay revoking the blob URL (5 seconds is safer than 1 second)
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
       }, 'image/png');
     } else {
-      favicon.href = canvas.toDataURL('image/png');
+      const dataURL = canvas.toDataURL('image/png');
+      removeOldFavicon();
+
+      const favicon = document.createElement('link');
+      favicon.id = 'favicon';
+      favicon.rel = 'icon';
+      favicon.href = dataURL;
+      document.head.appendChild(favicon);
     }
   };
 
