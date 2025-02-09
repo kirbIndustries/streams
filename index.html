@@ -790,6 +790,11 @@ function loadAndPlaySong(song) {
             musicTitle.textContent = song.name;
             musicArtist.textContent = song.artist;
             
+            const qualityBadge = document.querySelector('.quality-badge');
+            const quality = determineAudioQuality({ name: song.url });
+            qualityBadge.textContent = quality.label;
+            qualityBadge.className = `quality-badge ${quality.class}`;
+            
             const backgroundElement = document.querySelector('.background-blur');
             backgroundElement.classList.add('changing');
             backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
