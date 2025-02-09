@@ -936,36 +936,44 @@ async function preloadSongs(files) {
 }
 
 function updateFavicon(albumArt) {
-    // Create a canvas element
-    const canvas = document.createElement('canvas');
-    canvas.width = 16;
-    canvas.height = 16;
-    const ctx = canvas.getContext('2d');
+  // Create a 16x16 canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
 
-    // Create an image element
-    const img = new Image();
+  // Create an image and set crossOrigin so we don’t get a tainted canvas
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  
+  img.onload = function() {
+    // Draw the image onto the canvas
+    ctx.drawImage(img, 0, 0, 16, 16);
     
-    // When the image loads, draw it to the canvas and update favicon
-    img.onload = function() {
-        // Draw image to canvas
-        ctx.drawImage(img, 0, 0, 16, 16);
-        
-        // Get the favicon element
-        const favicon = document.getElementById('favicon');
-        if (favicon) {
-            // Convert canvas to blob and create URL
-            canvas.toBlob(function(blob) {
-                const url = URL.createObjectURL(blob);
-                favicon.href = url;
-                
-                // Clean up old blob URL after a delay
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-            });
-        }
-    };
+    // Get the favicon element; if missing, create one and append it to the head
+    let favicon = document.getElementById('favicon');
+    if (!favicon) {
+      favicon = document.createElement('link');
+      favicon.id = 'favicon';
+      favicon.rel = 'icon';
+      document.head.appendChild(favicon);
+    }
+    
+    // Prefer using toBlob if available, otherwise fall back to toDataURL
+    if (canvas.toBlob) {
+      canvas.toBlob(function(blob) {
+        const url = URL.createObjectURL(blob);
+        favicon.href = url;
+        // Revoke the URL after a short delay to avoid memory leaks
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }, 'image/png');
+    } else {
+      favicon.href = canvas.toDataURL('image/png');
+    }
+  };
 
-    // Set image source to album art
-    img.src = albumArt;
+  // Start loading the image
+  img.src = albumArt;
 }
 
 async function loadSong(song) {
