@@ -109,16 +109,16 @@
         }
 
         .album-art {
-            width: 500px;
+            width: 50vw;
             height: 500px;
             border-radius: 25px;
             background-color: #666666;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-top: 40px;
             overflow: hidden;
             transition: transform 0.5s ease;
+            max-width: 500px;
         }
 
         .album-art img {
@@ -525,12 +525,6 @@
     font-size: 14px;
 }
 
-@media (max-height: 600px) {
-    .album-art {
-        display: none;
-    }
-}
-        
 @media (max-width: 768px) {
     .sidebar {
         position: fixed;
@@ -571,13 +565,6 @@
     .overlay.active {
         display: block;
     }
-
-   .album-art {
-       width: 80vw;
-       height: 80vw;
-       max-width: 500px;
-       max-height: 500px;
-   }
 
     .progress-container {
         width: 90%;
