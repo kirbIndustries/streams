@@ -1390,6 +1390,9 @@ function attachEventListeners() {
             const song = songs.find(s => s.id === songId);
             
             if (song) {
+                // Stop any current playback to avoid errors
+                audioPlayer.pause();
+                
                 currentSongId = song.id;
                 updatePlayQueue(); // Update queue when selecting a new song
                 
@@ -1405,7 +1408,7 @@ function attachEventListeners() {
                         }
                         song.url = URL.createObjectURL(request.result.file);
                         
-                        // Set up audio player and play immediately
+                        // Set up audio player
                         audioPlayer.src = song.url;
                         audioPlayer.currentTime = 0;
                         musicTitle.textContent = song.name;
@@ -1425,30 +1428,43 @@ function attachEventListeners() {
                             backgroundElement.classList.remove('changing');
                         }, 500);
                         
-                        // Play immediately
-                        audioPlayer.play()
-                            .then(() => {
-                                // Update UI to show playing status
-                                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                                playPauseBtn.classList.add('playing');
-                                document.querySelector('.background-blur').classList.add('rotating');
-                                
-                                // Update media session if available
-                                if ('mediaSession' in navigator && typeof updateMediaSessionMetadata === 'function') {
-                                    updateMediaSessionMetadata(song);
-                                    updateMediaSessionPlaybackState('playing');
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Failed to play audio:', error);
-                            });
+                        // Use a small delay before playing to ensure everything is loaded
+                        setTimeout(() => {
+                            // Using playback with error handling
+                            const playPromise = audioPlayer.play();
+                            
+                            if (playPromise !== undefined) {
+                                playPromise
+                                    .then(() => {
+                                        // Update UI to show playing status
+                                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                                        playPauseBtn.classList.add('playing');
+                                        document.querySelector('.background-blur').classList.add('rotating');
+                                        
+                                        // Update media session if available
+                                        if ('mediaSession' in navigator && typeof updateMediaSessionMetadata === 'function') {
+                                            updateMediaSessionMetadata(song);
+                                            updateMediaSessionPlaybackState('playing');
+                                        }
+                                    })
+                                    .catch(error => {
+                                        // Handle the error appropriately - could be user-initiated abort or other issue
+                                        console.log("Playback was prevented:", error.message);
+                                        
+                                        // Still update UI in case it's a benign error
+                                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                                        playPauseBtn.classList.remove('playing');
+                                        document.querySelector('.background-blur').classList.remove('rotating');
+                                    });
+                            }
+                        }, 50); // Small delay of 50ms
                         
                         renderSongs();
                     }
                 };
                 
-                request.onerror = () => {
-                    console.error(`Failed to load song with ID: ${songId}`);
+                request.onerror = (error) => {
+                    console.error(`Failed to load song with ID: ${songId}`, error);
                 };
             }
         });
@@ -1863,10 +1879,19 @@ audioPlayer.addEventListener('timeupdate', async () => {
 
 playPauseBtn.addEventListener('click', () => {
     if (audioPlayer.paused) {
-        audioPlayer.play();
-        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-        playPauseBtn.classList.add('playing');
-        document.querySelector('.background-blur').classList.add('rotating');
+        const playPromise = audioPlayer.play();
+        
+        if (playPromise !== undefined) {
+            playPromise
+                .then(() => {
+                    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                    playPauseBtn.classList.add('playing');
+                    document.querySelector('.background-blur').classList.add('rotating');
+                })
+                .catch(error => {
+                    console.log("Play button click prevented:", error.message);
+                });
+        }
     } else {
         audioPlayer.pause();
         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
@@ -1930,7 +1955,13 @@ audioPlayer.addEventListener('play', () => {
 audioPlayer.addEventListener('ended', () => {
     if (repeatMode === 'one') {
         audioPlayer.currentTime = 0;
-        audioPlayer.play();
+        const playPromise = audioPlayer.play();
+        
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.log("Auto-replay prevented:", error.message);
+            });
+        }
     } else if (repeatMode === 'none' && currentQueueIndex >= playQueue.length - 1) {
         resetPlayer();
     } else {
