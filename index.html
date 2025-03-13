@@ -239,6 +239,7 @@
             border-radius: 25px;
             cursor: pointer;
             margin-bottom: 10px;
+            transition: all 0.5s ease;
         }
 
         .progress {
@@ -944,34 +945,68 @@ async function preloadSongs(files) {
 }
 
 function updateFavicon(albumArt) {
-  // Determine the favicon URL.
-  // For data URLs, don't add a cache-busting query string.
-  const faviconURL = albumArt.startsWith('data:') 
-    ? albumArt 
-    : albumArt + '?' + new Date().getTime();
-
-  // Remove any existing favicon links.
-  const removeFavicons = () => {
+  // Create a canvas to draw the rounded image
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const size = 32; // Standard favicon size
+  
+  canvas.width = size;
+  canvas.height = size;
+  
+  // Create a new image from the album art
+  const img = new Image();
+  
+  // Set crossOrigin to anonymous for CORS if needed
+  if (!albumArt.startsWith('data:')) {
+    img.crossOrigin = 'anonymous';
+  }
+  
+  img.onload = function() {
+    // Clear the canvas
+    ctx.clearRect(0, 0, size, size);
+    
+    // Create a rounded clipping path
+    ctx.beginPath();
+    ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2, true);
+    ctx.closePath();
+    ctx.clip();
+    
+    // Draw the image with proper scaling
+    ctx.drawImage(img, 0, 0, size, size);
+    
+    // Get the rounded image as a data URL
+    const roundedImageURL = canvas.toDataURL('image/png');
+    
+    // Remove any existing favicon links
     const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
     links.forEach(link => link.parentNode.removeChild(link));
-  };
-  removeFavicons();
-
-  // Create a new favicon link element.
-  const newFavicon = document.createElement('link');
-  newFavicon.rel = 'icon';
-
-  // Set the MIME type based on the Base64 data.
-  if (albumArt.startsWith('data:image/jpeg')) {
-    newFavicon.type = 'image/jpeg';
-  } else if (albumArt.startsWith('data:image/png')) {
+    
+    // Create a new favicon link element
+    const newFavicon = document.createElement('link');
+    newFavicon.rel = 'icon';
     newFavicon.type = 'image/png';
-  } else {
-    newFavicon.type = 'image/png'; // Default fallback.
-  }
-
-  newFavicon.href = faviconURL;
-  document.head.appendChild(newFavicon);
+    newFavicon.href = roundedImageURL;
+    
+    // Add the new favicon to the document
+    document.head.appendChild(newFavicon);
+  };
+  
+  // Set the source to load the image
+  img.src = albumArt;
+  
+  // Handle image loading errors
+  img.onerror = function() {
+    console.error('Error loading album art for favicon');
+    // Set the default favicon
+    const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
+    links.forEach(link => link.parentNode.removeChild(link));
+    
+    const defaultFavicon = document.createElement('link');
+    defaultFavicon.rel = 'icon';
+    defaultFavicon.type = 'image/png';
+    defaultFavicon.href = '/music/favicon.png';
+    document.head.appendChild(defaultFavicon);
+  };
 }
 
 function setUpSongPlayback(song) {
