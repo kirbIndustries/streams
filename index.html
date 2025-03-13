@@ -753,6 +753,7 @@ function resetPlayer() {
     currentSongId = null;
     playQueue = [];
     currentQueueIndex = -1;
+    updateFavicon(song.albumArt);
     
     // Reset UI
     musicTitle.textContent = 'No song playing';
@@ -1689,17 +1690,6 @@ function updatePlayQueue() {
     // Update the current queue index
     currentQueueIndex = playQueue.findIndex(song => song.id === currentSongId);
     if (currentQueueIndex === -1) currentQueueIndex = 0;
-}
-
-function showNoSongPlayingScreen() {
-    updateFavicon(song.albumArt);
-    musicTitle.textContent = 'No song playing';
-    musicArtist.textContent = '';
-    albumArtImg.src = ''; // Or set to default image
-    document.querySelector('.background-blur').classList.remove('rotating');
-    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-    playPauseBtn.classList.remove('playing');
-    currentSongId = null;
 }
         
 function groupSongsByAlbum(songs) {
