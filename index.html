@@ -667,6 +667,7 @@
         let playQueue = [];
         let currentQueueIndex = -1;
         let searchTimeout;
+        let searchInput;
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
@@ -791,6 +792,9 @@ function loadAndPlaySong(song) {
             backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
             albumArtImg.src = song.albumArt;
             
+            // Update favicon
+            updateFavicon(song.albumArt);
+            
             setTimeout(() => {
                 backgroundElement.classList.remove('changing');
             }, 500);
@@ -800,6 +804,13 @@ function loadAndPlaySong(song) {
             playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
             playPauseBtn.classList.add('playing');
             document.querySelector('.background-blur').classList.add('rotating');
+            
+            // Update media session if available
+            if ('mediaSession' in navigator) {
+                updateMediaSessionMetadata(song);
+                updateMediaSessionPlaybackState('playing');
+            }
+            
             renderSongs();
         }
     };
@@ -961,6 +972,34 @@ function updateFavicon(albumArt) {
 
   newFavicon.href = faviconURL;
   document.head.appendChild(newFavicon);
+}
+
+function setUpSongPlayback(song) {
+    audioPlayer.src = song.url;
+    audioPlayer.currentTime = 0;
+    musicTitle.textContent = song.name;
+    musicArtist.textContent = song.artist;
+    
+    const backgroundElement = document.querySelector('.background-blur');
+    backgroundElement.classList.add('changing');
+    backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+    albumArtImg.src = song.albumArt;
+    
+    // Update favicon
+    updateFavicon(song.albumArt);
+    
+    setTimeout(() => {
+        backgroundElement.classList.remove('changing');
+    }, 500);
+    
+    currentSongId = song.id;
+    document.title = `${song.name} by ${song.artist}`;
+    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+    
+    // Update media session if available
+    if ('mediaSession' in navigator) {
+        updateMediaSessionMetadata(song);
+    }
 }
 
 async function loadSong(song) {
@@ -1368,25 +1407,6 @@ document.querySelectorAll('.music-item').forEach(item => {
     });
 });
 }
- 
-function loadSong(song) {
-    audioPlayer.src = song.url; // Use preloaded Blob URL
-    audioPlayer.currentTime = 0; // Always start from the beginning
-    musicTitle.textContent = song.name;
-    musicArtist.textContent = song.artist;
-
-    const backgroundElement = document.querySelector('.background-blur');
-    backgroundElement.classList.add('changing');
-    backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-    albumArtImg.src = song.albumArt;
-
-    setTimeout(() => {
-        backgroundElement.classList.remove('changing');
-    }, 500);
-
-    currentSongId = song.id;
-    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-}
         
 function playNextSong() {
     if (!playQueue.length) {
@@ -1453,61 +1473,6 @@ function playPreviousSong() {
             const albumSongs = playQueue.filter(song => song.album === currentAlbum);
             currentQueueIndex = playQueue.indexOf(albumSongs[albumSongs.length - 1]);
         } else if (repeatMode === 'all') {
-            currentQueueIndex = playQueue.length - 1;
-        } else {
-            currentQueueIndex = 0;
-        }
-    }
-    
-    const prevSong = playQueue[currentQueueIndex];
-    if (prevSong) {
-        loadAndPlaySong(prevSong);
-    }
-}
-
-function playPreviousSong() {
-    const currentIndex = songs.findIndex(s => s.id === currentSongId);
-    
-    if (audioPlayer.currentTime > 3) {
-        // If more than 3 seconds have played, restart current song
-        audioPlayer.currentTime = 0;
-        audioPlayer.play();
-    } else {
-        // Calculate previous index, ensuring it wraps around correctly
-        const prevIndex = currentIndex === 0 ? songs.length - 1 : currentIndex - 1;
-        const prevSong = songs[prevIndex];
-        
-        const transaction = db.transaction(['musicFiles'], 'readonly');
-        const store = transaction.objectStore('musicFiles');
-        const request = store.get(prevSong.id);
-        
-        request.onsuccess = (event) => {
-            if (request.result) {
-                prevSong.url = URL.createObjectURL(request.result.file);
-                loadSong(prevSong);
-                audioPlayer.currentTime = 0;
-                audioPlayer.play();
-                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                playPauseBtn.classList.add('playing');
-                document.querySelector('.background-blur').classList.add('rotating');
-                renderSongs();
-            }
-        };
-    }
-
-    if (!playQueue.length) {
-        playQueue = createPlayQueue();
-    }
-    
-    if (audioPlayer.currentTime > 3) {
-        audioPlayer.currentTime = 0;
-        return;
-    }
-    
-    currentQueueIndex--;
-    
-    if (currentQueueIndex < 0) {
-        if (repeatMode === 'all') {
             currentQueueIndex = playQueue.length - 1;
         } else {
             currentQueueIndex = 0;
@@ -1868,25 +1833,26 @@ audioPlayer.addEventListener('ended', () => {
     }
 });
 
-searchInput.addEventListener('input', (e) => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => {
-        searchSongs(e.target.value.trim());
-    }, 300);
-});
-
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         await initDB();
-        const searchInput = document.getElementById('searchInput');
+        searchInput = document.getElementById('searchInput');
         let searchTimeout;
 
-        shuffleBtn.addEventListener('click', () => {
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    searchSongs(e.target.value.trim());
+                }, 300);
+            });
+        }
+
+        document.getElementById('shuffleBtn').addEventListener('click', () => {
             toggleShuffle();
-            shuffleBtn.classList.toggle('active');
         });
 
-        repeatBtn.addEventListener('click', () => {
+        document.getElementById('repeatBtn').addEventListener('click', () => {
             toggleRepeat();
         });
         
