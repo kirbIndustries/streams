@@ -949,58 +949,60 @@ function updateFavicon(albumArt) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const size = 32; // Standard favicon size
-  
+  const radius = 10; // Corner radius
+
   canvas.width = size;
   canvas.height = size;
-  
+
   // Create a new image from the album art
   const img = new Image();
-  
+
   // Set crossOrigin to anonymous for CORS if needed
   if (!albumArt.startsWith('data:')) {
     img.crossOrigin = 'anonymous';
   }
-  
+
   img.onload = function() {
     // Clear the canvas
     ctx.clearRect(0, 0, size, size);
-    
-    // Create a rounded clipping path
+
+    // Create a rounded rectangle clipping path
     ctx.beginPath();
-    ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2, true);
+    ctx.roundRect(0, 0, size, size, radius);
     ctx.closePath();
     ctx.clip();
-    
+
     // Draw the image with proper scaling
     ctx.drawImage(img, 0, 0, size, size);
-    
+
     // Get the rounded image as a data URL
     const roundedImageURL = canvas.toDataURL('image/png');
-    
+
     // Remove any existing favicon links
     const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
     links.forEach(link => link.parentNode.removeChild(link));
-    
+
     // Create a new favicon link element
     const newFavicon = document.createElement('link');
     newFavicon.rel = 'icon';
     newFavicon.type = 'image/png';
     newFavicon.href = roundedImageURL;
-    
+
     // Add the new favicon to the document
     document.head.appendChild(newFavicon);
   };
-  
+
   // Set the source to load the image
   img.src = albumArt;
-  
+
   // Handle image loading errors
   img.onerror = function() {
     console.error('Error loading album art for favicon');
+    
     // Set the default favicon
     const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
     links.forEach(link => link.parentNode.removeChild(link));
-    
+
     const defaultFavicon = document.createElement('link');
     defaultFavicon.rel = 'icon';
     defaultFavicon.type = 'image/png';
