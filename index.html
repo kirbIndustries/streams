@@ -16,6 +16,23 @@
             font-family: 'Inter', sans-serif;
         }
 
+        /* Global hover styles */
+        *:hover {
+          /* Reset all hover effects for touch devices */
+          background-color: inherit !important;
+          color: inherit !important;
+          border-color: inherit !important;
+          text-decoration: none !important;
+          box-shadow: none !important;
+        }
+        
+        /* Disable hover globally for touch devices */
+        @media (hover: none) {
+          *:hover {
+            all: unset !important; /* Remove all hover-related styles */
+          }
+        }
+
         body {
             background-color: #1c1c1c;
             min-height: 100vh;
