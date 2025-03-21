@@ -16,23 +16,6 @@
             font-family: 'Inter', sans-serif;
         }
 
-        /* Global hover styles */
-        *:hover {
-          /* Reset all hover effects for touch devices */
-          background-color: inherit !important;
-          color: inherit !important;
-          border-color: inherit !important;
-          text-decoration: none !important;
-          box-shadow: none !important;
-        }
-        
-        /* Disable hover globally for touch devices */
-        @media (hover: none) {
-          *:hover {
-            all: unset !important; /* Remove all hover-related styles */
-          }
-        }
-
         body {
             background-color: #1c1c1c;
             min-height: 100vh;
@@ -66,10 +49,6 @@
     border-radius: 4px;
 }
 
-.sidebar::-webkit-scrollbar-thumb:hover {
-    background: #bdd6ff;
-}
-
         .main-content {
             flex-grow: 1;
             padding: 20px;
@@ -93,11 +72,6 @@
             margin-bottom: 20px;
         }
 
-        .upload-btn:hover {
-            background-color: #bdd6ff;
-            color: #1c1c1c;
-        }
-
         .music-list {
             display: flex;
             flex-direction: column;
@@ -117,12 +91,6 @@
 
         .music-item.active {
             background-color: rgba(102, 102, 102, .8) !important;
-            border-radius: 15px;
-            transition: all 0.3s ease;
-        }
-
-        .music-item:hover {
-            background-color: rgba(102, 102, 102, .6);
             border-radius: 15px;
             transition: all 0.3s ease;
         }
@@ -219,11 +187,6 @@
     line-height: 0; /* Ensures icon isn't pushed out */
 }
 
-.control-btn:hover {
-    background-color: #f9f9f9 !important;
-    color: #1c1c1c;
-}
-
 .control-btn.play-pause {
     background-color: rgba(102, 102, 102, .8);
     width: 60px;
@@ -276,6 +239,9 @@
             align-items: center;
             gap: 10px;
             margin: 20px 0 20px;
+            background: rgba(102, 102, 102, .4);
+            border-radius: 25px;
+            padding: 0px 6px;
         }
 
 .volume-control span {
@@ -287,10 +253,8 @@
             width: 100px;
             height: 25px;
             -webkit-appearance: none;
-            background: rgba(102, 102, 102, .4);
-            border-radius: 25px;
+            background: rgba(0, 0, 0, .0);
             outline: none;
-            padding: 0 6px;
         }
 
         .volume-slider::-webkit-slider-thumb {
@@ -504,11 +468,6 @@
 /* When active, use the same background as other control buttons */
 #shuffleBtn.active, #repeatBtn.active {
     background: rgba(102, 102, 102, .4);
-}
-
-#shuffleBtn:hover, #repeatBtn:hover {
-    background-color: #f9f9f9 !important;
-    color: #1c1c1c;
 }
         
 .sidebar-title {
