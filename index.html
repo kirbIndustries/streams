@@ -810,7 +810,6 @@ function loadAndPlaySong(song) {
                             // Update UI to reflect paused state
                             playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
                             playPauseBtn.classList.remove('playing');
-                            document.querySelector('.background-blur').classList.remove('rotating');
                         });
                 }
             }, 50); // Small delay of 50ms
@@ -1463,7 +1462,6 @@ function attachEventListeners() {
                                         // Update UI to reflect paused state
                                         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
                                         playPauseBtn.classList.remove('playing');
-                                        document.querySelector('.background-blur').classList.remove('rotating');
                                     });
                             }
                         }, 50); // Small delay of 50ms
@@ -1909,7 +1907,6 @@ playPauseBtn.addEventListener('click', () => {
         audioPlayer.pause();
         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
         playPauseBtn.classList.remove('playing');
-        document.querySelector('.background-blur').classList.remove('rotating');
         
         // Update media session if available
         if ('mediaSession' in navigator) {
