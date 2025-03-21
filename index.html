@@ -752,6 +752,9 @@ function resetPlayer() {
 function loadAndPlaySong(song) {
     if (!song) return;
     
+    // Stop any current playback to avoid errors
+    audioPlayer.pause();
+    
     const transaction = db.transaction(['musicFiles'], 'readonly');
     const store = transaction.objectStore('musicFiles');
     const request = store.get(song.id);
@@ -762,6 +765,8 @@ function loadAndPlaySong(song) {
                 URL.revokeObjectURL(song.url);
             }
             song.url = URL.createObjectURL(new Blob([request.result.file]));
+            
+            // Set up audio player
             audioPlayer.src = song.url;
             audioPlayer.currentTime = 0;
             musicTitle.textContent = song.name;
@@ -780,19 +785,42 @@ function loadAndPlaySong(song) {
             }, 500);
             
             currentSongId = song.id;
-            audioPlayer.play();
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            playPauseBtn.classList.add('playing');
-            document.querySelector('.background-blur').classList.add('rotating');
+            document.title = `${song.name} by ${song.artist}`;
             
-            // Update media session if available
-            if ('mediaSession' in navigator) {
-                updateMediaSessionMetadata(song);
-                updateMediaSessionPlaybackState('playing');
-            }
+            // Small delay before attempting to play
+            setTimeout(() => {
+                const playPromise = audioPlayer.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            // Playback started successfully
+                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                            playPauseBtn.classList.add('playing');
+                            document.querySelector('.background-blur').classList.add('rotating');
+                            
+                            // Update media session if available
+                            if ('mediaSession' in navigator) {
+                                updateMediaSessionMetadata(song);
+                                updateMediaSessionPlaybackState('playing');
+                            }
+                        })
+                        .catch(error => {
+                            console.log("Playback was prevented:", error.message);
+                            // Update UI to reflect paused state
+                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                            playPauseBtn.classList.remove('playing');
+                            document.querySelector('.background-blur').classList.remove('rotating');
+                        });
+                }
+            }, 50); // Small delay of 50ms
             
             renderSongs();
         }
+    };
+    
+    request.onerror = (error) => {
+        console.error(`Failed to load song with ID: ${song.id}`, error);
     };
 }
         
@@ -1429,10 +1457,10 @@ function attachEventListeners() {
                                         }
                                     })
                                     .catch(error => {
-                                        // Handle the error appropriately - could be user-initiated abort or other issue
+                                        // Handle the error appropriately
                                         console.log("Playback was prevented:", error.message);
                                         
-                                        // Still update UI in case it's a benign error
+                                        // Update UI to reflect paused state
                                         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
                                         playPauseBtn.classList.remove('playing');
                                         document.querySelector('.background-blur').classList.remove('rotating');
@@ -1517,7 +1545,13 @@ function playNextSong() {
     
     if (repeatMode === 'one') {
         audioPlayer.currentTime = 0;
-        audioPlayer.play();
+        const playPromise = audioPlayer.play();
+        
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.log("Repeat playback prevented:", error.message);
+            });
+        }
         return;
     }
     
@@ -1556,7 +1590,13 @@ function playPreviousSong() {
     // If current time is > 3 seconds, restart song
     if (audioPlayer.currentTime > 3) {
         audioPlayer.currentTime = 0;
-        audioPlayer.play();
+        const playPromise = audioPlayer.play();
+        
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.log("Restart playback prevented:", error.message);
+            });
+        }
         return;
     }
     
@@ -1855,6 +1895,11 @@ playPauseBtn.addEventListener('click', () => {
                     playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
                     playPauseBtn.classList.add('playing');
                     document.querySelector('.background-blur').classList.add('rotating');
+                    
+                    // Update media session if available
+                    if ('mediaSession' in navigator) {
+                        updateMediaSessionPlaybackState('playing');
+                    }
                 })
                 .catch(error => {
                     console.log("Play button click prevented:", error.message);
@@ -1864,6 +1909,12 @@ playPauseBtn.addEventListener('click', () => {
         audioPlayer.pause();
         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
         playPauseBtn.classList.remove('playing');
+        document.querySelector('.background-blur').classList.remove('rotating');
+        
+        // Update media session if available
+        if ('mediaSession' in navigator) {
+            updateMediaSessionPlaybackState('paused');
+        }
     }
 });
         
