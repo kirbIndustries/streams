@@ -638,6 +638,23 @@
         const body = document.body;
         const menuBtn = document.createElement('button');
 
+        const updateMediaSessionMetadata = (song) => {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: song.name,
+                    artist: song.artist,
+                    album: song.album,
+                    artwork: [{ src: song.albumArt, sizes: '512x512', type: 'image/jpeg' }]
+                });
+            }
+        };
+        
+        const updateMediaSessionPlaybackState = (state) => {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = state;
+            }
+        };
+
         let songs = JSON.parse(localStorage.getItem('songs')) || [];
         let currentSongId = null;
         let db;
@@ -1613,15 +1630,14 @@ function searchSongs(query) {
 
 function toggleShuffle() {
     isShuffleEnabled = !isShuffleEnabled;
-    const shuffleBtn = document.getElementById('shuffleBtn');
-    shuffleBtn.classList.toggle('active');
+    let shuffleBtn = document.getElementById("shuffleBtn");
+    shuffleBtn.classList.toggle("active");
     
-    // Create new shuffled queue immediately
-    const currentSong = currentSongId ? songs.find(s => s.id === currentSongId) : null;
-    playQueue = createPlayQueue();
+    // Update the play queue with the current song at the correct position
+    updatePlayQueue();
     
-    // Find the current song's position in the new queue
-    currentQueueIndex = currentSong ? playQueue.findIndex(s => s.id === currentSong.id) : 0;
+    // Log state for debugging
+    console.log("Shuffle state:", isShuffleEnabled);
 }
         
 function toggleRepeat() {
@@ -1647,27 +1663,25 @@ function toggleRepeat() {
 
 function updatePlayQueue() {
     if (isShuffleEnabled) {
-        // Create a copy of all songs excluding the current song
-        let availableSongs = songs.filter(song => song.id !== currentSongId);
+        // Keep current song at the beginning, shuffle the rest
+        let currentSong = currentSongId ? songs.find(s => s.id === currentSongId) : null;
+        let otherSongs = songs.filter(s => s.id !== currentSongId);
         
-        // Shuffle the available songs
-        availableSongs = availableSongs.sort(() => Math.random() - 0.5);
-        
-        // If there's a current song, add it at the beginning
-        if (currentSongId) {
-            const currentSong = songs.find(song => song.id === currentSongId);
-            playQueue = currentSong ? [currentSong, ...availableSongs] : availableSongs;
-        } else {
-            playQueue = availableSongs;
+        // Properly shuffle the array
+        for (let i = otherSongs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [otherSongs[i], otherSongs[j]] = [otherSongs[j], otherSongs[i]];
         }
+        
+        playQueue = currentSong ? [currentSong, ...otherSongs] : otherSongs;
     } else {
-        // In non-shuffle mode, maintain the original order
         playQueue = [...songs];
     }
     
-    // Update the current queue index
-    currentQueueIndex = playQueue.findIndex(song => song.id === currentSongId);
-    if (currentQueueIndex === -1) currentQueueIndex = 0;
+    currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
+    if (currentQueueIndex === -1) {
+        currentQueueIndex = 0;
+    }
 }
         
 function groupSongsByAlbum(songs) {
@@ -1701,18 +1715,6 @@ function groupSongsByAlbum(songs) {
 
     return Object.values(albums).sort((a, b) => b.dateAdded - a.dateAdded);
 }
-
-if ('mediaSession' in navigator) {
-    function updateMediaSessionMetadata(song) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-            title: song.name,
-            artist: song.artist,
-            album: song.album,
-            artwork: [
-                { src: song.albumArt, sizes: '512x512', type: 'image/jpeg' }
-            ]
-        });
-    }
 
     function setupMediaSessionActions() {
         navigator.mediaSession.setActionHandler('play', () => {
