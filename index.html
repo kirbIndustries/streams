@@ -1954,7 +1954,7 @@ volumeSlider.addEventListener('input', (e) => {
     audioPlayer.volume = volume;
 
     if (volume === 0) {
-        volumeIcon.textContent = 'volume_off';
+        volumeIcon.textContent = 'volume_mute';
     } else if (volume < 0.5) {
         volumeIcon.textContent = 'volume_down';
     } else {
