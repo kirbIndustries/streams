@@ -830,7 +830,7 @@ function updatePageTitle() {
         const song = songs.find(s => s.id === currentSongId);
         if (song) {
             const currentTime = formatTime(audioPlayer.currentTime);
-            document.title = `${currentTime} • ${song.name} by ${song.artist}`;
+            document.title = `${currentTime} | ${song.name} • ${song.artist}`;
         }
     } else {
         document.title = 'Music'; // Default title when no song is playing
