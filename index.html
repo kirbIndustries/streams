@@ -770,6 +770,7 @@
         let currentQueueIndex = -1;
         let searchTimeout;
         let searchInput;
+        let musicDirectoryHandle = null;
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
@@ -789,10 +790,50 @@ overlay.addEventListener('click', () => {
     document.querySelector('.sidebar').classList.remove('open');
     overlay.classList.remove('active');
 });
+
+async function getAccessToMusicDirectory() {
+    try {
+        // Request a directory from the user
+        musicDirectoryHandle = await window.showDirectoryPicker({
+            id: 'music-directory',
+            mode: 'readwrite',
+            startIn: 'music'
+        });
+        
+        // Store the directory handle for future sessions
+        const handleData = await musicDirectoryHandle.requestPermission({ mode: 'readwrite' });
+        if (handleData === 'granted') {
+            // Save the handle to IndexedDB for persistent access
+            await saveDirectoryHandle(musicDirectoryHandle);
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error accessing music directory:', error);
+        return false;
+    }
+}
+
+async function saveDirectoryHandle(handle) {
+    const transaction = db.transaction(['settings'], 'readwrite');
+    const store = transaction.objectStore('settings');
+    await store.put({ id: 'musicDirectoryHandle', handle });
+}
+
+async function getSavedDirectoryHandle() {
+    const transaction = db.transaction(['settings'], 'readonly');
+    const store = transaction.objectStore('settings');
+    const request = store.get('musicDirectoryHandle');
+    
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result?.handle || null);
+        request.onerror = () => reject(request.error);
+    });
+}
         
 const initDB = () => {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('musicDB', 2); // Increment version to trigger upgrade
+        const request = indexedDB.open('musicDB', 3); // Increment version to add settings store
         
         request.onerror = (event) => {
             console.error('IndexedDB error:', event.target.error);
@@ -802,11 +843,6 @@ const initDB = () => {
         request.onupgradeneeded = (event) => {
             db = event.target.result;
             
-            // Create store for music files if it doesn't exist
-            if (!db.objectStoreNames.contains('musicFiles')) {
-                db.createObjectStore('musicFiles', { keyPath: 'id' });
-            }
-            
             // Create store for song metadata if it doesn't exist
             if (!db.objectStoreNames.contains('songs')) {
                 const songStore = db.createObjectStore('songs', { keyPath: 'id' });
@@ -814,11 +850,35 @@ const initDB = () => {
                 songStore.createIndex('artist', 'artist');
                 songStore.createIndex('album', 'album');
             }
+            
+            // Create settings store for app settings
+            if (!db.objectStoreNames.contains('settings')) {
+                db.createObjectStore('settings', { keyPath: 'id' });
+            }
         };
 
-        request.onsuccess = (event) => {
+        request.onsuccess = async (event) => {
             db = event.target.result;
-            loadSongsFromStorage();
+            
+            // Try to restore the directory handle
+            musicDirectoryHandle = await getSavedDirectoryHandle();
+            
+            // Check if we need permission again
+            if (musicDirectoryHandle) {
+                const state = await musicDirectoryHandle.requestPermission({ mode: 'readwrite' });
+                if (state !== 'granted') {
+                    musicDirectoryHandle = null;
+                }
+            }
+            
+            // Load songs if we have access
+            if (musicDirectoryHandle) {
+                await loadSongsFromFileSystem();
+            } else {
+                // Try to load any songs that might be cached in the songs store
+                loadSongsFromFileSystem();
+            }
+            
             resolve();
         };
     });
@@ -872,78 +932,90 @@ function resetPlayer() {
             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
 
-function loadAndPlaySong(song) {
+async function loadAndPlaySong(song) {
     if (!song) return;
     
     // Stop any current playback to avoid errors
     audioPlayer.pause();
     
-    const transaction = db.transaction(['musicFiles'], 'readonly');
-    const store = transaction.objectStore('musicFiles');
-    const request = store.get(song.id);
-    
-    request.onsuccess = () => {
-        if (request.result) {
-            if (song.url) {
-                URL.revokeObjectURL(song.url);
+    try {
+        // Get the file handle from the song object or look it up
+        let fileHandle = song.fileHandle;
+        
+        if (!fileHandle) {
+            // Try to get the file handle by navigating the directory structure
+            const pathParts = song.path.split('/').filter(part => part);
+            let currentHandle = musicDirectoryHandle;
+            
+            for (let i = 0; i < pathParts.length - 1; i++) {
+                currentHandle = await currentHandle.getDirectoryHandle(pathParts[i]);
             }
-            song.url = URL.createObjectURL(new Blob([request.result.file]));
             
-            // Set up audio player
-            audioPlayer.src = song.url;
-            audioPlayer.currentTime = 0;
-            musicTitle.textContent = song.name;
-            musicArtist.textContent = song.artist;
-            
-            const backgroundElement = document.querySelector('.background-blur');
-            backgroundElement.classList.add('changing');
-            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-            albumArtImg.src = song.albumArt;
-            
-            // Update favicon
-            updateFavicon(song.albumArt);
-            
-            setTimeout(() => {
-                backgroundElement.classList.remove('changing');
-            }, 500);
-            
-            currentSongId = song.id;
-            document.title = `${song.name} by ${song.artist}`;
-            
-            // Small delay before attempting to play
-            setTimeout(() => {
-                const playPromise = audioPlayer.play();
-                
-                if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            // Playback started successfully
-                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                            playPauseBtn.classList.add('playing');
-                            document.querySelector('.background-blur').classList.add('rotating');
-                            
-                            // Update media session if available
-                            if ('mediaSession' in navigator) {
-                                updateMediaSessionMetadata(song);
-                                updateMediaSessionPlaybackState('playing');
-                            }
-                        })
-                        .catch(error => {
-                            console.log("Playback was prevented:", error.message);
-                            // Update UI to reflect paused state
-                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-                            playPauseBtn.classList.remove('playing');
-                        });
-                }
-            }, 50); // Small delay of 50ms
-            
-            renderSongs();
+            fileHandle = await currentHandle.getFileHandle(pathParts[pathParts.length - 1]);
+            song.fileHandle = fileHandle;
         }
-    };
-    
-    request.onerror = (error) => {
+        
+        // Get the file from the handle
+        const file = await fileHandle.getFile();
+        
+        // Create a URL for the file
+        if (song.url) {
+            URL.revokeObjectURL(song.url);
+        }
+        song.url = URL.createObjectURL(file);
+        
+        // Set up audio player
+        audioPlayer.src = song.url;
+        audioPlayer.currentTime = 0;
+        musicTitle.textContent = song.name;
+        musicArtist.textContent = song.artist;
+        
+        const backgroundElement = document.querySelector('.background-blur');
+        backgroundElement.classList.add('changing');
+        backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+        albumArtImg.src = song.albumArt;
+        
+        // Update favicon
+        updateFavicon(song.albumArt);
+        
+        setTimeout(() => {
+            backgroundElement.classList.remove('changing');
+        }, 500);
+        
+        currentSongId = song.id;
+        document.title = `${song.name} by ${song.artist}`;
+        
+        // Small delay before attempting to play
+        setTimeout(() => {
+            const playPromise = audioPlayer.play();
+            
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        // Playback started successfully
+                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                        playPauseBtn.classList.add('playing');
+                        document.querySelector('.background-blur').classList.add('rotating');
+                        
+                        // Update media session if available
+                        if ('mediaSession' in navigator) {
+                            updateMediaSessionMetadata(song);
+                            updateMediaSessionPlaybackState('playing');
+                        }
+                    })
+                    .catch(error => {
+                        console.log("Playback was prevented:", error.message);
+                        // Update UI to reflect paused state
+                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                        playPauseBtn.classList.remove('playing');
+                    });
+            }
+        }, 50); // Small delay of 50ms
+        
+        renderSongs();
+    } catch (error) {
         console.error(`Failed to load song with ID: ${song.id}`, error);
-    };
+    }
 }
         
 function updatePageTitle() {
@@ -1169,43 +1241,61 @@ function setUpSongPlayback(song) {
 }
 
 async function loadSong(song) {
-    const transaction = db.transaction(['musicFiles'], 'readonly');
-    const store = transaction.objectStore('musicFiles');
-    const request = store.get(song.id);
-    document.title = `${song.name} by ${song.artist}`;
-    
-    request.onsuccess = (event) => {
-        if (request.result && request.result.file) {
-            // Check if it's a valid audio file
-            if (!isAudioFile(request.result.file)) {
-                console.error('Invalid audio file type');
-                playNextSong(); // Skip to next song
-                return;
-            }
-
-            // Continue with loading the song
-            song.url = URL.createObjectURL(request.result.file);
-            audioPlayer.src = song.url;
-            audioPlayer.currentTime = 0;
-            musicTitle.textContent = song.name;
-            musicArtist.textContent = song.artist;
-
-            const backgroundElement = document.querySelector('.background-blur');
-            backgroundElement.classList.add('changing');
-            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-            albumArtImg.src = song.albumArt;
+    try {
+        // Get the file handle from the song object or look it up
+        let fileHandle = song.fileHandle;
+        
+        if (!fileHandle) {
+            // Try to get the file handle by navigating the directory structure
+            const pathParts = song.path.split('/').filter(part => part);
+            let currentHandle = musicDirectoryHandle;
             
-            // Update favicon
-            updateFavicon(song.albumArt);
-
-            setTimeout(() => {
-                backgroundElement.classList.remove('changing');
-            }, 500);
-
-            currentSongId = song.id;
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+            for (let i = 0; i < pathParts.length - 1; i++) {
+                currentHandle = await currentHandle.getDirectoryHandle(pathParts[i]);
+            }
+            
+            fileHandle = await currentHandle.getFileHandle(pathParts[pathParts.length - 1]);
+            song.fileHandle = fileHandle;
         }
-    };
+        
+        // Get the file from the handle
+        const file = await fileHandle.getFile();
+        
+        // Create a URL for the file
+        if (song.url) {
+            URL.revokeObjectURL(song.url);
+        }
+        song.url = URL.createObjectURL(file);
+        
+        // Set up the audio player
+        audioPlayer.src = song.url;
+        audioPlayer.currentTime = 0;
+        musicTitle.textContent = song.name;
+        musicArtist.textContent = song.artist;
+        
+        const backgroundElement = document.querySelector('.background-blur');
+        backgroundElement.classList.add('changing');
+        backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+        albumArtImg.src = song.albumArt;
+        
+        // Update favicon
+        updateFavicon(song.albumArt);
+        
+        setTimeout(() => {
+            backgroundElement.classList.remove('changing');
+        }, 500);
+        
+        currentSongId = song.id;
+        document.title = `${song.name} by ${song.artist}`;
+        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+        
+        // Update media session if available
+        if ('mediaSession' in navigator) {
+            updateMediaSessionMetadata(song);
+        }
+    } catch (error) {
+        console.error(`Error loading song: ${song.id}`, error);
+    }
 }
         
 async function extractMetadata(file) {
@@ -1283,45 +1373,141 @@ async function extractMetadata(file) {
 }
         
 async function addSongs(files) {
-    for (let file of files) {
-        // Skip non-audio files
-        if (!isAudioFile(file)) {
-            console.log(`Skipping non-audio file: ${file.name}`);
-            continue;
+    // Check if we have a directory handle
+    if (!musicDirectoryHandle) {
+        const hasAccess = await getAccessToMusicDirectory();
+        if (!hasAccess) {
+            console.error('No access to music directory');
+            return;
         }
-
-        // Extract metadata without consuming the file
-        const metadata = await extractMetadata(file);
-        const timestamp = Date.now();
-
-        const song = {
-            id: timestamp + Math.random(),
-            name: metadata.title,
-            artist: metadata.artist,
-            album: metadata.album || 'Unknown Album',
-            year: metadata.year,
-            albumArt: metadata.albumArt,
-            trackNumber: metadata.trackNumber,
-            type: file.type,
-            dateAdded: timestamp
-        };
-
-        // Store the song file in IndexedDB
-        const transaction = db.transaction(['musicFiles'], 'readwrite');
-        const store = transaction.objectStore('musicFiles');
-        store.put({ id: song.id, file }); 
-
-        songs.push(song);
     }
-    await saveSongs();
-    renderSongs();
-    if (songs.length === files.length) {
-        loadSong(songs[0]);
+    
+    try {
+        // Create a Songs directory if it doesn't exist
+        let songsDir;
+        try {
+            songsDir = await musicDirectoryHandle.getDirectoryHandle('Songs', { create: true });
+        } catch (error) {
+            console.error('Error creating Songs directory:', error);
+            return;
+        }
+        
+        for (let file of files) {
+            // Skip non-audio files
+            if (!isAudioFile(file)) {
+                console.log(`Skipping non-audio file: ${file.name}`);
+                continue;
+            }
+            
+            // Extract metadata without consuming the file
+            const metadata = await extractMetadata(file);
+            const timestamp = Date.now();
+            
+            // Create a safe filename
+            const safeFileName = file.name.replace(/[^\w\s.-]/gi, '_');
+            
+            // Write the file to the Songs directory
+            try {
+                const newFileHandle = await songsDir.getFileHandle(safeFileName, { create: true });
+                const writable = await newFileHandle.createWritable();
+                await writable.write(file);
+                await writable.close();
+                
+                const song = {
+                    id: `Songs/${safeFileName}`,
+                    path: `Songs/${safeFileName}`,
+                    name: metadata.title,
+                    artist: metadata.artist,
+                    album: metadata.album || 'Unknown Album',
+                    year: metadata.year,
+                    albumArt: metadata.albumArt,
+                    trackNumber: metadata.trackNumber,
+                    type: file.type,
+                    dateAdded: timestamp,
+                    fileHandle: newFileHandle
+                };
+                
+                songs.push(song);
+            } catch (error) {
+                console.error(`Error writing file ${safeFileName}:`, error);
+            }
+        }
+        
+        await saveSongs();
+        renderSongs();
+        
+        if (songs.length === files.length) {
+            loadSong(songs[0]);
+        }
+    } catch (error) {
+        console.error('Error adding songs:', error);
+    }
+}
+
+async function loadSongsFromFileSystem() {
+    try {
+        songs = [];
+        
+        // Function to recursively scan directories
+        async function scanDirectory(dirHandle, path = '') {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'directory') {
+                    // Recursively scan subdirectories
+                    await scanDirectory(entry, `${path}${entry.name}/`);
+                } else if (entry.kind === 'file') {
+                    // Process audio files
+                    const fileName = entry.name.toLowerCase();
+                    if (fileName.match(/\.(mp3|wav|flac|ogg|opus|m4a|aac)$/i)) {
+                        const file = await entry.getFile();
+                        
+                        // Get a FileSystemFileHandle reference we can use later
+                        const fileHandle = entry;
+                        
+                        // Extract metadata
+                        const metadata = await extractMetadata(file);
+                        const timestamp = Date.now();
+                        
+                        const song = {
+                            id: `${path}${entry.name}`, // Use path as ID for stability
+                            path: `${path}${entry.name}`,
+                            name: metadata.title,
+                            artist: metadata.artist,
+                            album: metadata.album || 'Unknown Album',
+                            year: metadata.year,
+                            albumArt: metadata.albumArt,
+                            trackNumber: metadata.trackNumber,
+                            type: file.type,
+                            dateAdded: timestamp,
+                            fileHandle: fileHandle
+                        };
+                        
+                        songs.push(song);
+                    }
+                }
+            }
+        }
+        
+        // Start scanning from the root music directory
+        await scanDirectory(musicDirectoryHandle);
+        
+        // Save song metadata to IndexedDB for quick loading
+        await saveSongs();
+        
+        // Render the song list
+        renderSongs();
+        
+        // Load the first song if available
+        if (songs.length > 0) {
+            const firstSong = songs[0];
+            await loadSong(firstSong);
+        }
+    } catch (error) {
+        console.error('Error loading songs from file system:', error);
     }
 }
 
 async function loadSongsFromStorage() {
-    const transaction = db.transaction(['songs', 'musicFiles'], 'readonly');
+    const transaction = db.transaction(['songs'], 'readonly');
     const songStore = transaction.objectStore('songs');
     
     try {
@@ -1346,12 +1532,12 @@ async function loadSongsFromStorage() {
             return true;
         });
         
-        if (songs.length > 0) {
-            const firstSong = songs[0];
-            await loadSong(firstSong);
-        }
-        
         renderSongs();
+        
+        // If we have a directory handle, we should refresh from the file system
+        if (musicDirectoryHandle) {
+            loadSongsFromFileSystem();
+        }
     } catch (error) {
         console.error('Error loading songs:', error);
     }
@@ -1368,10 +1554,11 @@ async function saveSongs() {
         const clearRequest = store.clear();
 
         clearRequest.onsuccess = () => {
-            // Add all songs
+            // Add all songs (omitting fileHandle as it can't be stored)
             songs.forEach(song => {
-                store.add({
+                const songData = {
                     id: song.id,
+                    path: song.path,
                     name: song.name,
                     artist: song.artist,
                     album: song.album,
@@ -1379,7 +1566,9 @@ async function saveSongs() {
                     albumArt: song.albumArt,
                     trackNumber: song.trackNumber,
                     type: song.type,
-                });
+                    dateAdded: song.dateAdded
+                };
+                store.add(songData);
             });
         };
 
@@ -1860,6 +2049,11 @@ function groupSongsByAlbum(songs) {
     return Object.values(albums).sort((a, b) => b.dateAdded - a.dateAdded);
 }
 
+// Add a function to check File System Access API support
+function isFileSystemAccessSupported() {
+    return 'showDirectoryPicker' in window;
+}
+
 if ('mediaSession' in navigator) {
     function updateMediaSessionMetadata(song) {
         navigator.mediaSession.metadata = new MediaMetadata({
@@ -1977,6 +2171,28 @@ window.addEventListener("load", async () => {
 
     } catch (error) {
         console.error('Error loading saved song:', error);
+    }
+});
+
+window.addEventListener('DOMContentLoaded', async () => {
+    await initDB();
+    
+    // Check for File System Access API support
+    if (!isFileSystemAccessSupported()) {
+        alert('Your browser does not support the File System Access API. The music player will have limited functionality.');
+    } else if (!musicDirectoryHandle) {
+        // Show a button to select a music directory
+        const setupButton = document.createElement('button');
+        setupButton.textContent = 'Select Music Directory';
+        setupButton.className = 'setup-button';
+        setupButton.addEventListener('click', async () => {
+            const hasAccess = await getAccessToMusicDirectory();
+            if (hasAccess) {
+                loadSongsFromFileSystem();
+                setupButton.remove();
+            }
+        });
+        document.querySelector('.player-container').prepend(setupButton);
     }
 });
         
