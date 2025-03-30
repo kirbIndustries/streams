@@ -696,6 +696,7 @@
         <div class="music-list"></div>
         <label class="upload-btn">
             <span class="material-symbols-rounded">add</span> Add
+            <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
         </label>
     </div>
     <div class="main-content">
@@ -769,7 +770,6 @@
         let currentQueueIndex = -1;
         let searchTimeout;
         let searchInput;
-        let directoryHandle = null;
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
@@ -790,120 +790,39 @@ overlay.addEventListener('click', () => {
     overlay.classList.remove('active');
 });
         
-const initDB = async () => {
-    try {
-        // Always set up IndexedDB as a fallback
-        const setupIndexedDB = () => {
-            return new Promise((resolve, reject) => {
-                try {
-                    const request = indexedDB.open('musicDB', 2);
-                    
-                    request.onerror = (event) => {
-                        console.error('IndexedDB error:', event.target.error);
-                        // Continue without IndexedDB
-                        console.warn('Continuing without IndexedDB support');
-                        resolve(false);
-                    };
-
-                    request.onupgradeneeded = (event) => {
-                        try {
-                            db = event.target.result;
-                            
-                            if (!db.objectStoreNames.contains('musicFiles')) {
-                                db.createObjectStore('musicFiles', { keyPath: 'id' });
-                            }
-                            
-                            if (!db.objectStoreNames.contains('songs')) {
-                                const songStore = db.createObjectStore('songs', { keyPath: 'id' });
-                                songStore.createIndex('name', 'name');
-                                songStore.createIndex('artist', 'artist');
-                                songStore.createIndex('album', 'album');
-                            }
-                        } catch (error) {
-                            console.error('Error during IndexedDB upgrade:', error);
-                        }
-                    };
-
-                    request.onsuccess = (event) => {
-                        db = event.target.result;
-                        resolve(true);
-                    };
-                } catch (error) {
-                    console.error('Failed to initialize IndexedDB:', error);
-                    resolve(false); // Continue even if IndexedDB fails
-                }
-            });
+const initDB = () => {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('musicDB', 2); // Increment version to trigger upgrade
+        
+        request.onerror = (event) => {
+            console.error('IndexedDB error:', event.target.error);
+            reject(event.target.error);
         };
 
-        // Check if File System Access API is supported
-        const fsApiSupported = 'showDirectoryPicker' in window;
-        
-        if (!fsApiSupported) {
-            console.warn('File System Access API not supported, falling back to IndexedDB only');
-            const dbInitialized = await setupIndexedDB();
-            if (dbInitialized) {
-                await loadSongsFromStorage();
-            }
-            return;
-        }
-        
-        // Initialize IndexedDB for fallback support
-        await setupIndexedDB();
-        
-        // Check if we have a stored directory handle
-        try {
-            const storedDirHandle = await tryGetPersistedDirectoryHandle();
+        request.onupgradeneeded = (event) => {
+            db = event.target.result;
             
-            if (storedDirHandle) {
-                console.log('Found stored directory handle, loading songs');
-                directoryHandle = storedDirHandle;
-                await loadSongsFromDirectory(directoryHandle);
-            } else {
-                console.log('No stored directory handle, loading from IndexedDB if available');
-                await loadSongsFromStorage();
+            // Create store for music files if it doesn't exist
+            if (!db.objectStoreNames.contains('musicFiles')) {
+                db.createObjectStore('musicFiles', { keyPath: 'id' });
             }
-        } catch (error) {
-            console.error('Error accessing stored directory handle:', error);
-            // Fall back to IndexedDB
-            await loadSongsFromStorage();
-        }
-    } catch (error) {
-        console.error('Error in initDB:', error);
-        // Last resort - try to initialize minimal functionality
-        try {
-            const simpleDbSetup = indexedDB.open('musicDB', 1);
-            simpleDbSetup.onsuccess = (event) => {
-                db = event.target.result;
-            };
-        } catch (e) {
-            console.error('Failed to initialize any storage:', e);
-        }
-    }
+            
+            // Create store for song metadata if it doesn't exist
+            if (!db.objectStoreNames.contains('songs')) {
+                const songStore = db.createObjectStore('songs', { keyPath: 'id' });
+                songStore.createIndex('name', 'name');
+                songStore.createIndex('artist', 'artist');
+                songStore.createIndex('album', 'album');
+            }
+        };
+
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            loadSongsFromStorage();
+            resolve();
+        };
+    });
 };
-        
-async function tryGetPersistedDirectoryHandle() {
-    try {
-        // Check if we have a stored directory ID
-        const storedDirId = localStorage.getItem('musicDirectoryHandle');
-        if (!storedDirId) return null;
-        
-        // Try to get permission for the directory
-        const dirHandle = await navigator.storage.getDirectoryHandle(storedDirId);
-        if (!dirHandle) return null;
-        
-        // Verify we still have permission
-        const permission = await dirHandle.requestPermission({ mode: 'read' });
-        if (permission !== 'granted') {
-            console.warn('Permission not granted for stored directory handle');
-            return null;
-        }
-        
-        return dirHandle;
-    } catch (error) {
-        console.error('Failed to retrieve persisted directory handle:', error);
-        return null;
-    }
-}
 
 function createPlayQueue() {
     if (isShuffleEnabled) {
@@ -953,104 +872,78 @@ function resetPlayer() {
             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
 
-async function loadAndPlaySong(song) {
+function loadAndPlaySong(song) {
     if (!song) return;
     
     // Stop any current playback to avoid errors
     audioPlayer.pause();
     
-    try {
-        let loaded = false;
-        
-        if (song.fileHandle) {
-            // Get fresh file from the handle
-            const file = await song.fileHandle.getFile();
-            
-            // Create object URL
+    const transaction = db.transaction(['musicFiles'], 'readonly');
+    const store = transaction.objectStore('musicFiles');
+    const request = store.get(song.id);
+    
+    request.onsuccess = () => {
+        if (request.result) {
             if (song.url) {
                 URL.revokeObjectURL(song.url);
             }
-            song.url = URL.createObjectURL(file);
-            loaded = true;
-        } else if (db) {
-            // Fall back to IndexedDB if we don't have a file handle
-            const transaction = db.transaction(['musicFiles'], 'readonly');
-            const store = transaction.objectStore('musicFiles');
-            const request = store.get(song.id);
+            song.url = URL.createObjectURL(new Blob([request.result.file]));
             
-            loaded = await new Promise((resolve) => {
-                request.onsuccess = () => {
-                    if (request.result && request.result.file) {
-                        if (song.url) {
-                            URL.revokeObjectURL(song.url);
-                        }
-                        song.url = URL.createObjectURL(request.result.file);
-                        resolve(true);
-                    } else {
-                        resolve(false);
-                    }
-                };
-                request.onerror = () => resolve(false);
-            });
-        }
-        
-        if (!loaded) {
-            console.error(`Failed to load song: ${song.name}`);
-            return;
-        }
-        
-        // Set up audio player
-        audioPlayer.src = song.url;
-        audioPlayer.currentTime = 0;
-        musicTitle.textContent = song.name;
-        musicArtist.textContent = song.artist;
-        
-        const backgroundElement = document.querySelector('.background-blur');
-        backgroundElement.classList.add('changing');
-        backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-        albumArtImg.src = song.albumArt;
-        
-        // Update favicon
-        updateFavicon(song.albumArt);
-        
-        setTimeout(() => {
-            backgroundElement.classList.remove('changing');
-        }, 500);
-        
-        currentSongId = song.id;
-        document.title = `${song.name} by ${song.artist}`;
-        
-        // Small delay before attempting to play
-        setTimeout(() => {
-            const playPromise = audioPlayer.play();
+            // Set up audio player
+            audioPlayer.src = song.url;
+            audioPlayer.currentTime = 0;
+            musicTitle.textContent = song.name;
+            musicArtist.textContent = song.artist;
             
-            if (playPromise !== undefined) {
-                playPromise
-                    .then(() => {
-                        // Playback started successfully
-                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                        playPauseBtn.classList.add('playing');
-                        document.querySelector('.background-blur').classList.add('rotating');
-                        
-                        // Update media session if available
-                        if ('mediaSession' in navigator) {
-                            updateMediaSessionMetadata(song);
-                            updateMediaSessionPlaybackState('playing');
-                        }
-                    })
-                    .catch(error => {
-                        console.log("Playback was prevented:", error.message);
-                        // Update UI to reflect paused state
-                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-                        playPauseBtn.classList.remove('playing');
-                    });
-            }
-        }, 50); // Small delay of 50ms
-        
-        renderSongs();
-    } catch (error) {
+            const backgroundElement = document.querySelector('.background-blur');
+            backgroundElement.classList.add('changing');
+            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+            albumArtImg.src = song.albumArt;
+            
+            // Update favicon
+            updateFavicon(song.albumArt);
+            
+            setTimeout(() => {
+                backgroundElement.classList.remove('changing');
+            }, 500);
+            
+            currentSongId = song.id;
+            document.title = `${song.name} by ${song.artist}`;
+            
+            // Small delay before attempting to play
+            setTimeout(() => {
+                const playPromise = audioPlayer.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            // Playback started successfully
+                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                            playPauseBtn.classList.add('playing');
+                            document.querySelector('.background-blur').classList.add('rotating');
+                            
+                            // Update media session if available
+                            if ('mediaSession' in navigator) {
+                                updateMediaSessionMetadata(song);
+                                updateMediaSessionPlaybackState('playing');
+                            }
+                        })
+                        .catch(error => {
+                            console.log("Playback was prevented:", error.message);
+                            // Update UI to reflect paused state
+                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                            playPauseBtn.classList.remove('playing');
+                        });
+                }
+            }, 50); // Small delay of 50ms
+            
+            renderSongs();
+        }
+    };
+    
+    request.onerror = (error) => {
         console.error(`Failed to load song with ID: ${song.id}`, error);
-    }
+    };
 }
         
 function updatePageTitle() {
@@ -1276,23 +1169,27 @@ function setUpSongPlayback(song) {
 }
 
 async function loadSong(song) {
-    try {
-        if (song.fileHandle) {
-            // Get fresh file from the handle
-            const file = await song.fileHandle.getFile();
-            
-            // Create object URL
-            if (song.url) {
-                URL.revokeObjectURL(song.url);
+    const transaction = db.transaction(['musicFiles'], 'readonly');
+    const store = transaction.objectStore('musicFiles');
+    const request = store.get(song.id);
+    document.title = `${song.name} by ${song.artist}`;
+    
+    request.onsuccess = (event) => {
+        if (request.result && request.result.file) {
+            // Check if it's a valid audio file
+            if (!isAudioFile(request.result.file)) {
+                console.error('Invalid audio file type');
+                playNextSong(); // Skip to next song
+                return;
             }
-            song.url = URL.createObjectURL(file);
-            
-            // Set up audio player
+
+            // Continue with loading the song
+            song.url = URL.createObjectURL(request.result.file);
             audioPlayer.src = song.url;
             audioPlayer.currentTime = 0;
             musicTitle.textContent = song.name;
             musicArtist.textContent = song.artist;
-            
+
             const backgroundElement = document.querySelector('.background-blur');
             backgroundElement.classList.add('changing');
             backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
@@ -1300,70 +1197,15 @@ async function loadSong(song) {
             
             // Update favicon
             updateFavicon(song.albumArt);
-            
+
             setTimeout(() => {
                 backgroundElement.classList.remove('changing');
             }, 500);
-            
+
             currentSongId = song.id;
-            document.title = `${song.name} by ${song.artist}`;
             playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-            
-            return true;
-        } else if (db) {
-            // Fall back to IndexedDB if we don't have a file handle
-            const transaction = db.transaction(['musicFiles'], 'readonly');
-            const store = transaction.objectStore('musicFiles');
-            const request = store.get(song.id);
-            
-            return new Promise((resolve) => {
-                request.onsuccess = () => {
-                    if (request.result && request.result.file) {
-                        if (song.url) {
-                            URL.revokeObjectURL(song.url);
-                        }
-                        song.url = URL.createObjectURL(request.result.file);
-                        
-                        audioPlayer.src = song.url;
-                        audioPlayer.currentTime = 0;
-                        musicTitle.textContent = song.name;
-                        musicArtist.textContent = song.artist;
-                        
-                        const backgroundElement = document.querySelector('.background-blur');
-                        backgroundElement.classList.add('changing');
-                        backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-                        albumArtImg.src = song.albumArt;
-                        
-                        // Update favicon
-                        updateFavicon(song.albumArt);
-                        
-                        setTimeout(() => {
-                            backgroundElement.classList.remove('changing');
-                        }, 500);
-                        
-                        currentSongId = song.id;
-                        document.title = `${song.name} by ${song.artist}`;
-                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-                        
-                        resolve(true);
-                    } else {
-                        console.error(`No file data found for song ID: ${song.id}`);
-                        resolve(false);
-                    }
-                };
-                
-                request.onerror = () => {
-                    console.error(`Error loading song ID: ${song.id}`);
-                    resolve(false);
-                };
-            });
         }
-        
-        return false;
-    } catch (error) {
-        console.error('Error loading song:', error);
-        return false;
-    }
+    };
 }
         
 async function extractMetadata(file) {
@@ -1441,187 +1283,108 @@ async function extractMetadata(file) {
 }
         
 async function addSongs(files) {
-    try {
-        // Show directory picker
-        directoryHandle = await window.showDirectoryPicker();
-        
-        // Request permission for future sessions
-        const permission = await directoryHandle.requestPermission({ mode: 'read' });
-        if (permission !== 'granted') {
-            throw new Error('Permission to access files not granted.');
+    for (let file of files) {
+        // Skip non-audio files
+        if (!isAudioFile(file)) {
+            console.log(`Skipping non-audio file: ${file.name}`);
+            continue;
         }
-        
-        // Store directory handle for future sessions
-        const dirName = directoryHandle.name;
-        localStorage.setItem('musicDirectoryHandle', dirName);
-        
-        // Clear existing songs
-        songs = [];
-        
-        // Process the directory
-        await loadSongsFromDirectory(directoryHandle);
-        
-        if (songs.length > 0) {
-            // Load the first song
-            await loadSong(songs[0]);
-        }
-    } catch (error) {
-        console.error('Error accessing directory:', error);
-    }
-}
 
-async function loadSongsFromDirectory(dirHandle, path = '') {
-    for await (const entry of dirHandle.values()) {
-        try {
-            // Handle subdirectories recursively
-            if (entry.kind === 'directory') {
-                await loadSongsFromDirectory(entry, `${path}${entry.name}/`);
-            } 
-            // Handle files
-            else if (entry.kind === 'file') {
-                const file = await entry.getFile();
-                
-                if (isAudioFile(file)) {
-                    // Extract metadata without consuming the file
-                    const metadata = await extractMetadata(file);
-                    const timestamp = Date.now();
-                    
-                    const song = {
-                        id: timestamp + Math.random(),
-                        name: metadata.title,
-                        artist: metadata.artist,
-                        album: metadata.album || 'Unknown Album',
-                        year: metadata.year,
-                        albumArt: metadata.albumArt,
-                        trackNumber: metadata.trackNumber,
-                        type: file.type,
-                        dateAdded: timestamp,
-                        fileHandle: entry  // Store the file handle for later access
-                    };
-                    
-                    songs.push(song);
-                }
-            }
-        } catch (error) {
-            console.error('Error processing entry:', entry.name, error);
-        }
+        // Extract metadata without consuming the file
+        const metadata = await extractMetadata(file);
+        const timestamp = Date.now();
+
+        const song = {
+            id: timestamp + Math.random(),
+            name: metadata.title,
+            artist: metadata.artist,
+            album: metadata.album || 'Unknown Album',
+            year: metadata.year,
+            albumArt: metadata.albumArt,
+            trackNumber: metadata.trackNumber,
+            type: file.type,
+            dateAdded: timestamp
+        };
+
+        // Store the song file in IndexedDB
+        const transaction = db.transaction(['musicFiles'], 'readwrite');
+        const store = transaction.objectStore('musicFiles');
+        store.put({ id: song.id, file }); 
+
+        songs.push(song);
     }
-    
-    // Sort songs and update display
     await saveSongs();
     renderSongs();
+    if (songs.length === files.length) {
+        loadSong(songs[0]);
+    }
 }
 
 async function loadSongsFromStorage() {
-    // Check if we have a stored directory handle first
-    const storedDirHandle = await tryGetPersistedDirectoryHandle();
+    const transaction = db.transaction(['songs', 'musicFiles'], 'readonly');
+    const songStore = transaction.objectStore('songs');
     
-    if (storedDirHandle) {
-        directoryHandle = storedDirHandle;
-        await loadSongsFromDirectory(directoryHandle);
-        return;
-    }
-    
-    // Fall back to simplified localStorage data
-    const storedSongData = localStorage.getItem('songData');
-    
-    if (storedSongData) {
-        try {
-            const parsedSongs = JSON.parse(storedSongData);
-            if (parsedSongs.length > 0) {
-                songs = parsedSongs;
-                renderSongs();
-                return;
-            }
-        } catch (e) {
-            console.error('Failed to parse song data from localStorage:', e);
-        }
-    }
-    
-    // If no localStorage data, try IndexedDB as final fallback
-    if (db) {
-        const transaction = db.transaction(['songs', 'musicFiles'], 'readonly');
-        const songStore = transaction.objectStore('songs');
+    try {
+        const songsRequest = songStore.getAll();
         
-        try {
-            const songsRequest = songStore.getAll();
-            
-            const loadedSongs = await new Promise((resolve, reject) => {
-                songsRequest.onsuccess = () => resolve(songsRequest.result);
-                songsRequest.onerror = () => reject(songsRequest.error);
-            });
-            
-            songs = loadedSongs.map(song => ({
-                ...song,
-                album: song.album || 'Unknown Album',
-                artist: song.artist || 'Unknown Artist',
-                year: song.year || '',
-                trackNumber: song.trackNumber || null
-            })).filter(song => {
-                if (song.type) {
-                    const dummyFile = { type: song.type, name: song.name };
-                    return isAudioFile(dummyFile);
-                }
-                return true;
-            });
-            
-            if (songs.length > 0) {
-                const firstSong = songs[0];
-                await loadSong(firstSong);
+        const loadedSongs = await new Promise((resolve, reject) => {
+            songsRequest.onsuccess = () => resolve(songsRequest.result);
+            songsRequest.onerror = () => reject(songsRequest.error);
+        });
+        
+        songs = loadedSongs.map(song => ({
+            ...song,
+            album: song.album || 'Unknown Album',
+            artist: song.artist || 'Unknown Artist',
+            year: song.year || '',
+            trackNumber: song.trackNumber || null
+        })).filter(song => {
+            if (song.type) {
+                const dummyFile = { type: song.type, name: song.name };
+                return isAudioFile(dummyFile);
             }
-            
-            renderSongs();
-        } catch (error) {
-            console.error('Error loading songs:', error);
+            return true;
+        });
+        
+        if (songs.length > 0) {
+            const firstSong = songs[0];
+            await loadSong(firstSong);
         }
-    } else {
-        console.log('No saved songs found.');
+        
+        renderSongs();
+    } catch (error) {
+        console.error('Error loading songs:', error);
     }
 }
   
 async function saveSongs() {
-    // If we don't have IndexedDB access, store a simplified version in localStorage
-    const simplifiedSongs = songs.map(song => ({
-        id: song.id,
-        name: song.name,
-        artist: song.artist,
-        album: song.album,
-        year: song.year,
-        albumArt: song.albumArt,
-        trackNumber: song.trackNumber,
-        type: song.type,
-        dateAdded: song.dateAdded
-        // Note: We can't serialize fileHandle in JSON, it will be re-acquired on page load
-    }));
-    
-    // Store simplified song data in localStorage for recovery
-    try {
-        localStorage.setItem('songData', JSON.stringify(simplifiedSongs));
-    } catch (e) {
-        console.error('Failed to save songs to localStorage (likely size exceeded):', e);
-    }
-    
-    // If we have IndexedDB, use it as a fallback
-    if (db) {
-        const transaction = db.transaction(['songs'], 'readwrite');
-        const store = transaction.objectStore('songs');
+    const transaction = db.transaction(['songs'], 'readwrite');
+    const store = transaction.objectStore('songs');
 
-        return new Promise((resolve, reject) => {
-            transaction.onerror = () => reject(transaction.error);
+    return new Promise((resolve, reject) => {
+        transaction.onerror = () => reject(transaction.error);
 
-            // Clear existing songs
-            const clearRequest = store.clear();
+        // Clear existing songs
+        const clearRequest = store.clear();
 
-            clearRequest.onsuccess = () => {
-                // Add all songs
-                simplifiedSongs.forEach(song => {
-                    store.add(song);
+        clearRequest.onsuccess = () => {
+            // Add all songs
+            songs.forEach(song => {
+                store.add({
+                    id: song.id,
+                    name: song.name,
+                    artist: song.artist,
+                    album: song.album,
+                    year: song.year,
+                    albumArt: song.albumArt,
+                    trackNumber: song.trackNumber,
+                    type: song.type,
                 });
-            };
+            });
+        };
 
-            transaction.oncomplete = () => resolve();
-        });
-    }
+        transaction.oncomplete = () => resolve();
+    });
 }
 
 function renderSongs() {
@@ -2216,15 +1979,16 @@ window.addEventListener("load", async () => {
         console.error('Error loading saved song:', error);
     }
 });
-
-const uploadButton = document.querySelector('.upload-btn');
-
-uploadButton.addEventListener('click', async (e) => {
-    // Prevent the default behavior which would open the file picker
-    e.preventDefault();
-    
-    // Call the addSongs function with no parameters
-    await addSongs();
+        
+musicUpload.addEventListener('change', async (e) => {
+    if (e.target.files.length > 0) {
+        try {
+            await preloadSongs(e.target.files);
+            await addSongs(e.target.files); // Add this line to process the metadata
+        } catch (error) {
+            console.error('Error uploading songs:', error);
+        }
+    }
 });
 
 audioPlayer.addEventListener('timeupdate', async () => {
