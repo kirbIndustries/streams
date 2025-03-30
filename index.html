@@ -791,92 +791,114 @@ overlay.addEventListener('click', () => {
 });
         
 const initDB = async () => {
-    if (!('showDirectoryPicker' in window)) {
-        alert('Your browser does not support the File System Access API. Try Chrome, Edge, or Opera.');
+    try {
+        // Always set up IndexedDB as a fallback
+        const setupIndexedDB = () => {
+            return new Promise((resolve, reject) => {
+                try {
+                    const request = indexedDB.open('musicDB', 2);
+                    
+                    request.onerror = (event) => {
+                        console.error('IndexedDB error:', event.target.error);
+                        // Continue without IndexedDB
+                        console.warn('Continuing without IndexedDB support');
+                        resolve(false);
+                    };
+
+                    request.onupgradeneeded = (event) => {
+                        try {
+                            db = event.target.result;
+                            
+                            if (!db.objectStoreNames.contains('musicFiles')) {
+                                db.createObjectStore('musicFiles', { keyPath: 'id' });
+                            }
+                            
+                            if (!db.objectStoreNames.contains('songs')) {
+                                const songStore = db.createObjectStore('songs', { keyPath: 'id' });
+                                songStore.createIndex('name', 'name');
+                                songStore.createIndex('artist', 'artist');
+                                songStore.createIndex('album', 'album');
+                            }
+                        } catch (error) {
+                            console.error('Error during IndexedDB upgrade:', error);
+                        }
+                    };
+
+                    request.onsuccess = (event) => {
+                        db = event.target.result;
+                        resolve(true);
+                    };
+                } catch (error) {
+                    console.error('Failed to initialize IndexedDB:', error);
+                    resolve(false); // Continue even if IndexedDB fails
+                }
+            });
+        };
+
+        // Check if File System Access API is supported
+        const fsApiSupported = 'showDirectoryPicker' in window;
         
-        // Fall back to IndexedDB if File System API is not available
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('musicDB', 2);
-            
-            request.onerror = (event) => {
-                console.error('IndexedDB error:', event.target.error);
-                reject(event.target.error);
-            };
-
-            request.onupgradeneeded = (event) => {
-                db = event.target.result;
-                
-                if (!db.objectStoreNames.contains('musicFiles')) {
-                    db.createObjectStore('musicFiles', { keyPath: 'id' });
-                }
-                
-                if (!db.objectStoreNames.contains('songs')) {
-                    const songStore = db.createObjectStore('songs', { keyPath: 'id' });
-                    songStore.createIndex('name', 'name');
-                    songStore.createIndex('artist', 'artist');
-                    songStore.createIndex('album', 'album');
-                }
-            };
-
-            request.onsuccess = (event) => {
-                db = event.target.result;
-                loadSongsFromStorage();
-                resolve();
-            };
-        });
-    }
-    
-    // Check if we have a stored directory path
-    const storedDirHandle = await tryGetPersistedDirectoryHandle();
-    
-    if (storedDirHandle) {
-        directoryHandle = storedDirHandle;
-        await loadSongsFromDirectory(directoryHandle);
-    } else {
+        if (!fsApiSupported) {
+            console.warn('File System Access API not supported, falling back to IndexedDB only');
+            const dbInitialized = await setupIndexedDB();
+            if (dbInitialized) {
+                await loadSongsFromStorage();
+            }
+            return;
+        }
+        
         // Initialize IndexedDB for fallback support
-        const request = indexedDB.open('musicDB', 2);
+        await setupIndexedDB();
         
-        request.onerror = (event) => {
-            console.error('IndexedDB error:', event.target.error);
-        };
-
-        request.onupgradeneeded = (event) => {
-            db = event.target.result;
+        // Check if we have a stored directory handle
+        try {
+            const storedDirHandle = await tryGetPersistedDirectoryHandle();
             
-            if (!db.objectStoreNames.contains('musicFiles')) {
-                db.createObjectStore('musicFiles', { keyPath: 'id' });
+            if (storedDirHandle) {
+                console.log('Found stored directory handle, loading songs');
+                directoryHandle = storedDirHandle;
+                await loadSongsFromDirectory(directoryHandle);
+            } else {
+                console.log('No stored directory handle, loading from IndexedDB if available');
+                await loadSongsFromStorage();
             }
-            
-            if (!db.objectStoreNames.contains('songs')) {
-                const songStore = db.createObjectStore('songs', { keyPath: 'id' });
-                songStore.createIndex('name', 'name');
-                songStore.createIndex('artist', 'artist');
-                songStore.createIndex('album', 'album');
-            }
-        };
-
-        request.onsuccess = (event) => {
-            db = event.target.result;
-            loadSongsFromStorage();
-        };
+        } catch (error) {
+            console.error('Error accessing stored directory handle:', error);
+            // Fall back to IndexedDB
+            await loadSongsFromStorage();
+        }
+    } catch (error) {
+        console.error('Error in initDB:', error);
+        // Last resort - try to initialize minimal functionality
+        try {
+            const simpleDbSetup = indexedDB.open('musicDB', 1);
+            simpleDbSetup.onsuccess = (event) => {
+                db = event.target.result;
+            };
+        } catch (e) {
+            console.error('Failed to initialize any storage:', e);
+        }
     }
 };
-
+        
 async function tryGetPersistedDirectoryHandle() {
     try {
-        // Check if permission was previously granted
-        const storedHandle = localStorage.getItem('musicDirectoryHandle');
-        if (!storedHandle) return null;
+        // Check if we have a stored directory ID
+        const storedDirId = localStorage.getItem('musicDirectoryHandle');
+        if (!storedDirId) return null;
         
-        // Convert the stored string back to an object
-        const handle = await navigator.storage.getDirectory();
-        const musicDir = await handle.getDirectoryHandle(storedHandle, { create: false });
+        // Try to get permission for the directory
+        const dirHandle = await navigator.storage.getDirectoryHandle(storedDirId);
+        if (!dirHandle) return null;
         
         // Verify we still have permission
-        const permission = await musicDir.requestPermission({ mode: 'read' });
-        if (permission !== 'granted') return null;
+        const permission = await dirHandle.requestPermission({ mode: 'read' });
+        if (permission !== 'granted') {
+            console.warn('Permission not granted for stored directory handle');
+            return null;
+        }
         
-        return musicDir;
+        return dirHandle;
     } catch (error) {
         console.error('Failed to retrieve persisted directory handle:', error);
         return null;
@@ -2194,10 +2216,15 @@ window.addEventListener("load", async () => {
         console.error('Error loading saved song:', error);
     }
 });
-        
-document.getElementById('selectMusicFolderBtn').addEventListener('click', async (e) => {
-    e.preventDefault(); // Prevent any default action
-    await addSongs(); // This will open the directory picker dialog
+
+const uploadButton = document.querySelector('.upload-btn');
+
+uploadButton.addEventListener('click', async (e) => {
+    // Prevent the default behavior which would open the file picker
+    e.preventDefault();
+    
+    // Call the addSongs function with no parameters
+    await addSongs();
 });
 
 audioPlayer.addEventListener('timeupdate', async () => {
