@@ -421,6 +421,7 @@
             z-index: -9999;
         }
         
+        /* Default (dark theme) background blur */
         .background-blur {
             position: fixed;
             top: 50%;
@@ -430,9 +431,15 @@
             background-position: center;
             background-size: cover;
             filter: blur(50px) brightness(0.6);
-            transition: background-image 0.5s ease;
+            transition: background-image 0.5s ease, opacity 0.3s ease;
             z-index: -9999;
             transform: translate(-50%, -50%) scale(1.42);
+            opacity: 1; /* Full opacity for dark theme */
+        }
+        
+        /* Light theme background blur with reduced opacity */
+        body.light-theme .background-blur {
+            opacity: 0.5; /* 50% opacity for light theme */
         }
         
         @keyframes fadeIn {
