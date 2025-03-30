@@ -9,46 +9,92 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,700,1,0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
     <style>
+        :root {
+            /* Dark Theme (Default) Variables */
+            --background-color-dark: #1c1c1c;
+            --text-color-dark: #f9f9f9;
+            --secondary-text-color-dark: rgba(255, 255, 255, 0.7);
+            --modal-background-dark: rgba(51, 51, 51, 0.8);
+            --modal-transparent-dark: rgba(51, 51, 51, 0.7);
+            --search-background-dark: rgba(51, 51, 51, 0.5);
+            --dark-overlay: rgba(51, 51, 51, 0.2);
+            --dark-transparent: rgba(255, 255, 255, 0.1); 
+            
+            /* Light Theme Variables */
+            --background-color-light: #f0f0f0;
+            --text-color-light: #333333;
+            --secondary-text-color-light: rgba(0, 0, 0, 0.7);
+            --modal-background-light: rgba(220, 220, 220, 0.8);
+            --modal-transparent-light: rgba(240, 240, 240, 0.7);
+            --search-background-light: rgba(220, 220, 220, 0.5);
+            --light-overlay: rgba(220, 220, 220, 0.2);
+            --light-transparent: rgba(255, 255, 255, 0.1);
+            
+            /* Default to Dark Theme */
+            --background-color: var(--background-color-dark);
+            --text-color: var(--text-color-dark);
+            --secondary-text-color: var(--secondary-text-color-dark);
+            --modal-background: var(--modal-background-dark);
+            --modal-transparent: var(--modal-transparent-dark);
+            --search-background: var(--search-background-dark);
+            --overlay-color: var(--dark-overlay);
+            --transparent-color: var(--dark-transparent);
+        }
+        
+        body.light-theme {
+            --background-color: var(--background-color-light);
+            --text-color: var(--text-color-light);
+            --secondary-text-color: var(--secondary-text-color-light);
+            --modal-background: var(--modal-background-light);
+            --modal-transparent: var(--modal-transparent-light);
+            --search-background: var(--search-background-light);
+            --overlay-color: var(--light-overlay);
+            --transparent-color: var(--light-transparent);
+        }
+        
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
         }
-
+        
         body {
-            background-color: #1c1c1c;
+            background-color: var(--background-color);
             min-height: 100vh;
             display: flex;
             padding: 20px;
             user-select: none;
             position: relative;
-            overflow: hidden; /* Prevent background overflow */
+            overflow: hidden;
+            transition: background-color 0.3s, color 0.3s, background-image 0.5s;
+            color: var(--text-color);
         }
-
+        
         .sidebar {
             width: 300px;
             padding: 20px;
             display: flex;
             flex-direction: column;
             gap: 20px;
-            height: 100vh; /* Full viewport height */
-            overflow-y: auto; /* Enable vertical scrolling */
+            height: 100vh;
+            overflow-y: auto;
         }
-
-.sidebar::-webkit-scrollbar {
-    width: 4px;
-}
         
-.sidebar::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, .0);
-}
-
-.sidebar::-webkit-scrollbar-thumb {
-    background: #666666;
-    border-radius: 4px;
-}
-
+        .sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+                
+        .sidebar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, .0);
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb {
+            background: var(--modal-transparent);
+            border-radius: 4px;
+        }
+        
         .main-content {
             flex-grow: 1;
             padding: 20px;
@@ -59,46 +105,47 @@
             align-items: center;
             height: 100vh;
         }
-
+        
         .upload-btn {
-            background-color: #666666;
-            color: white;
+            background-color: var(--modal-transparent);
+            color: var(--text-color);
             border: none;
             border-radius: 25px;
             padding: 12px 20px;
             cursor: pointer;
             transition: background-color 0.2s;
-            display: flex; align-items: center;
+            display: flex; 
+            align-items: center;
             margin-bottom: 20px;
         }
-
+        
         .music-list {
             display: flex;
             flex-direction: column;
             gap: 10px;
             overflow-y: initial;
         }
-
+        
         .music-item {
             padding: 15px 20px;
-            background-color: rgba(102, 102, 102, .4);
+            background-color: var(--search-background);
             border: none;
             border-radius: 20px;
-            color: white;
+            color: var(--text-color);
             cursor: pointer;
             transition: all 0.3s ease;
             backdrop-filter: blur(10px);
         }
-
+        
         .music-item.active {
-            background-color: rgba(102, 102, 102, .8) !important;
+            background-color: var(--modal-background) !important;
             border-radius: 15px;
             transition: all 0.3s ease;
         }
-
+        
         .album-art {
             border-radius: 25px;
-            background-color: #666666;
+            background-color: var(--modal-transparent);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -108,153 +155,153 @@
             max-height: 500px;
             aspect-ratio: 1 / 1;
         }
-
+        
         .album-art img {
             width: 100%;
             height: 100%;
             object-fit: cover;
             border-radius: 25px;
         }
-
-.music-info {
-    color: white;
-    text-align: center;
-    margin: 20px 0;
-    max-width: 80%;
-}
-
-.music-title {
-    font-size: 1.5rem;
-    margin-bottom: 10px;
-    word-wrap: break-word;
-    font-weight: bold;
-}
-
-.music-artist {
-    color: #f9f9f9;
-    margin-bottom: 5px;
-}
-
-.music-album {
-    color: #f9f9f9;
-    font-size: 0.9em;
-}
-
-.quality-badge {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.8em;
-    font-weight: 500;
-    margin-top: 5px;
-    background: rgba(102, 102, 102, .4);
-    color: white;
-}
-
-.quality-lossless {
-    background: rgba(189, 214, 255, .2);
-    color: #bdd6ff;
-}
-
-.quality-enhanced {
-    background: rgba(144, 238, 144, .2);
-    color: #90ee90;
-}
-
-.quality-normal {
-    background: rgba(255, 255, 255, .2);
-    color: #ffffff;
-}
         
-.player-controls {
-    display: flex;
-    gap: 25px;
-    align-items: center;
-}
-
-.control-btn {
-    background: rgba(102, 102, 102, .4);
-    border: none;
-    color: white;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 1.2rem;
-    transition: background-color 0.2s;
-    display: flex; /* Flexbox to center the icon */
-    justify-content: center; /* Horizontally center */
-    align-items: center; /* Vertically center */
-    line-height: 0; /* Ensures icon isn't pushed out */
-    backdrop-filter: blur(10px);
-}
-
-.control-btn.play-pause {
-    background-color: rgba(102, 102, 102, .8);
-    width: 60px;
-    height: 60px;
-    font-size: 1.5rem;
-    transition: all 0.3s ease;
-    border-radius: 50%; /* Default to a circle when paused */
-    display: flex; /* Flexbox to center the icon */
-    justify-content: center; /* Horizontally center */
-    align-items: center; /* Vertically center */
-    line-height: 0; /* Ensures icon isn't pushed out */
-}
-
-.control-btn.play-pause.playing {
-    border-radius: 20px; /* Rounded square when playing */
-}
-
+        .music-info {
+            color: var(--text-color);
+            text-align: center;
+            margin: 20px 0;
+            max-width: 80%;
+        }
+        
+        .music-title {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            word-wrap: break-word;
+            font-weight: bold;
+        }
+        
+        .music-artist {
+            color: var(--text-color);
+            margin-bottom: 5px;
+        }
+        
+        .music-album {
+            color: var(--text-color);
+            font-size: 0.9em;
+        }
+        
+        .quality-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 500;
+            margin-top: 5px;
+            background: var(--search-background);
+            color: var(--text-color);
+        }
+        
+        .quality-lossless {
+            background: rgba(189, 214, 255, .2);
+            color: #bdd6ff;
+        }
+        
+        .quality-enhanced {
+            background: rgba(144, 238, 144, .2);
+            color: #90ee90;
+        }
+        
+        .quality-normal {
+            background: rgba(255, 255, 255, .2);
+            color: var(--text-color);
+        }
+                
+        .player-controls {
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
+        
+        .control-btn {
+            background: var(--search-background);
+            border: none;
+            color: var(--text-color);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: background-color 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            line-height: 0;
+            backdrop-filter: blur(10px);
+        }
+        
+        .control-btn.play-pause {
+            background-color: var(--modal-background);
+            width: 60px;
+            height: 60px;
+            font-size: 1.5rem;
+            transition: all 0.3s ease;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            line-height: 0;
+        }
+        
+        .control-btn.play-pause.playing {
+            border-radius: 20px;
+        }
+        
         .progress-container {
             width: 100%;
             max-width: 500px;
             padding: 0 20px;
         }
-
+        
         .progress-bar {
             width: 100%;
             height: 7.5px;
-            background: rgba(102, 102, 102, .4);
+            background: var(--search-background);
             border-radius: 25px;
             cursor: pointer;
             margin-bottom: 12px;
             transition: all 0.25s ease;
             backdrop-filter: blur(10px);
         }
-
+        
         .progress {
             height: 100%;
-            background: #f9f9f9;
+            background: var(--text-color);
             border-radius: 25px;
             width: 0%;
             transition: all 0.25s ease;
         }
-
+        
         .time-info {
             display: flex;
             justify-content: space-between;
-            color: #f9f9f9;
+            color: var(--text-color);
             font-variant-numeric: tabular-nums;
             font-size: 0.9rem;
         }
-
+        
         .volume-control {
             display: flex;
             align-items: center;
             gap: 10px;
             margin: 20px 0 20px;
-            background: rgba(102, 102, 102, .4);
+            background: var(--search-background);
             border-radius: 25px;
             padding: 5px 10px 5px 10px;
             backdrop-filter: blur(10px);
         }
-
-.volume-control span {
-    color: white;
-    font-size: 1.5rem;
-}
-
+        
+        .volume-control span {
+            color: var(--text-color);
+            font-size: 1.5rem;
+        }
+        
         .volume-slider {
             width: 100px;
             height: 25px;
@@ -262,306 +309,372 @@
             background: rgba(0, 0, 0, .0);
             outline: none;
         }
-
+        
         .volume-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
             width: 15px;
             height: 15px;
-            background: #f9f9f9;
+            background: var(--text-color);
             border-radius: 50%;
             cursor: pointer;
         }
-
-.album-section {
-    margin-bottom: 30px;
-    background: rgba(102, 102, 102, 0.1);
-    border-radius: 15px;
-    padding: 15px;
-    backdrop-filter: blur(10px);
-}
-
-.album-header {
-    display: flex;
-    gap: 15px;
-    margin-bottom: 15px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid rgba(102, 102, 102, 0.3);
-}
-
-.album-thumbnail {
-    width: 60px;
-    height: 60px;
-    border-radius: 8px;
-    object-fit: cover;
-}
-
-.album-info {
-    color: white;
-}
-
-.album-name {
-    font-weight: 600;
-    font-size: 1.1em;
-}
-
-.album-artist, .album-year {
-    color: #f9f9f9;
-    font-size: 0.9em;
-}
-
-.album-songs {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-
-.song-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.track-number {
-    color: #f9f9f9;
-    min-width: 25px;
-}
-
-.album-actions {
-    position: absolute;
-    right: 10px;
-    top: 10px;
-}
-
-.delete-album {
-    background: rgba(255, 0, 0, 0.8);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s;
-}
-
-.delete-album:hover {
-    background: rgba(255, 0, 0, 1);
-}
-
-.album-header {
-    position: relative;
-}
         
-.song-title {
-    flex-grow: 1;
-}
-
-.music-item {
-    padding: 10px 15px;
-}
-
-.music-item.active {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.background-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    z-index: -9999;
-}
-
-.background-blur {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    /* Make it larger to account for rotation */
-    width: 150%;
-    height: 150%;
-    background-position: center;
-    background-size: cover;
-    filter: blur(50px) brightness(0.6);
-    transition: background-image 0.5s ease;
-    z-index: -9999;
-    /* Center the element and scale up enough to cover during rotation */
-    transform: translate(-50%, -50%) scale(1.42);
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-.background-blur.changing {
-    animation: fadeIn 0.5s ease;
-}
-
-.background-blur.rotating {
-    animation: rotate 40s linear infinite;
-}
-
-@keyframes rotate {
-    from {
-        transform: translate(-50%, -50%) scale(1.42) rotate(0deg);
-    }
-    to {
-        transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
-    }
-}
-
-.search-container {
-    position: relative;
-    margin-bottom: 10px;
-    margin-top: 10px;
-}
-
-.search-input {
-    width: 100%;
-    padding: 10px 15px 10px 35px;
-    border-radius: 25px;
-    border: none;
-    background: rgba(102, 102, 102, .4);
-    color: white;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.2s;
-    flex-grow: 1;
-}
-
-.search-input:focus {
-    border-color: rgba(102, 102, 102, .8);
-}
-
-.search-input::placeholder {
-    color: #c2c2c2;
-}
-
-.search-icon {
-    font-size: 20px;
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #c2c2c2;
-    pointer-events: none;
-}
-
-.control-btn.active {
-    color: #bdd6ff;
-}
-
-/* Make shuffle and repeat buttons transparent by default */
-#shuffleBtn, #repeatBtn {
-    background: transparent;
-    border: none;
-    color: #f9f9f9;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 1.2rem;
-    transition: all 0.3s ease;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    line-height: 0;
-}
-
-/* When active, use the same background as other control buttons */
-#shuffleBtn.active, #repeatBtn.active {
-    background: rgba(102, 102, 102, .4);
-}
+        .album-section {
+            margin-bottom: 30px;
+            background: var(--overlay-color);
+            border-radius: 15px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+        }
         
-.sidebar-title {
-    color: white;
-    font-size: 24px;
-    font-weight: bold;
-    padding: 10px 0;
-}
+        .album-header {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--modal-transparent);
+            position: relative;
+        }
         
-.material-symbols-rounded {
-  font-variation-settings:
-  'FILL' 1,
-  'wght' 700,
-  'GRAD' 0,
-  'opsz' 24;
-  vertical-align: middle;
-}
-
-.no-results {
-    color: #f9f9f9;
-    text-align: center;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-}
-
-.no-results .material-symbols-rounded {
-    font-size: 48px;
-}
-
-.no-results p {
-    font-size: 14px;
-}
-
-@media (max-width: 768px) {
-    .sidebar {
-        position: fixed;
-        left: -300px;
-        top: 0;
-        bottom: 0;
-        background: #1c1c1c;
-        transition: left 0.3s ease;
-        z-index: 100;
-    }
-
-    .sidebar.open {
-        left: 0;
-    }
-
-    .menu-btn {
-        position: fixed;
-        top: 20px;
-        left: 20px;
-        background: none;
-        border: none;
-        color: white;
-        z-index: 99;
-        cursor: pointer;
-    }
-
-    .overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.5);
-        z-index: 99;
-    }
-
-    .overlay.active {
-        display: block;
-    }
-
-    .progress-container {
-        width: 90%;
-    }
-}
-
-@media (min-width: 768px) {
-   .menu-btn {
-       display: none;
-   }
-}
+        .album-thumbnail {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            object-fit: cover;
+        }
+        
+        .album-info {
+            color: var(--text-color);
+        }
+        
+        .album-name {
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+        
+        .album-artist, .album-year {
+            color: var(--text-color);
+            font-size: 0.9em;
+        }
+        
+        .album-songs {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .song-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .track-number {
+            color: var(--secondary-text-color);
+            min-width: 25px;
+        }
+        
+        .album-actions {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+        }
+        
+        .delete-album {
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        
+        .delete-album:hover {
+            background: rgba(255, 0, 0, 1);
+        }
+        
+        .song-title {
+            flex-grow: 1;
+            color: var(--text-color);
+        }
+        
+        .music-item {
+            padding: 10px 15px;
+        }
+        
+        .music-item.active {
+            background: var(--transparent-color);
+        }
+        
+        .background-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -9999;
+        }
+        
+        .background-blur {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 150%;
+            height: 150%;
+            background-position: center;
+            background-size: cover;
+            filter: blur(50px) brightness(0.6);
+            transition: background-image 0.5s ease;
+            z-index: -9999;
+            transform: translate(-50%, -50%) scale(1.42);
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .background-blur.changing {
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .background-blur.rotating {
+            animation: rotate 40s linear infinite;
+        }
+        
+        @keyframes rotate {
+            from {
+                transform: translate(-50%, -50%) scale(1.42) rotate(0deg);
+            }
+            to {
+                transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
+            }
+        }
+        
+        .search-container {
+            position: relative;
+            margin-bottom: 10px;
+            margin-top: 10px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 10px 15px 10px 35px;
+            border-radius: 25px;
+            border: none;
+            background: var(--search-background);
+            color: var(--text-color);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+            flex-grow: 1;
+        }
+        
+        .search-input:focus {
+            border-color: var(--modal-background);
+        }
+        
+        .search-input::placeholder {
+            color: var(--secondary-text-color);
+        }
+        
+        .search-icon {
+            font-size: 20px;
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--secondary-text-color);
+            pointer-events: none;
+        }
+        
+        .control-btn.active {
+            color: #bdd6ff;
+        }
+        
+        #shuffleBtn, #repeatBtn {
+            background: transparent;
+            border: none;
+            color: var(--text-color);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            line-height: 0;
+        }
+        
+        #shuffleBtn.active, #repeatBtn.active {
+            background: var(--search-background);
+        }
+                
+        .sidebar-title {
+            color: var(--text-color);
+            font-size: 24px;
+            font-weight: bold;
+            padding: 10px 0;
+        }
+                
+        .material-symbols-rounded {
+          font-variation-settings:
+          'FILL' 1,
+          'wght' 700,
+          'GRAD' 0,
+          'opsz' 24;
+          vertical-align: middle;
+        }
+        
+        .no-results {
+            color: var(--text-color);
+            text-align: center;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .no-results .material-symbols-rounded {
+            font-size: 48px;
+        }
+        
+        .no-results p {
+            font-size: 14px;
+        }
+        
+        /* For all clickable elements */
+        [onclick], 
+        button, 
+        a, 
+        input[type="button"], 
+        input[type="submit"],
+        .clickable {
+          cursor: pointer;
+          transform: scale(1);
+          transition: transform 0.15s cubic-bezier(0.2, 0, 0.38, 0.9);
+        }
+        
+        /* Active effect (when clicking down) */
+        [onclick]:active, 
+        button:active, 
+        a:active, 
+        input[type="button"]:active, 
+        input[type="submit"]:active,
+        .clickable:active {
+          transform: scale(0.96);
+          transition: transform 0.1s cubic-bezier(0.2, 0, 0.38, 0.9);
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -300px;
+                top: 0;
+                bottom: 0;
+                background: var(--background-color);
+                transition: left 0.3s ease;
+                z-index: 100;
+            }
+        
+            .sidebar.open {
+                left: 0;
+            }
+        
+            .menu-btn {
+                position: fixed;
+                top: 20px;
+                left: 20px;
+                background: none;
+                border: none;
+                color: var(--text-color);
+                z-index: 99;
+                cursor: pointer;
+            }
+        
+            .overlay {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 99;
+            }
+        
+            .overlay.active {
+                display: block;
+            }
+        
+            .progress-container {
+                width: 90%;
+            }
+        }
+        
+        @media (min-width: 768px) {
+           .menu-btn {
+               display: none;
+           }
+        }
+        
+        /* When animations are disabled */
+        .reduce-animations * {
+            /* Disable all animations */
+            animation: none !important;
+        
+            /* Disable all transitions except opacity */
+            transition: opacity 0.3s ease !important;
+            transition-property: opacity !important;
+        }
+        
+        /* Special handling for clickable elements */
+        .reduce-animations [onclick],
+        .reduce-animations button,
+        .reduce-animations a,
+        .reduce-animations input[type="button"],
+        .reduce-animations input[type="submit"],
+        .reduce-animations .clickable {
+            /* Keep initial state but remove transition */
+            transform: scale(1) !important;
+            transition: opacity 0.3s ease !important;
+        }
+        
+        /* Keep active state functional but without animation */
+        .reduce-animations [onclick]:active,
+        .reduce-animations button:active,
+        .reduce-animations a:active,
+        .reduce-animations input[type="button"]:active,
+        .reduce-animations input[type="submit"]:active,
+        .reduce-animations .clickable:active {
+            /* Apply scale instantly without transition */
+            transform: scale(0.98) !important;
+            transition: none !important;
+        }
+        
+        /* Adjust for background image with light/dark theme */
+        body[style*="background-image"] .music-title,
+        body[style*="background-image"] .music-artist,
+        body[style*="background-image"] .music-album,
+        body[style*="background-image"] .time-info {
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        
+        body.light-theme[style*="background-image"] .music-title,
+        body.light-theme[style*="background-image"] .music-artist,
+        body.light-theme[style*="background-image"] .music-album,
+        body.light-theme[style*="background-image"] .time-info {
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
     </style>
 </head>
 <body>
@@ -639,6 +752,7 @@
         const volumeIcon = document.getElementById('volumeIcon');
         const body = document.body;
         const menuBtn = document.createElement('button');
+        const storedLightMode = localStorage.getItem('theme') || 'dark';
 
         let songs = JSON.parse(localStorage.getItem('songs')) || [];
         let currentSongId = null;
@@ -2011,6 +2125,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         console.error('Failed to initialize application:', error);
     }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Apply light theme if that's what was stored
+    document.body.classList.toggle('light-theme', storedLightMode === 'light');
 });
 
         renderSongs();
