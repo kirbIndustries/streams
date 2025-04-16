@@ -915,51 +915,72 @@ function createWaveBackground() {
   }
 }
 
-// Audio beat detection for syncing animations
 function setupBeatDetection() {
   if (!audioPlayer) return;
-  
-  // Create audio analyzer
+
   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const analyser = audioContext.createAnalyser();
   const source = audioContext.createMediaElementSource(audioPlayer);
-  
+
   source.connect(analyser);
   analyser.connect(audioContext.destination);
-  
+
   analyser.fftSize = 256;
   const bufferLength = analyser.frequencyBinCount;
   const dataArray = new Uint8Array(bufferLength);
-  
-    // Function to respond to beats
-    function reactToBeat() {
-      if (audioPlayer.paused) {
-        requestAnimationFrame(reactToBeat);
-        return;
-      }
-    
-      analyser.getByteFrequencyData(dataArray);
-    
-      let sum = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i];
-      }
-      const average = sum / bufferLength;
-    
-      const segments = document.querySelectorAll('.wave-segment');
-      segments.forEach((segment) => {
-        const intensity = Math.min(1.5, 1 + (average / 255));
-        
-        const scale = 1 + (intensity - 1) * 0.15;       // Up to 1.075
-        const brightness = 1 + (intensity - 1) * 1.2;   // Up to 1.6 (60% brighter)
-    
-        segment.style.transform = `scale(${scale})`;
-        segment.style.filter = `brightness(${brightness})`;
-      });
-    
+
+  let lastBeatTime = 0;
+  let beatHoldTime = 300; // ms between beats (minimum)
+  let beatThreshold = 180; // sensitivity
+  let beatDecay = 0.98;
+  let currentMax = 0;
+
+  function reactToBeat(timestamp) {
+    if (audioPlayer.paused) {
       requestAnimationFrame(reactToBeat);
+      return;
     }
-  
+
+    analyser.getByteFrequencyData(dataArray);
+
+    // Use low frequency bands only (e.g., first 32 bins = bass)
+    let bassSum = 0;
+    let bassCount = 32;
+    for (let i = 0; i < bassCount; i++) {
+      bassSum += dataArray[i];
+    }
+    const bassAvg = bassSum / bassCount;
+
+    // Track max to adjust threshold dynamically
+    currentMax = Math.max(currentMax * beatDecay, bassAvg);
+
+    const now = performance.now();
+    const isBeat = bassAvg > beatThreshold && (now - lastBeatTime > beatHoldTime);
+
+    const segments = document.querySelectorAll('.wave-segment');
+
+    segments.forEach(segment => {
+      if (isBeat) {
+        // Bigger visual effect on beat
+        segment.style.transform = `scale(1.25)`;
+        segment.style.filter = `brightness(2)`;
+
+        // Reset
+        lastBeatTime = now;
+
+        // Optional: pulse animation
+        segment.style.transition = 'transform 0.1s ease, filter 0.1s ease';
+      } else {
+        // Decay slowly
+        segment.style.transform = `scale(1)`;
+        segment.style.filter = `brightness(1)`;
+        segment.style.transition = 'transform 0.3s ease, filter 0.3s ease';
+      }
+    });
+
+    requestAnimationFrame(reactToBeat);
+  }
+
   reactToBeat();
 }
 
