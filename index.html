@@ -430,7 +430,7 @@
             height: 150%;
             background-position: center;
             background-size: cover;
-            filter: blur(50px) brightness(0.6);
+            filter: blur(10px) brightness(0.6);
             transition: background-image 0.5s ease, opacity 0.3s ease;
             z-index: -9999;
             transform: translate(-50%, -50%) scale(1.42);
@@ -448,7 +448,7 @@
           top: 0;
           background-size: cover;
           background-position: center;
-          filter: brightness(0.8);
+          filter: blur(10px);
           transition: transform 0.5s ease;
         }
       
@@ -931,31 +931,34 @@ function setupBeatDetection() {
   const bufferLength = analyser.frequencyBinCount;
   const dataArray = new Uint8Array(bufferLength);
   
-  // Function to respond to beats
-  function reactToBeat() {
-    if (audioPlayer.paused) {
+    // Function to respond to beats
+    function reactToBeat() {
+      if (audioPlayer.paused) {
+        requestAnimationFrame(reactToBeat);
+        return;
+      }
+    
+      analyser.getByteFrequencyData(dataArray);
+    
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / bufferLength;
+    
+      const segments = document.querySelectorAll('.wave-segment');
+      segments.forEach((segment) => {
+        const intensity = Math.min(1.5, 1 + (average / 255));
+        
+        const scale = 1 + (intensity - 1) * 0.15;       // Up to 1.075
+        const brightness = 1 + (intensity - 1) * 1.2;   // Up to 1.6 (60% brighter)
+    
+        segment.style.transform = `scale(${scale})`;
+        segment.style.filter = `brightness(${brightness})`;
+      });
+    
       requestAnimationFrame(reactToBeat);
-      return;
     }
-    
-    analyser.getByteFrequencyData(dataArray);
-    
-    // Get average volume across frequency bands
-    let sum = 0;
-    for (let i = 0; i < bufferLength; i++) {
-      sum += dataArray[i];
-    }
-    const average = sum / bufferLength;
-    
-    // Respond to beats
-    const segments = document.querySelectorAll('.wave-segment');
-    segments.forEach((segment, i) => {
-      const intensity = Math.min(1.5, 1 + (average / 255));
-      segment.style.transform = `scale(${1 + (intensity - 1) * 0.15})`;
-    });
-    
-    requestAnimationFrame(reactToBeat);
-  }
   
   reactToBeat();
 }
