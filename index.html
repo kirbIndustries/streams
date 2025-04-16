@@ -2108,11 +2108,15 @@ function handleKeyboardControls(e) {
             break;
     }
 }
+        
+// Update the progressBar event listener section
+progressBar.addEventListener("click", e => {
+    seekAudio(e);
+});
 
-// Update event listeners for drag-only functionality
-progressBar.addEventListener("mousedown", (e) => {
+// Add new event listeners for drag functionality
+progressBar.addEventListener("mousedown", () => {
     isDragging = true;
-    // Don't seek immediately on mousedown, require dragging
 });
 
 document.addEventListener("mouseup", () => {
