@@ -2045,10 +2045,10 @@ prevBtn.addEventListener('click', () => {
 
 function seekAudio(e) {
     const rect = progressBar.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
+    const clickX = Math.max(0, Math.min(e.clientX, rect.right)) - rect.left;
     const width = rect.width;
-    const percent = clickX / width;
-    const seekTime = Math.max(0, Math.min(1, percent)) * audioPlayer.duration;
+    const percent = Math.max(0, Math.min(1, clickX / width));
+    const seekTime = percent * audioPlayer.duration;
     
     if (isFinite(seekTime)) {
         audioPlayer.currentTime = seekTime;
