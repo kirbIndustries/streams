@@ -766,6 +766,7 @@
         let currentQueueIndex = -1;
         let searchTimeout;
         let searchInput;
+        let isDragging = false;
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
@@ -2041,30 +2042,94 @@ nextBtn.addEventListener('click', () => {
 prevBtn.addEventListener('click', () => {
     playPreviousSong();
 });
-        
-progressBar.addEventListener('click', (e) => {
+
+function seekAudio(e) {
     const rect = progressBar.getBoundingClientRect();
-    const clickPosition = e.clientX - rect.left;
-    const totalWidth = rect.width;
-    const seekPercentage = clickPosition / totalWidth;
+    const clickX = e.clientX - rect.left;
+    const width = rect.width;
+    const percent = clickX / width;
+    const seekTime = Math.max(0, Math.min(1, percent)) * audioPlayer.duration;
     
-    // Ensure the percentage is between 0 and 1
-    const clampedPercentage = Math.max(0, Math.min(1, seekPercentage));
-    
-    // Calculate the new time
-    const newTime = clampedPercentage * audioPlayer.duration;
-    
-    // Update the audio player time
-    if (isFinite(newTime)) {
-        audioPlayer.currentTime = newTime;
-        
-        // Update the progress bar visually
-        const percentage = (newTime / audioPlayer.duration) * 100;
-        progress.style.width = `${percentage}%`;
-        
-        // Update the time display
-        currentTimeDisplay.textContent = formatTime(newTime);
+    if (isFinite(seekTime)) {
+        audioPlayer.currentTime = seekTime;
+        progress.style.width = `${percent * 100}%`;
+        currentTimeDisplay.textContent = formatTime(seekTime);
     }
+}
+
+// Function to handle progress dragging
+function handleProgressDrag(e) {
+    if (isDragging) {
+        seekAudio(e);
+    }
+}
+
+// Function to handle keyboard controls
+function handleKeyboardControls(e) {
+    switch (e.key.toLowerCase()) {
+        case ' ': // Play/Pause
+            e.preventDefault();
+            if (audioPlayer.paused) {
+                let playPromise = audioPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                        playPauseBtn.classList.add("playing");
+                        document.querySelector(".background-blur").classList.add("rotating");
+                        if ("mediaSession" in navigator) {
+                            updateMediaSessionPlaybackState("playing");
+                        }
+                    }).catch(error => {
+                        console.log("Play keyboard shortcut prevented:", error.message);
+                    });
+                }
+            } else {
+                audioPlayer.pause();
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                playPauseBtn.classList.remove("playing");
+                if ("mediaSession" in navigator) {
+                    updateMediaSessionPlaybackState("paused");
+                }
+            }
+            break;
+        case 'arrowleft': // Seek backward
+            audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 5);
+            break;
+        case 'arrowright': // Seek forward
+            audioPlayer.currentTime = Math.min(audioPlayer.duration, audioPlayer.currentTime + 5);
+            break;
+        case 'f': // No fullscreen for audio player, but could implement some other feature
+            break;
+        case 'n': // Next song
+            playNextSong();
+            break;
+        case 'p': // Previous song
+            playPreviousSong();
+            break;
+    }
+}
+        
+// Update the progressBar event listener section
+progressBar.addEventListener("click", e => {
+    seekAudio(e);
+});
+
+// Add new event listeners for drag functionality
+progressBar.addEventListener("mousedown", () => {
+    isDragging = true;
+});
+
+document.addEventListener("mouseup", () => {
+    isDragging = false;
+});
+
+document.addEventListener("mousemove", e => {
+    handleProgressDrag(e);
+});
+
+// Add keyboard controls event listener
+document.addEventListener("keydown", e => {
+    handleKeyboardControls(e);
 });
 
 volumeSlider.addEventListener('input', (e) => {
