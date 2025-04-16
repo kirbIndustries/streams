@@ -422,15 +422,14 @@
         
         /* Default (dark theme) background blur */
         .background-blur {
-            overflow: hidden;
-            position: relative;
+            position: fixed;
             top: 50%;
             left: 50%;
             width: 150%;
             height: 150%;
             background-position: center;
             background-size: cover;
-            filter: blur(10px) brightness(0.6);
+            filter: blur(50px) brightness(0.6);
             transition: background-image 0.5s ease, opacity 0.3s ease;
             z-index: -9999;
             transform: translate(-50%, -50%) scale(1.42);
@@ -440,25 +439,6 @@
         /* Light theme background blur with reduced opacity */
         body.light-theme .background-blur {
             opacity: 0.5; /* 50% opacity for light theme */
-        }
-
-       .wave-segment {
-          position: absolute;
-          height: 100%;
-          top: 0;
-          background-size: cover;
-          background-position: center;
-          filter: blur(10px);
-          transition: transform 0.5s ease;
-        }
-      
-        @keyframes wave-animation {
-          0% {
-            transform: translateY(5%) scale(1.05);
-          }
-          100% {
-            transform: translateY(-5%) scale(1.1);
-          }
         }
         
         @keyframes fadeIn {
@@ -889,101 +869,6 @@ function resetPlayer() {
             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
 
-function createWaveBackground() {
-  const backgroundBlur = document.querySelector('.background-blur');
-  if (!backgroundBlur) return;
-  
-  // Clear existing background
-  backgroundBlur.innerHTML = '';
-  backgroundBlur.classList.remove('rotating');
-  
-  // Create wave segments
-  const numSegments = 6; // Number of wavy parts
-  for (let i = 0; i < numSegments; i++) {
-    const segment = document.createElement('div');
-    segment.className = 'wave-segment';
-    segment.style.backgroundImage = backgroundBlur.style.backgroundImage;
-    segment.style.left = `${(i / numSegments) * 100}%`;
-    segment.style.width = `${100 / numSegments * 1.2}%`; // Slight overlap
-    
-    // Random initial position and animation speed
-    const delay = Math.random() * 2;
-    const duration = 3 + Math.random() * 2;
-    segment.style.animation = `wave-animation ${duration}s ease-in-out ${delay}s infinite alternate`;
-    
-    backgroundBlur.appendChild(segment);
-  }
-}
-
-function setupBeatDetection() {
-  if (!audioPlayer) return;
-
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const analyser = audioContext.createAnalyser();
-  const source = audioContext.createMediaElementSource(audioPlayer);
-
-  source.connect(analyser);
-  analyser.connect(audioContext.destination);
-
-  analyser.fftSize = 256;
-  const bufferLength = analyser.frequencyBinCount;
-  const dataArray = new Uint8Array(bufferLength);
-
-  let lastBeatTime = 0;
-  let beatHoldTime = 300; // ms between beats (minimum)
-  let beatThreshold = 180; // sensitivity
-  let beatDecay = 0.98;
-  let currentMax = 0;
-
-  function reactToBeat(timestamp) {
-    if (audioPlayer.paused) {
-      requestAnimationFrame(reactToBeat);
-      return;
-    }
-
-    analyser.getByteFrequencyData(dataArray);
-
-    // Use low frequency bands only (e.g., first 32 bins = bass)
-    let bassSum = 0;
-    let bassCount = 32;
-    for (let i = 0; i < bassCount; i++) {
-      bassSum += dataArray[i];
-    }
-    const bassAvg = bassSum / bassCount;
-
-    // Track max to adjust threshold dynamically
-    currentMax = Math.max(currentMax * beatDecay, bassAvg);
-
-    const now = performance.now();
-    const isBeat = bassAvg > beatThreshold && (now - lastBeatTime > beatHoldTime);
-
-    const segments = document.querySelectorAll('.wave-segment');
-
-    segments.forEach(segment => {
-      if (isBeat) {
-        // Bigger visual effect on beat
-        segment.style.transform = `scale(1.25)`;
-        segment.style.filter = `brightness(2)`;
-
-        // Reset
-        lastBeatTime = now;
-
-        // Optional: pulse animation
-        segment.style.transition = 'transform 0.1s ease, filter 0.1s ease';
-      } else {
-        // Decay slowly
-        segment.style.transform = `scale(1)`;
-        segment.style.filter = `brightness(1)`;
-        segment.style.transition = 'transform 0.3s ease, filter 0.3s ease';
-      }
-    });
-
-    requestAnimationFrame(reactToBeat);
-  }
-
-  reactToBeat();
-}
-
 function loadAndPlaySong(song) {
     if (!song) return;
     
@@ -1056,15 +941,6 @@ function loadAndPlaySong(song) {
     request.onerror = (error) => {
         console.error(`Failed to load song with ID: ${song.id}`, error);
     };
-
-    let backgroundBlur = document.querySelector('.background-blur');
-    backgroundBlur.classList.add('changing');
-    backgroundBlur.style.backgroundImage = `url('${song.albumArt}')`;
-  
-    setTimeout(() => {
-      backgroundBlur.classList.remove('changing');
-      createWaveBackground();
-    }, 500);
 }
         
 function updatePageTitle() {
@@ -2321,8 +2197,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Theme synchronization for Gurapp side
       document.addEventListener('DOMContentLoaded', () => {
-          setupBeatDetection();
-          
           // Initial theme application based on localStorage
           const storedTheme = localStorage.getItem('theme') || 'dark';
           document.body.classList.toggle('light-theme', storedTheme === 'light');
