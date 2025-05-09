@@ -619,12 +619,13 @@
             
             .sidebar {
                 position: fixed;
-                left: -300px;
+                left: -100%;
                 top: 0;
                 bottom: 0;
-                background: var(--background-color);
+                background: var(--modal-background);
                 transition: left 0.3s ease;
                 z-index: 100;
+                backdrop-filter: blur(10px);
             }
         
             .sidebar.open {
@@ -652,6 +653,7 @@
                 bottom: 0;
                 background: rgba(0,0,0,0.5);
                 z-index: 99;
+                backdrop-filter: blur(10px)
             }
         
             .overlay.active {
