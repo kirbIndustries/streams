@@ -823,18 +823,54 @@ document.addEventListener('DOMContentLoaded', () => {
   const menuBtn = document.querySelector('.menu-btn');
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.querySelector('.overlay');
-
-  if (menuBtn && sidebar && overlay) {
-    menuBtn.addEventListener('click', () => {
-      sidebar.classList.add('open');
-      overlay.classList.add('active');
-    });
-
-    overlay.addEventListener('click', () => {
-      sidebar.classList.remove('open');
-      overlay.classList.remove('active');
-    });
+  
+  // Function to handle responsive behavior
+  const handleResponsiveBehavior = () => {
+    if (window.innerWidth < 768) {
+      // Mobile behavior - enable sidebar toggle and overlay
+      if (menuBtn && sidebar && overlay) {
+        // Set initial state for mobile
+        sidebar.style.pointerEvents = 'none';
+        overlay.style.pointerEvents = 'none';
+        
+        // Clear any previous listeners to avoid duplicates
+        menuBtn.removeEventListener('click', openSidebar);
+        overlay.removeEventListener('click', closeSidebar);
+        
+        // Add listeners
+        menuBtn.addEventListener('click', openSidebar);
+        overlay.addEventListener('click', closeSidebar);
+      }
+    } else {
+      // Desktop behavior - enable sidebar always, no overlay
+      if (sidebar && overlay) {
+        sidebar.classList.remove('open');
+        sidebar.style.pointerEvents = 'auto';
+        overlay.classList.remove('active');
+      }
+    }
+  };
+  
+  // Functions for event handlers
+  function openSidebar() {
+    sidebar.classList.add('open');
+    sidebar.style.pointerEvents = 'auto';
+    overlay.classList.add('active');
+    overlay.style.pointerEvents = 'auto';
   }
+  
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    sidebar.style.pointerEvents = 'none';
+    overlay.classList.remove('active');
+    overlay.style.pointerEvents = 'none';
+  }
+  
+  // Run once on load
+  handleResponsiveBehavior();
+  
+  // And whenever window is resized
+  window.addEventListener('resize', handleResponsiveBehavior);
 });
         
 const initDB = () => {
