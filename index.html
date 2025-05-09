@@ -226,8 +226,25 @@
             display: flex;
             gap: 30px;
             align-items: center;
+            justify-content: center;
+            max-width: 100%;
+            box-sizing: border-box;
         }
         
+        .player-controls button:nth-child(2),
+        .player-controls button:nth-child(3),
+        .player-controls button:nth-child(4) {
+            order: 1; /* Middle group gets priority */
+        }
+        
+        .player-controls button:nth-child(1) {
+            order: 0; /* Shuffle on the left */
+        }
+        
+        .player-controls button:nth-child(5) {
+            order: 2; /* Repeat on the right */
+        }
+                
         .control-btn {
             background: var(--search-background);
             border: none;
@@ -635,6 +652,10 @@
         
             .overlay.active {
                 display: block;
+            }
+
+            .player-controls {
+                gap: 15px;
             }
         }
         
