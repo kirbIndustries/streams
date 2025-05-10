@@ -347,9 +347,26 @@
             border-radius: 50%;
             cursor: pointer;
             border: 1px solid var(--glass-border);
+            transition: width 0.3s, height 0.3s, transform 0.3s;
         }
 
         .volume-slider::-webkit-slider-thumb:active {
+            width: 21px;
+            height: 21px;
+            transform: scale(1.1);
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: var(--text-color);
+            cursor: pointer;
+            border: 1px solid var(--glass-border);
+            transition: width 0.3s, height 0.3s, transform 0.3s;
+        }
+
+        .volume-slider::-moz-range-thumb:active {
             width: 21px;
             height: 21px;
             transform: scale(1.1);
