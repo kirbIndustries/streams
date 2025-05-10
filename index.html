@@ -98,6 +98,13 @@
             background: var(--modal-transparent);
             border-radius: 4px;
         }
+
+        .sidebar-logo {
+            width: 100px;
+            height: auto;
+            display: block;
+            margin: 0 auto 16px auto;
+        }        
         
         .main-content {
             flex-grow: 1;
@@ -775,10 +782,11 @@
     <div class="background-blur"></div>
 </div>
     <div class="sidebar">
+        <img src="/music/favicon.png" alt="Music Icon" class="sidebar-logo">
         <h1>Music</h1>
         <div class="search-container">
             <span class="material-symbols-rounded search-icon">search</span>
-            <input type="text" id="searchInput" placeholder="Search Songs" class="search-input">
+            <input type="text" id="searchInput" placeholder="Search" class="search-input">
         </div>
         <div class="music-list"></div>
         <label class="upload-btn">
