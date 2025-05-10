@@ -341,12 +341,19 @@
         
         .volume-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 15px;
-            height: 15px;
+            width: 21px;
+            height: 21px;
             background: var(--text-color);
             border-radius: 50%;
             cursor: pointer;
             border: 1px solid var(--glass-border);
+        }
+
+        
+        .weight-slider::-webkit-slider-thumb:active {
+            width: 21px;
+            height: 21px;
+            transform: scale(1.1);
         }
         
         .album-section {
