@@ -174,10 +174,18 @@
         }
         
         .music-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             color: var(--text-color);
-            text-align: center;
+            text-align: left;
             margin: 10px 0;
             max-width: 500px;
+            width: 100%;
+        }
+        
+        .music-text {
+            flex-grow: 1;
         }
         
         .music-title {
@@ -187,13 +195,20 @@
             font-weight: bold;
         }
         
-        .music-artist {
-            color: var(--text-color);
-        }
-        
+        .music-artist,
         .music-album {
             color: var(--text-color);
             font-size: 0.9em;
+        }
+        
+        .favorite-button {
+            background: var(--search-background);
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background 0.2s ease;
+            backdrop-filter: blur(10px);
         }
         
         .quality-badge {
@@ -767,9 +782,14 @@
             <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="Album Art" id="albumArtImg">
         </div>
         <div class="music-info">
-            <div class="music-title">No song playing</div>
-            <div class="music-artist"></div>
-            <div class="music-album"></div>
+            <div class="music-text">
+                <div class="music-title">DEVIL NOBODY</div>
+                <div class="music-artist">zombAe</div>
+                <div class="music-album"></div>
+            </div>
+            <button class="favorite-button">
+                <span class="material-symbols-rounded">favorite</span>
+            </button>
         </div>
         <div class="progress-container">
             <div class="progress-bar">
