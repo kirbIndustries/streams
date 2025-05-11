@@ -139,6 +139,19 @@
             gap: 10px;
             overflow-y: initial;
         }
+
+        .music-item.dragging, .album-section.dragging {
+          opacity: 0.5;
+          background-color: var(--modal-background);
+          box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .drag-handle {
+          cursor: move;
+          opacity: 0.5;
+          margin-left: auto;
+          padding-left: 10px;
+        }
         
         .music-item {
             padding: 15px 20px;
@@ -409,6 +422,20 @@
             padding: 15px;
             backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
+        }
+
+        .album-section::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          right: 0;
+          height: 2px;
+          background: transparent;
+          transition: background 0.3s;
+        }
+        
+        .album-section.drag-over::after {
+          background: var(--text-color);
         }
         
         .album-header {
@@ -870,6 +897,9 @@
         let searchTimeout;
         let searchInput;
         let isDragging = false;
+        let draggedItem = null;
+        let isDraggingAlbum = false;
+        let draggedOverItem = null;
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
@@ -1015,6 +1045,117 @@ function resetPlayer() {
             const remainingSeconds = Math.floor(seconds % 60);
             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
+
+function makeElementsDraggable() {
+  // Make album sections draggable
+  document.querySelectorAll('.album-section').forEach(albumSection => {
+    albumSection.setAttribute('draggable', 'true');
+    
+    albumSection.addEventListener('dragstart', e => {
+      draggedItem = albumSection;
+      isDraggingAlbum = true;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => {
+        albumSection.classList.add('dragging');
+      }, 0);
+    });
+    
+    albumSection.addEventListener('dragend', () => {
+      draggedItem.classList.remove('dragging');
+      draggedItem = null;
+      isDraggingAlbum = false;
+    });
+    
+    albumSection.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (isDraggingAlbum && draggedItem !== albumSection) {
+        const boundingRect = albumSection.getBoundingClientRect();
+        const offset = boundingRect.y + (boundingRect.height / 2);
+        
+        if (e.clientY - offset > 0) {
+          albumSection.parentNode.insertBefore(draggedItem, albumSection.nextSibling);
+        } else {
+          albumSection.parentNode.insertBefore(draggedItem, albumSection);
+        }
+        
+        // Update songs array to match new order
+        updateSongsArrayFromDOM();
+      }
+    });
+  });
+  
+  // Make individual songs draggable within their albums
+  document.querySelectorAll('.music-item').forEach(musicItem => {
+    musicItem.setAttribute('draggable', 'true');
+    
+    musicItem.addEventListener('dragstart', e => {
+      draggedItem = musicItem;
+      isDraggingAlbum = false;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => {
+        musicItem.classList.add('dragging');
+      }, 0);
+    });
+    
+    musicItem.addEventListener('dragend', () => {
+      draggedItem.classList.remove('dragging');
+      draggedItem = null;
+    });
+    
+    musicItem.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (!isDraggingAlbum && draggedItem !== musicItem) {
+        const parentAlbumSongs = musicItem.closest('.album-songs');
+        const draggedItemParent = draggedItem.closest('.album-songs');
+        
+        // Only allow reordering within the same album
+        if (parentAlbumSongs === draggedItemParent) {
+          const boundingRect = musicItem.getBoundingClientRect();
+          const offset = boundingRect.y + (boundingRect.height / 2);
+          
+          if (e.clientY - offset > 0) {
+            parentAlbumSongs.insertBefore(draggedItem, musicItem.nextSibling);
+          } else {
+            parentAlbumSongs.insertBefore(draggedItem, musicItem);
+          }
+          
+          // Update songs array to match new order
+          updateSongsArrayFromDOM();
+        }
+      }
+    });
+  });
+}
+
+// Function to update the songs array based on the DOM order
+function updateSongsArrayFromDOM() {
+  const newSongsOrder = [];
+  
+  document.querySelectorAll('.album-section').forEach(albumSection => {
+    const albumName = albumSection.querySelector('.album-name').textContent;
+    const albumArtist = albumSection.querySelector('.album-artist').textContent;
+    
+    albumSection.querySelectorAll('.music-item').forEach((musicItem, index) => {
+      const songId = parseFloat(musicItem.dataset.id);
+      const song = songs.find(s => s.id === songId);
+      
+      if (song) {
+        // Update track number based on new position
+        song.trackNumber = index + 1;
+        newSongsOrder.push(song);
+      }
+    });
+  });
+  
+  // Update songs array
+  songs = newSongsOrder;
+  
+  // Update playback queue to match new order
+  updatePlayQueue();
+  
+  // Save changes to storage
+  saveSongs();
+}
 
 function loadAndPlaySong(song) {
     if (!song) return;
@@ -1585,60 +1726,56 @@ function renderSongs() {
     attachEventListeners();
 }
 
-function renderSongs(filteredSongs = null) {
-    // Use filteredSongs if provided, otherwise use all songs
-    const songsToRender = filteredSongs || songs;
-    const albums = groupSongsByAlbum(songsToRender);
-
-    if (songsToRender.length === 0) {
-        musicList.innerHTML = `
-            <div class="no-results">
-                <span class="material-symbols-rounded">search_off</span>
-                <p>No songs found</p>
-            </div>`;
-        return;
-    }
-
-    albums.sort((a, b) => {
-        const aFirstSong = a.songs[0];
-        const bFirstSong = b.songs[0];
-        return aFirstSong.dateAdded - bFirstSong.dateAdded;
-    });
-
-    musicList.innerHTML = albums.map(album => `
-        <div class="album-section">
-            <div class="album-header">
-                <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
-                <div class="album-info">
-                    <div class="album-name">${album.name}</div>
-                    <div class="album-artist">${album.artist}</div>
-                    <div class="album-year">${album.year}</div>
-                </div>
-                <div class="album-actions" style="display: none;">
-                    <button class="delete-album" data-album="${album.name}">
-                        <span class="material-symbols-rounded">delete</span>
-                    </button>
-                </div>
-            </div>
-            <div class="album-songs">
-                ${album.songs.map(song => `
-                    <div class="music-item ${song.id === currentSongId ? 'active' : ''}" 
-                         data-id="${song.id}">
-                        <div class="song-info">
-                            ${song.trackNumber ? `<span class="track-number">${song.trackNumber}.</span>` : ''}
-                            <span class="song-title">${song.name}</span>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
+function renderSongs(filteredSongs=null) {
+  const songsToRender = filteredSongs || songs;
+  const albums = groupSongsByAlbum(songsToRender);
+  
+  if (songsToRender.length === 0) {
+    musicList.innerHTML = `<div class="no-results"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>`;
+    return;
+  }
+  
+  albums.sort((a, b) => {
+    const aFirstSong = a.songs[0];
+    const bFirstSong = b.songs[0];
+    return aFirstSong.dateAdded - bFirstSong.dateAdded;
+  });
+  
+  musicList.innerHTML = albums.map(album => `
+    <div class="album-section">
+      <div class="album-header">
+        <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
+        <div class="album-info">
+          <div class="album-name">${album.name}</div>
+          <div class="album-artist">${album.artist}</div>
+          <div class="album-year">${album.year}</div>
         </div>
-    `).join('');
-
-    if (playQueue.length === 0) {
-        updatePlayQueue();
-    }
-    
-    attachEventListeners();
+        <div class="album-actions" style="display: none;">
+          <button class="delete-album" data-album="${album.name}">
+            <span class="material-symbols-rounded">delete</span>
+          </button>
+        </div>
+      </div>
+      <div class="album-songs">
+        ${album.songs.map(song => `
+          <div class="music-item ${song.id === currentSongId ? 'active' : ''}" data-id="${song.id}">
+            <div class="song-info">
+              <span class="track-number">${song.trackNumber ? song.trackNumber + '.' : ''}</span>
+              <span class="song-title">${song.name}</span>
+              <span class="drag-handle material-symbols-rounded">drag_indicator</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+  
+  if (playQueue.length === 0) {
+    updatePlayQueue();
+  }
+  
+  attachEventListeners();
+  makeElementsDraggable();
 }
         
 function attachEventListeners() {
@@ -1948,28 +2085,28 @@ function toggleRepeat() {
             break;
     }
 }
-
+    
 function updatePlayQueue() {
-    if (isShuffleEnabled) {
-        // Keep current song at the beginning, shuffle the rest
-        let currentSong = currentSongId ? songs.find(s => s.id === currentSongId) : null;
-        let otherSongs = songs.filter(s => s.id !== currentSongId);
-        
-        // Properly shuffle the array
-        for (let i = otherSongs.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [otherSongs[i], otherSongs[j]] = [otherSongs[j], otherSongs[i]];
-        }
-        
-        playQueue = currentSong ? [currentSong, ...otherSongs] : otherSongs;
-    } else {
-        playQueue = [...songs];
+  // Create queue from current sidebar order
+  playQueue = [...songs];
+  
+  // If shuffle is enabled, shuffle all songs except current
+  if (isShuffleEnabled) {
+    let currentSong = currentSongId ? songs.find(s => s.id === currentSongId) : null;
+    let otherSongs = songs.filter(s => s.id !== currentSongId);
+    
+    for (let i = otherSongs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [otherSongs[i], otherSongs[j]] = [otherSongs[j], otherSongs[i]];
     }
     
-    currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
-    if (currentQueueIndex === -1) {
-        currentQueueIndex = 0;
-    }
+    playQueue = currentSong ? [currentSong, ...otherSongs] : otherSongs;
+  }
+  
+  currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
+  if (currentQueueIndex === -1) {
+    currentQueueIndex = 0;
+  }
 }
         
 function groupSongsByAlbum(songs) {
