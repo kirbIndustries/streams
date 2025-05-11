@@ -1871,6 +1871,11 @@ async function saveSongs() {
         });
       });
     };
+    
+    transaction.oncomplete = () => {
+      console.log('Songs saved with new order');
+      resolve();
+    };
   });
 }
 
