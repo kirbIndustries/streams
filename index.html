@@ -143,14 +143,10 @@
         .music-item.dragging, .album-section.dragging {
           opacity: 0.5;
           background-color: var(--modal-background);
-          box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-        }
-        
-        .drag-handle {
-          cursor: move;
-          opacity: 0.5;
-          margin-left: auto;
-          padding-left: 10px;
+          box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+          position: relative;
+          z-index: 1000;
+          transition: transform 0.1s ease;
         }
         
         .music-item {
@@ -163,6 +159,8 @@
             transition: all 0.3s ease;
             backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
+            cursor: move;
+            touch-action: pan-y;
         }
         
         .music-item.active {
@@ -442,6 +440,7 @@
             display: flex;
             gap: 15px;
             margin-bottom: 15px;
+            cursor: move;
             position: relative;
         }
         
@@ -510,9 +509,27 @@
         
         .song-title {
             flex-grow: 1;
-            color: var(--text-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .drag-placeholder {
+          height: 2px;
+          background-color: var(--text-color);
+          transition: all 0.2s ease;
         }
         
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
+          70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+        
+        .music-item.dragging, .album-section.dragging {
+          animation: pulse 1.5s infinite;
+        }
+
         .music-item {
             padding: 10px 15px;
         }
@@ -899,7 +916,9 @@
         let isDragging = false;
         let draggedItem = null;
         let isDraggingAlbum = false;
-        let draggedOverItem = null;
+        let touchStartY = 0;
+        let initialY = 0;
+        let touchTarget = null;
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">menu</span>';
@@ -1045,12 +1064,13 @@ function resetPlayer() {
             const remainingSeconds = Math.floor(seconds % 60);
             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
-
+        
 function makeElementsDraggable() {
   // Make album sections draggable
   document.querySelectorAll('.album-section').forEach(albumSection => {
     albumSection.setAttribute('draggable', 'true');
     
+    // Mouse events for albums
     albumSection.addEventListener('dragstart', e => {
       draggedItem = albumSection;
       isDraggingAlbum = true;
@@ -1064,6 +1084,7 @@ function makeElementsDraggable() {
       draggedItem.classList.remove('dragging');
       draggedItem = null;
       isDraggingAlbum = false;
+      updateSongsArrayFromDOM();
     });
     
     albumSection.addEventListener('dragover', e => {
@@ -1077,18 +1098,78 @@ function makeElementsDraggable() {
         } else {
           albumSection.parentNode.insertBefore(draggedItem, albumSection);
         }
+      }
+    });
+    
+    // Touch events for albums
+    albumSection.addEventListener('touchstart', e => {
+      // Prevent default only on header to allow scrolling on content
+      if (e.target.closest('.album-header')) {
+        touchTarget = albumSection;
+        isDraggingAlbum = true;
+        touchStartY = e.touches[0].clientY;
+        initialY = albumSection.getBoundingClientRect().top;
         
-        // Update songs array to match new order
+        setTimeout(() => {
+          albumSection.classList.add('dragging');
+        }, 200); // Add a delay so quick taps don't trigger dragging
+      }
+    }, { passive: false });
+    
+    albumSection.addEventListener('touchmove', e => {
+      if (touchTarget === albumSection) {
+        e.preventDefault(); // Prevent scrolling while dragging
+        
+        const currentY = e.touches[0].clientY;
+        const deltaY = currentY - touchStartY;
+        
+        albumSection.style.transform = `translateY(${deltaY}px)`;
+        albumSection.style.zIndex = '1000';
+        
+        // Check for collision with other albums
+        document.querySelectorAll('.album-section').forEach(otherAlbum => {
+          if (otherAlbum !== albumSection) {
+            const rect = otherAlbum.getBoundingClientRect();
+            const albumRect = albumSection.getBoundingClientRect();
+            
+            if (albumRect.top <= rect.top + rect.height / 2 && 
+                albumRect.bottom >= rect.top) {
+              // Move up
+              albumSection.parentNode.insertBefore(albumSection, otherAlbum);
+            } else if (albumRect.bottom >= rect.bottom - rect.height / 2 && 
+                       albumRect.top <= rect.bottom) {
+              // Move down
+              albumSection.parentNode.insertBefore(albumSection, otherAlbum.nextSibling);
+            }
+          }
+        });
+      }
+    }, { passive: false });
+    
+    albumSection.addEventListener('touchend', () => {
+      if (touchTarget === albumSection) {
+        albumSection.classList.remove('dragging');
+        albumSection.style.transform = '';
+        albumSection.style.zIndex = '';
+        touchTarget = null;
+        isDraggingAlbum = false;
         updateSongsArrayFromDOM();
       }
     });
   });
   
-  // Make individual songs draggable within their albums
+  // Make individual songs draggable
   document.querySelectorAll('.music-item').forEach(musicItem => {
     musicItem.setAttribute('draggable', 'true');
     
+    // Mouse events for songs
     musicItem.addEventListener('dragstart', e => {
+      // Don't start drag if clicking play button
+      if (e.target.closest('.play-control')) {
+        e.preventDefault();
+        return;
+      }
+      
       draggedItem = musicItem;
       isDraggingAlbum = false;
       e.dataTransfer.effectAllowed = 'move';
@@ -1100,6 +1181,7 @@ function makeElementsDraggable() {
     musicItem.addEventListener('dragend', () => {
       draggedItem.classList.remove('dragging');
       draggedItem = null;
+      updateSongsArrayFromDOM();
     });
     
     musicItem.addEventListener('dragover', e => {
@@ -1118,10 +1200,85 @@ function makeElementsDraggable() {
           } else {
             parentAlbumSongs.insertBefore(draggedItem, musicItem);
           }
+        }
+      }
+    });
+    
+    // Touch events for songs
+    let longPressTimer;
+    
+    musicItem.addEventListener('touchstart', e => {
+      // Don't drag if touching the play button
+      if (e.target.closest('.play-control')) {
+        return;
+      }
+      
+      touchTarget = musicItem;
+      touchStartY = e.touches[0].clientY;
+      initialY = musicItem.getBoundingClientRect().top;
+      
+      // Set long press timer for initiating drag
+      longPressTimer = setTimeout(() => {
+        musicItem.classList.add('dragging');
+      }, 200);
+    }, { passive: true });
+    
+    musicItem.addEventListener('touchmove', e => {
+      if (touchTarget === musicItem) {
+        clearTimeout(longPressTimer);
+        
+        if (musicItem.classList.contains('dragging')) {
+          e.preventDefault(); // Prevent scrolling when dragging
           
-          // Update songs array to match new order
+          const currentY = e.touches[0].clientY;
+          const deltaY = currentY - touchStartY;
+          
+          musicItem.style.transform = `translateY(${deltaY}px)`;
+          musicItem.style.zIndex = '1000';
+          
+          // Check for collision with other songs in the same album
+          const parentAlbumSongs = musicItem.closest('.album-songs');
+          parentAlbumSongs.querySelectorAll('.music-item').forEach(otherItem => {
+            if (otherItem !== musicItem) {
+              const rect = otherItem.getBoundingClientRect();
+              const itemRect = musicItem.getBoundingClientRect();
+              
+              if (itemRect.top <= rect.top + rect.height / 2 && 
+                  itemRect.bottom >= rect.top) {
+                // Move up
+                parentAlbumSongs.insertBefore(musicItem, otherItem);
+              } else if (itemRect.bottom >= rect.bottom - rect.height / 2 && 
+                         itemRect.top <= rect.bottom) {
+                // Move down
+                parentAlbumSongs.insertBefore(musicItem, otherItem.nextSibling);
+              }
+            }
+          });
+        }
+      }
+    }, { passive: false });
+    
+    musicItem.addEventListener('touchend', () => {
+      if (touchTarget === musicItem) {
+        clearTimeout(longPressTimer);
+        musicItem.classList.remove('dragging');
+        musicItem.style.transform = '';
+        musicItem.style.zIndex = '';
+        touchTarget = null;
+        
+        if (musicItem.classList.contains('dragging')) {
           updateSongsArrayFromDOM();
         }
+      }
+    });
+    
+    musicItem.addEventListener('touchcancel', () => {
+      if (touchTarget === musicItem) {
+        clearTimeout(longPressTimer);
+        musicItem.classList.remove('dragging');
+        musicItem.style.transform = '';
+        musicItem.style.zIndex = '';
+        touchTarget = null;
       }
     });
   });
@@ -1130,24 +1287,32 @@ function makeElementsDraggable() {
 // Function to update the songs array based on the DOM order
 function updateSongsArrayFromDOM() {
   const newSongsOrder = [];
+  const albumOrder = [];
   
-  document.querySelectorAll('.album-section').forEach(albumSection => {
+  document.querySelectorAll('.album-section').forEach((albumSection, albumIndex) => {
     const albumName = albumSection.querySelector('.album-name').textContent;
     const albumArtist = albumSection.querySelector('.album-artist').textContent;
     
-    albumSection.querySelectorAll('.music-item').forEach((musicItem, index) => {
+    // Add album to order tracking
+    albumOrder.push({
+      name: albumName,
+      index: albumIndex
+    });
+    
+    albumSection.querySelectorAll('.music-item').forEach((musicItem, songIndex) => {
       const songId = parseFloat(musicItem.dataset.id);
       const song = songs.find(s => s.id === songId);
       
       if (song) {
-        // Update track number based on new position
-        song.trackNumber = index + 1;
+        // Update song with new track number and album order
+        song.trackNumber = songIndex + 1;
+        song.albumOrder = albumIndex;
         newSongsOrder.push(song);
       }
     });
   });
   
-  // Update songs array
+  // Update songs array with new order
   songs = newSongsOrder;
   
   // Update playback queue to match new order
@@ -1643,33 +1808,35 @@ async function loadSongsFromStorage() {
 }
   
 async function saveSongs() {
-    const transaction = db.transaction(['songs'], 'readwrite');
-    const store = transaction.objectStore('songs');
-
-    return new Promise((resolve, reject) => {
-        transaction.onerror = () => reject(transaction.error);
-
-        // Clear existing songs
-        const clearRequest = store.clear();
-
-        clearRequest.onsuccess = () => {
-            // Add all songs
-            songs.forEach(song => {
-                store.add({
-                    id: song.id,
-                    name: song.name,
-                    artist: song.artist,
-                    album: song.album,
-                    year: song.year,
-                    albumArt: song.albumArt,
-                    trackNumber: song.trackNumber,
-                    type: song.type,
-                });
-            });
-        };
-
-        transaction.oncomplete = () => resolve();
-    });
+  const transaction = db.transaction(['songs'], 'readwrite');
+  const store = transaction.objectStore('songs');
+  
+  return new Promise((resolve, reject) => {
+    transaction.onerror = () => reject(transaction.error);
+    
+    const clearRequest = store.clear();
+    clearRequest.onsuccess = () => {
+      songs.forEach(song => {
+        store.add({
+          id: song.id,
+          name: song.name,
+          artist: song.artist,
+          album: song.album,
+          year: song.year,
+          albumArt: song.albumArt,
+          trackNumber: song.trackNumber,
+          albumOrder: song.albumOrder,
+          type: song.type,
+          dateAdded: song.dateAdded
+        });
+      });
+    };
+    
+    transaction.oncomplete = () => {
+      console.log('Songs saved with new order');
+      resolve();
+    };
+  });
 }
 
 function renderSongs() {
@@ -1735,9 +1902,16 @@ function renderSongs(filteredSongs=null) {
     return;
   }
   
+  // Sort albums by albumOrder if available, otherwise by dateAdded
   albums.sort((a, b) => {
+    // Check if the first song of each album has albumOrder
     const aFirstSong = a.songs[0];
     const bFirstSong = b.songs[0];
+    
+    if (aFirstSong.albumOrder !== undefined && bFirstSong.albumOrder !== undefined) {
+      return aFirstSong.albumOrder - bFirstSong.albumOrder;
+    }
+    
     return aFirstSong.dateAdded - bFirstSong.dateAdded;
   });
   
@@ -1762,7 +1936,7 @@ function renderSongs(filteredSongs=null) {
             <div class="song-info">
               <span class="track-number">${song.trackNumber ? song.trackNumber + '.' : ''}</span>
               <span class="song-title">${song.name}</span>
-              <span class="drag-handle material-symbols-rounded">drag_indicator</span>
+              <span class="play-control" style="display:none;"></span>
             </div>
           </div>
         `).join('')}
@@ -1797,88 +1971,163 @@ function attachEventListeners() {
     });
 
     document.querySelectorAll('.music-item').forEach(item => {
-        item.addEventListener('click', async () => {
-            const songId = parseFloat(item.dataset.id);
-            const song = songs.find(s => s.id === songId);
-            
-            if (song) {
-                // Stop any current playback to avoid errors
-                audioPlayer.pause();
-                
-                currentSongId = song.id;
-                updatePlayQueue(); // Update queue when selecting a new song
-                
-                // Load song from IndexedDB and play it
-                const transaction = db.transaction(['musicFiles'], 'readonly');
-                const store = transaction.objectStore('musicFiles');
-                const request = store.get(songId);
-                
-                request.onsuccess = () => {
-                    if (request.result) {
-                        if (song.url) {
-                            URL.revokeObjectURL(song.url);
+      // Variables to detect a genuine tap (vs. a drag)
+      let tapStartTime;
+      let tapStartX;
+      let tapStartY;
+    
+      // Record when/where the touch starts
+      item.addEventListener('touchstart', e => {
+        tapStartTime = Date.now();
+        tapStartX = e.touches[0].clientX;
+        tapStartY = e.touches[0].clientY;
+      }, { passive: true });
+    
+      // On touch end, see if it was a quick tap — if so, run your old click logic
+      item.addEventListener('touchend', e => {
+        const tapEndTime = Date.now();
+        const tapEndX = e.changedTouches[0].clientX;
+        const tapEndY = e.changedTouches[0].clientY;
+    
+        const tapDuration = tapEndTime - tapStartTime;
+        const tapDistance = Math.hypot(tapEndX - tapStartX, tapEndY - tapStartY);
+    
+        if (tapDuration < 200 && tapDistance < 10) {
+          const songId = parseFloat(item.dataset.id);
+          const song = songs.find(s => s.id === songId);
+    
+          if (song) {
+            // === BEGIN original A logic ===
+            audioPlayer.pause();
+            currentSongId = song.id;
+            updatePlayQueue(); // Update queue when selecting a new song
+    
+            const transaction = db.transaction(['musicFiles'], 'readonly');
+            const store = transaction.objectStore('musicFiles');
+            const request = store.get(songId);
+    
+            request.onsuccess = () => {
+              if (request.result) {
+                // clean up old blob URL if any
+                if (song.url) {
+                  URL.revokeObjectURL(song.url);
+                }
+                song.url = URL.createObjectURL(request.result.file);
+    
+                // set up player UI
+                audioPlayer.src = song.url;
+                audioPlayer.currentTime = 0;
+                musicTitle.textContent = song.name;
+                musicArtist.textContent = song.artist;
+    
+                const backgroundElement = document.querySelector('.background-blur');
+                backgroundElement.classList.add('changing');
+                backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+                albumArtImg.src = song.albumArt;
+    
+                if (typeof updateFavicon === 'function') {
+                  updateFavicon(song.albumArt);
+                }
+    
+                setTimeout(() => {
+                  backgroundElement.classList.remove('changing');
+                }, 500);
+    
+                // small delay to ensure metadata etc. are ready
+                setTimeout(() => {
+                  const playPromise = audioPlayer.play();
+                  if (playPromise !== undefined) {
+                    playPromise
+                      .then(() => {
+                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                        playPauseBtn.classList.add('playing');
+                        document.querySelector('.background-blur').classList.add('rotating');
+    
+                        if ('mediaSession' in navigator && typeof updateMediaSessionMetadata === 'function') {
+                          updateMediaSessionMetadata(song);
+                          updateMediaSessionPlaybackState('playing');
                         }
-                        song.url = URL.createObjectURL(request.result.file);
-                        
-                        // Set up audio player
-                        audioPlayer.src = song.url;
-                        audioPlayer.currentTime = 0;
-                        musicTitle.textContent = song.name;
-                        musicArtist.textContent = song.artist;
-                        
-                        const backgroundElement = document.querySelector('.background-blur');
-                        backgroundElement.classList.add('changing');
-                        backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-                        albumArtImg.src = song.albumArt;
-                        
-                        // Update favicon if function exists
-                        if (typeof updateFavicon === 'function') {
-                            updateFavicon(song.albumArt);
-                        }
-                        
-                        setTimeout(() => {
-                            backgroundElement.classList.remove('changing');
-                        }, 500);
-                        
-                        // Use a small delay before playing to ensure everything is loaded
-                        setTimeout(() => {
-                            // Using playback with error handling
-                            const playPromise = audioPlayer.play();
-                            
-                            if (playPromise !== undefined) {
-                                playPromise
-                                    .then(() => {
-                                        // Update UI to show playing status
-                                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                                        playPauseBtn.classList.add('playing');
-                                        document.querySelector('.background-blur').classList.add('rotating');
-                                        
-                                        // Update media session if available
-                                        if ('mediaSession' in navigator && typeof updateMediaSessionMetadata === 'function') {
-                                            updateMediaSessionMetadata(song);
-                                            updateMediaSessionPlaybackState('playing');
-                                        }
-                                    })
-                                    .catch(error => {
-                                        // Handle the error appropriately
-                                        console.log("Playback was prevented:", error.message);
-                                        
-                                        // Update UI to reflect paused state
-                                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-                                        playPauseBtn.classList.remove('playing');
-                                    });
-                            }
-                        }, 50); // Small delay of 50ms
-                        
-                        renderSongs();
-                    }
-                };
-                
-                request.onerror = (error) => {
-                    console.error(`Failed to load song with ID: ${songId}`, error);
-                };
+                      })
+                      .catch(error => {
+                        console.log("Playback was prevented:", error.message);
+                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                        playPauseBtn.classList.remove('playing');
+                      });
+                  }
+                }, 50);
+    
+                renderSongs();
+              }
+            };
+            // === END original A logic ===
+          }
+        }
+      }, { passive: true });
+      
+      // (Optional) keep the desktop click fallback
+      item.addEventListener('click', async () => {
+        const songId = parseFloat(item.dataset.id);
+        const song = songs.find(s => s.id === songId);
+        if (song) {
+          // You could either DRY this by extracting the above into a function
+          // or just duplicate the same logic here for non-touch devices.
+          audioPlayer.pause();
+          currentSongId = song.id;
+          updatePlayQueue();
+    
+          const transaction = db.transaction(['musicFiles'], 'readonly');
+          const store = transaction.objectStore('musicFiles');
+          const request = store.get(songId);
+    
+          request.onsuccess = () => {
+            if (request.result) {
+              if (song.url) URL.revokeObjectURL(song.url);
+              song.url = URL.createObjectURL(request.result.file);
+    
+              audioPlayer.src = song.url;
+              audioPlayer.currentTime = 0;
+              musicTitle.textContent = song.name;
+              musicArtist.textContent = song.artist;
+    
+              const backgroundElement = document.querySelector('.background-blur');
+              backgroundElement.classList.add('changing');
+              backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+              albumArtImg.src = song.albumArt;
+              if (typeof updateFavicon === 'function') {
+                updateFavicon(song.albumArt);
+              }
+              setTimeout(() => backgroundElement.classList.remove('changing'), 500);
+    
+              setTimeout(() => {
+                const playPromise = audioPlayer.play();
+                if (playPromise !== undefined) {
+                  playPromise
+                    .then(() => {
+                      playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                      playPauseBtn.classList.add('playing');
+                      document.querySelector('.background-blur').classList.add('rotating');
+                      if ('mediaSession' in navigator && typeof updateMediaSessionMetadata === 'function') {
+                        updateMediaSessionMetadata(song);
+                        updateMediaSessionPlaybackState('playing');
+                      }
+                    })
+                    .catch(error => {
+                      console.log("Playback was prevented:", error.message);
+                      playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                      playPauseBtn.classList.remove('playing');
+                    });
+                }
+              }, 50);
+
+              renderSongs();
             }
-        });
+          };
+
+          request.onerror = (error) => {
+            console.error(`Failed to load song with ID: ${songId}`, error);
+          };
+        }
+      });
     });
     
     // Delete album functionality
@@ -2110,35 +2359,37 @@ function updatePlayQueue() {
 }
         
 function groupSongsByAlbum(songs) {
-    const albums = {};
-    songs.forEach(song => {
-        const albumName = song.album || 'Unknown Album';
-        if (!albums[albumName]) {
-            albums[albumName] = {
-                name: albumName,
-                artist: song.artist,
-                year: song.year,
-                albumArt: song.albumArt,
-                songs: [],
-                dateAdded: song.dateAdded
-            };
-        }
-        albums[albumName].songs.push(song);
-    });
-
-    // Sort songs within each album by track number first, then by name
-    for (let albumName in albums) {
-        albums[albumName].songs.sort((a, b) => {
-            if (a.trackNumber && b.trackNumber) {
-                return a.trackNumber - b.trackNumber;
-            }
-            if (a.trackNumber) return -1;
-            if (b.trackNumber) return 1;
-            return a.name.localeCompare(b.name);
-        });
+  const albums = {};
+  
+  songs.forEach(song => {
+    const albumName = song.album || 'Unknown Album';
+    if (!albums[albumName]) {
+      albums[albumName] = {
+        name: albumName,
+        artist: song.artist,
+        year: song.year,
+        albumArt: song.albumArt,
+        songs: [],
+        dateAdded: song.dateAdded,
+        albumOrder: song.albumOrder
+      };
     }
-
-    return Object.values(albums).sort((a, b) => b.dateAdded - a.dateAdded);
+    albums[albumName].songs.push(song);
+  });
+  
+  // Sort songs within each album by track number
+  for (let albumName in albums) {
+    albums[albumName].songs.sort((a, b) => {
+      if (a.trackNumber !== undefined && b.trackNumber !== undefined) {
+        return a.trackNumber - b.trackNumber;
+      }
+      
+      // Fall back to name if no track number
+      return a.name.localeCompare(b.name);
+    });
+  }
+  
+  return Object.values(albums);
 }
 
 if ('mediaSession' in navigator) {
