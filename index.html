@@ -1123,8 +1123,11 @@ function makeElementsDraggable() {
     });
     
     albumSection.addEventListener('dragend', () => {
-      draggedItem.classList.remove('dragging');
-      draggedItem = null;
+      // Check if draggedItem exists before accessing its properties
+      if (draggedItem) {
+        draggedItem.classList.remove('dragging');
+        draggedItem = null;
+      }
       isDraggingAlbum = false;
       updateSongsArrayFromDOM();
     });
@@ -1132,10 +1135,10 @@ function makeElementsDraggable() {
     albumSection.addEventListener('dragover', e => {
       e.preventDefault();
       if (isDraggingAlbum && draggedItem !== albumSection) {
-        const boundingRect = albumSection.getBoundingClientRect();
-        const offset = boundingRect.y + (boundingRect.height / 2);
+        const rect = albumSection.getBoundingClientRect();
+        const midY = rect.y + rect.height / 2;
         
-        if (e.clientY - offset > 0) {
+        if (e.clientY - midY > 0) {
           albumSection.parentNode.insertBefore(draggedItem, albumSection.nextSibling);
         } else {
           albumSection.parentNode.insertBefore(draggedItem, albumSection);
@@ -1145,7 +1148,6 @@ function makeElementsDraggable() {
     
     // Touch events for albums
     albumSection.addEventListener('touchstart', e => {
-      // Prevent default only on header to allow scrolling on content
       if (e.target.closest('.album-header')) {
         touchTarget = albumSection;
         isDraggingAlbum = true;
@@ -1154,34 +1156,28 @@ function makeElementsDraggable() {
         
         setTimeout(() => {
           albumSection.classList.add('dragging');
-        }, 200); // Add a delay so quick taps don't trigger dragging
+        }, 200);
       }
     }, { passive: false });
     
     albumSection.addEventListener('touchmove', e => {
       if (touchTarget === albumSection) {
-        e.preventDefault(); // Prevent scrolling while dragging
+        e.preventDefault();
+        const touchY = e.touches[0].clientY;
+        const offsetY = touchY - touchStartY;
         
-        const currentY = e.touches[0].clientY;
-        const deltaY = currentY - touchStartY;
-        
-        albumSection.style.transform = `translateY(${deltaY}px)`;
+        albumSection.style.transform = `translateY(${offsetY}px)`;
         albumSection.style.zIndex = '1000';
         
-        // Check for collision with other albums
-        document.querySelectorAll('.album-section').forEach(otherAlbum => {
-          if (otherAlbum !== albumSection) {
-            const rect = otherAlbum.getBoundingClientRect();
+        document.querySelectorAll('.album-section').forEach(el => {
+          if (el !== albumSection) {
+            const elRect = el.getBoundingClientRect();
             const albumRect = albumSection.getBoundingClientRect();
             
-            if (albumRect.top <= rect.top + rect.height / 2 && 
-                albumRect.bottom >= rect.top) {
-              // Move up
-              albumSection.parentNode.insertBefore(albumSection, otherAlbum);
-            } else if (albumRect.bottom >= rect.bottom - rect.height / 2 && 
-                       albumRect.top <= rect.bottom) {
-              // Move down
-              albumSection.parentNode.insertBefore(albumSection, otherAlbum.nextSibling);
+            if (albumRect.top <= elRect.top + elRect.height/2 && albumRect.bottom >= elRect.top) {
+              albumSection.parentNode.insertBefore(albumSection, el);
+            } else if (albumRect.bottom >= elRect.bottom - elRect.height/2 && albumRect.top <= elRect.bottom) {
+              albumSection.parentNode.insertBefore(albumSection, el.nextSibling);
             }
           }
         });
@@ -1200,126 +1196,114 @@ function makeElementsDraggable() {
     });
   });
   
-  // Make individual songs draggable
-  document.querySelectorAll('.music-item').forEach(musicItem => {
-    musicItem.setAttribute('draggable', 'true');
+  // Make music items draggable
+  document.querySelectorAll('.music-item').forEach(item => {
+    item.setAttribute('draggable', 'true');
     
-    // Mouse events for songs
-    musicItem.addEventListener('dragstart', e => {
-      // Don't start drag if clicking play button
+    // Mouse events for music items
+    item.addEventListener('dragstart', e => {
       if (e.target.closest('.play-control')) {
         e.preventDefault();
         return;
       }
-      
-      draggedItem = musicItem;
+      draggedItem = item;
       isDraggingAlbum = false;
       e.dataTransfer.effectAllowed = 'move';
       setTimeout(() => {
-        musicItem.classList.add('dragging');
+        item.classList.add('dragging');
       }, 0);
     });
     
-    musicItem.addEventListener('dragend', () => {
-      draggedItem.classList.remove('dragging');
-      draggedItem = null;
+    item.addEventListener('dragend', () => {
+      // Check if draggedItem exists before accessing its properties
+      if (draggedItem) {
+        draggedItem.classList.remove('dragging');
+        draggedItem = null;
+      }
       updateSongsArrayFromDOM();
     });
     
-    musicItem.addEventListener('dragover', e => {
+    item.addEventListener('dragover', e => {
       e.preventDefault();
-      if (!isDraggingAlbum && draggedItem !== musicItem) {
-        const parentAlbumSongs = musicItem.closest('.album-songs');
-        const draggedItemParent = draggedItem.closest('.album-songs');
+      if (!isDraggingAlbum && draggedItem !== item) {
+        const albumContainer = item.closest('.album-songs');
+        const draggedAlbumContainer = draggedItem ? draggedItem.closest('.album-songs') : null;
         
-        // Only allow reordering within the same album
-        if (parentAlbumSongs === draggedItemParent) {
-          const boundingRect = musicItem.getBoundingClientRect();
-          const offset = boundingRect.y + (boundingRect.height / 2);
+        if (albumContainer === draggedAlbumContainer) {
+          const rect = item.getBoundingClientRect();
+          const midY = rect.y + rect.height / 2;
           
-          if (e.clientY - offset > 0) {
-            parentAlbumSongs.insertBefore(draggedItem, musicItem.nextSibling);
+          if (e.clientY - midY > 0) {
+            albumContainer.insertBefore(draggedItem, item.nextSibling);
           } else {
-            parentAlbumSongs.insertBefore(draggedItem, musicItem);
+            albumContainer.insertBefore(draggedItem, item);
           }
         }
       }
     });
     
-    // Touch events for songs
+    // Touch events for music items
     let longPressTimer;
     
-    musicItem.addEventListener('touchstart', e => {
-      // Don't drag if touching the play button
-      if (e.target.closest('.play-control')) {
-        return;
+    item.addEventListener('touchstart', e => {
+      if (!e.target.closest('.play-control')) {
+        touchTarget = item;
+        touchStartY = e.touches[0].clientY;
+        initialY = item.getBoundingClientRect().top;
+        
+        longPressTimer = setTimeout(() => {
+          item.classList.add('dragging');
+        }, 200);
       }
-      
-      touchTarget = musicItem;
-      touchStartY = e.touches[0].clientY;
-      initialY = musicItem.getBoundingClientRect().top;
-      
-      // Set long press timer for initiating drag
-      longPressTimer = setTimeout(() => {
-        musicItem.classList.add('dragging');
-      }, 200);
     }, { passive: true });
     
-    musicItem.addEventListener('touchmove', e => {
-      if (touchTarget === musicItem) {
+    item.addEventListener('touchmove', e => {
+      if (touchTarget === item && item.classList.contains('dragging')) {
         clearTimeout(longPressTimer);
+        e.preventDefault();
         
-        if (musicItem.classList.contains('dragging')) {
-          e.preventDefault(); // Prevent scrolling when dragging
-          
-          const currentY = e.touches[0].clientY;
-          const deltaY = currentY - touchStartY;
-          
-          musicItem.style.transform = `translateY(${deltaY}px)`;
-          musicItem.style.zIndex = '1000';
-          
-          // Check for collision with other songs in the same album
-          const parentAlbumSongs = musicItem.closest('.album-songs');
-          parentAlbumSongs.querySelectorAll('.music-item').forEach(otherItem => {
-            if (otherItem !== musicItem) {
-              const rect = otherItem.getBoundingClientRect();
-              const itemRect = musicItem.getBoundingClientRect();
-              
-              if (itemRect.top <= rect.top + rect.height / 2 && 
-                  itemRect.bottom >= rect.top) {
-                // Move up
-                parentAlbumSongs.insertBefore(musicItem, otherItem);
-              } else if (itemRect.bottom >= rect.bottom - rect.height / 2 && 
-                         itemRect.top <= rect.bottom) {
-                // Move down
-                parentAlbumSongs.insertBefore(musicItem, otherItem.nextSibling);
-              }
+        const touchY = e.touches[0].clientY;
+        const offsetY = touchY - touchStartY;
+        
+        item.style.transform = `translateY(${offsetY}px)`;
+        item.style.zIndex = '1000';
+        
+        const albumContainer = item.closest('.album-songs');
+        albumContainer.querySelectorAll('.music-item').forEach(el => {
+          if (el !== item) {
+            const elRect = el.getBoundingClientRect();
+            const itemRect = item.getBoundingClientRect();
+            
+            if (itemRect.top <= elRect.top + elRect.height/2 && itemRect.bottom >= elRect.top) {
+              albumContainer.insertBefore(item, el);
+            } else if (itemRect.bottom >= elRect.bottom - elRect.height/2 && itemRect.top <= elRect.bottom) {
+              albumContainer.insertBefore(item, el.nextSibling);
             }
-          });
-        }
+          }
+        });
       }
     }, { passive: false });
     
-    musicItem.addEventListener('touchend', () => {
-      if (touchTarget === musicItem) {
+    item.addEventListener('touchend', () => {
+      if (touchTarget === item) {
         clearTimeout(longPressTimer);
-        musicItem.classList.remove('dragging');
-        musicItem.style.transform = '';
-        musicItem.style.zIndex = '';
+        item.classList.remove('dragging');
+        item.style.transform = '';
+        item.style.zIndex = '';
         touchTarget = null;
         
-        if (musicItem.classList.contains('dragging')) {
+        if (item.classList.contains('dragging')) {
           updateSongsArrayFromDOM();
         }
       }
     });
     
-    musicItem.addEventListener('touchcancel', () => {
-      if (touchTarget === musicItem) {
+    item.addEventListener('touchcancel', () => {
+      if (touchTarget === item) {
         clearTimeout(longPressTimer);
-        musicItem.classList.remove('dragging');
-        musicItem.style.transform = '';
-        musicItem.style.zIndex = '';
+        item.classList.remove('dragging');
+        item.style.transform = '';
+        item.style.zIndex = '';
         touchTarget = null;
       }
     });
