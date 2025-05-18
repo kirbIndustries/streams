@@ -955,7 +955,6 @@ overlay.className = 'overlay';
 body.prepend(menuBtn);
 body.prepend(overlay);
         
-document.addEventListener('DOMContentLoaded', () => {
   const menuBtn = document.querySelector('.menu-btn');
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.querySelector('.overlay');
@@ -985,7 +984,6 @@ document.addEventListener('DOMContentLoaded', () => {
         overlay.classList.remove('active');
       }
     }
-  };
   
   // Functions for event handlers
   function openSidebar() {
