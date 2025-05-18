@@ -2799,11 +2799,6 @@ document.addEventListener("mousemove", e => {
     handleProgressDrag(e);
 });
 
-// Add keyboard controls event listener
-document.addEventListener("keydown", e => {
-    handleKeyboardControls(e);
-});
-
 volumeSlider.addEventListener('input', (e) => {
     const volume = e.target.value / 100;
     audioPlayer.volume = volume;
