@@ -982,6 +982,7 @@ body.prepend(overlay);
         overlay.classList.remove('active');
       }
     }
+  }
   
   // Functions for event handlers
   function openSidebar() {
@@ -1004,6 +1005,7 @@ body.prepend(overlay);
   
   // And whenever window is resized
   window.addEventListener('resize', handleResponsiveBehavior);
+});
         
 const initDB = () => {
     return new Promise((resolve, reject) => {
