@@ -1934,8 +1934,6 @@ function renderSongs() {
     if (playQueue.length === 0) {
         updatePlayQueue();
     }
-    
-    attachEventListeners();
 }
 
 function renderSongs(filteredSongs=null) {
@@ -1992,8 +1990,6 @@ function renderSongs(filteredSongs=null) {
   if (playQueue.length === 0) {
     updatePlayQueue();
   }
-  
-  attachEventListeners();
   makeElementsDraggable();
 }
         
@@ -2907,6 +2903,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }, 5000);
       });
 
+        attachEventListeners()
         renderSongs();
         initDB();
     </script>
