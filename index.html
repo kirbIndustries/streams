@@ -868,9 +868,8 @@
         </div>
         <div class="music-info">
             <div class="music-text">
-                <div class="music-title"></div>
-                <div class="music-artist"></div>
-                <div class="music-album"></div>
+                <div class="music-title">No song playing</div>
+                <div class="music-artist">⠀</div>
             </div>
             <button class="more-button">
                 <span class="material-symbols-rounded">remove</span>
@@ -1084,7 +1083,9 @@ function resetPlayer() {
   
   // Update player controls
   musicTitle.textContent = 'No song playing';
-  musicArtist.textContent = '';
+  musicArtist.textContent = '⠀';
+  document.getElementById('currentTime').textContent = '';
+  document.getElementById('duration').textContent = '';
   playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
   playPauseBtn.classList.remove('playing');
   
