@@ -1003,6 +1003,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Run once on load
+  attachEventListeners();
   handleResponsiveBehavior();
   
   // And whenever window is resized
@@ -2898,7 +2899,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           }, 5000);
       });
 
-        attachEventListeners();
         renderSongs();
         initDB();
         updatePlayQueue();
