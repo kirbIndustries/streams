@@ -1919,26 +1919,23 @@ function renderSongs(e=null){
   attachEventListeners();
 }
 
-function renderSongs(filteredSongs=null) {
-  const songsToRender = filteredSongs || songs;
-  const albums = groupSongsByAlbum(songsToRender);
+function renderSongs(filteredSongs = null) {
+  let songsToRender = filteredSongs || songs;
+  let albums = groupSongsByAlbum(songsToRender);
   
   if (songsToRender.length === 0) {
-    musicList.innerHTML = `<div class="no-results"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>`;
+    musicList.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>';
     return;
   }
   
-  // Sort albums by albumOrder if available, otherwise by dateAdded
+  // Sort albums by album order or date
   albums.sort((a, b) => {
-    // Check if the first song of each album has albumOrder
-    const aFirstSong = a.songs[0];
-    const bFirstSong = b.songs[0];
-    
-    if (aFirstSong.albumOrder !== undefined && bFirstSong.albumOrder !== undefined) {
-      return aFirstSong.albumOrder - bFirstSong.albumOrder;
+    let songA = a.songs[0];
+    let songB = b.songs[0];
+    if (songA.albumOrder !== undefined && songB.albumOrder !== undefined) {
+      return songA.albumOrder - songB.albumOrder;
     }
-    
-    return aFirstSong.dateAdded - bFirstSong.dateAdded;
+    return songA.dateAdded - songB.dateAdded;
   });
   
   musicList.innerHTML = albums.map(album => `
@@ -1958,244 +1955,195 @@ function renderSongs(filteredSongs=null) {
       </div>
       <div class="album-songs">
         ${album.songs.map(song => `
-          <div class="music-item ${song.id === currentSongId ? 'active' : ''}" data-id="${song.id}">
+          <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
             <div class="song-info">
-              <span class="track-number">${song.trackNumber ? song.trackNumber + '.' : ''}</span>
+              <span class="track-number">${song.trackNumber ? song.trackNumber + "." : ""}</span>
               <span class="song-title">${song.name}</span>
               <span class="play-control" style="display:none;"></span>
             </div>
           </div>
-        `).join('')}
+        `).join("")}
       </div>
     </div>
-  `).join('');
+  `).join("");
   
   if (playQueue.length === 0) {
     updatePlayQueue();
   }
+  
+  // Move this call to attachEventListeners() before makeElementsDraggable()
+  attachSongAndAlbumEventListeners();
+  
+  // Now that events are attached, make elements draggable
   makeElementsDraggable();
+}
+
+// Create a separate function specifically for attaching song and album-related events
+function attachSongAndAlbumEventListeners() {
+  // Add event listeners to music items
+  document.querySelectorAll('.music-item').forEach(item => {
+    let startTime, startX, startY;
+    
+    // Touch events for detecting taps
+    item.addEventListener('touchstart', e => {
+      startTime = Date.now();
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }, { passive: true });
+    
+    item.addEventListener('touchend', e => {
+      const endTime = Date.now();
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      
+      const timeDiff = endTime - startTime;
+      const distance = Math.hypot(endX - startX, endY - startY);
+      
+      // If it's a quick tap with minimal movement
+      if (timeDiff < 200 && distance < 10) {
+        const songId = parseFloat(item.dataset.id);
+        const song = songs.find(s => s.id === songId);
+        
+        if (song) {
+          playSong(song);
+        }
+      }
+    }, { passive: true });
+    
+    // Click event for desktop
+    item.addEventListener('click', () => {
+      const songId = parseFloat(item.dataset.id);
+      const song = songs.find(s => s.id === songId);
+      
+      if (song) {
+        playSong(song);
+      }
+    });
+  });
+  
+  // Add event listeners to delete album buttons
+  document.querySelectorAll('.delete-album').forEach(button => {
+    button.addEventListener('click', async (e) => {
+      const albumName = button.dataset.album;
+      
+      if (confirm(`Are you sure you want to delete the album "${albumName}"?`)) {
+        const albumSongs = songs.filter(song => song.album === albumName);
+        
+        const tx = db.transaction(['musicFiles', 'songs'], 'readwrite');
+        const musicFilesStore = tx.objectStore('musicFiles');
+        const songsStore = tx.objectStore('songs');
+        
+        albumSongs.forEach(song => {
+          musicFilesStore.delete(song.id);
+          if (song.url) {
+            URL.revokeObjectURL(song.url);
+          }
+        });
+        
+        songs = songs.filter(song => song.album !== albumName);
+        
+        await saveSongs();
+        renderSongs();
+      }
+    });
+  });
+}
+
+// Helper function to play a song
+function playSong(song) {
+  audioPlayer.pause();
+  currentSongId = song.id;
+  updatePlayQueue();
+  
+  const tx = db.transaction(['musicFiles'], 'readonly');
+  const store = tx.objectStore('musicFiles');
+  const request = store.get(song.id);
+  
+  request.onsuccess = () => {
+    if (request.result) {
+      if (song.url) {
+        URL.revokeObjectURL(song.url);
+      }
+      song.url = URL.createObjectURL(request.result.file);
+      
+      audioPlayer.src = song.url;
+      audioPlayer.currentTime = 0;
+      musicTitle.textContent = song.name;
+      musicArtist.textContent = song.artist;
+      
+      const backgroundBlur = document.querySelector('.background-blur');
+      backgroundBlur.classList.add('changing');
+      backgroundBlur.style.backgroundImage = `url('${song.albumArt}')`;
+      albumArtImg.src = song.albumArt;
+      updateFavicon(song.albumArt);
+      
+      setTimeout(() => {
+        backgroundBlur.classList.remove('changing');
+      }, 500);
+      
+      setTimeout(() => {
+        const playPromise = audioPlayer.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+            playPauseBtn.classList.add('playing');
+            document.querySelector('.background-blur').classList.add('rotating');
+            
+            if ('mediaSession' in navigator && typeof updateMediaSessionMetadata === 'function') {
+              updateMediaSessionMetadata(song);
+              updateMediaSessionPlaybackState('playing');
+            }
+          }).catch(error => {
+            console.log('Playback was prevented:', error.message);
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+            playPauseBtn.classList.remove('playing');
+          });
+        }
+      }, 50);
+      
+      renderSongs();
+    }
+  };
+  
+  request.onerror = (event) => {
+    console.error(`Failed to load song with ID: ${song.id}`, event);
+  };
 }
       
 function attachEventListeners() {
-    // Use event delegation for shift key functionality
-    document.addEventListener("keydown", e => {
-        if(e.shiftKey) {
-            document.querySelectorAll(".album-actions").forEach(e => {
-                e.style.display = "block";
-            });
-        }
-    });
-    
-    document.addEventListener("keyup", e => {
-        if(!e.shiftKey) {
-            document.querySelectorAll(".album-actions").forEach(e => {
-                e.style.display = "none";
-            });
-        }
-    });
-
-    // Clear any existing touch variables
-    let touchVariables = {};
-
-    // Handle music item interactions
-    document.querySelectorAll('.music-item').forEach(item => {
-        // Variables to detect a genuine tap (vs. a drag)
-        let tapStartTime;
-        let tapStartX;
-        let tapStartY;
-    
-        // Record when/where the touch starts
-        item.addEventListener('touchstart', e => {
-            tapStartTime = Date.now();
-            tapStartX = e.touches[0].clientX;
-            tapStartY = e.touches[0].clientY;
-        }, { passive: true });
-    
-        // On touch end, see if it was a quick tap — if so, run your old click logic
-        item.addEventListener('touchend', e => {
-            const tapEndTime = Date.now();
-            const tapEndX = e.changedTouches[0].clientX;
-            const tapEndY = e.changedTouches[0].clientY;
-        
-            const tapDuration = tapEndTime - tapStartTime;
-            const tapDistance = Math.hypot(tapEndX - tapStartX, tapEndY - tapStartY);
-        
-            if (tapDuration < 200 && tapDistance < 10) {
-                const songId = parseFloat(item.dataset.id);
-                const song = songs.find(s => s.id === songId);
-            
-                if (song) {
-                    // === BEGIN original A logic ===
-                    audioPlayer.pause();
-                    currentSongId = song.id;
-                    updatePlayQueue(); // Update queue when selecting a new song
-            
-                    const transaction = db.transaction(['musicFiles'], 'readonly');
-                    const store = transaction.objectStore('musicFiles');
-                    const request = store.get(songId);
-            
-                    request.onsuccess = () => {
-                        if (request.result) {
-                            // clean up old blob URL if any
-                            if (song.url) {
-                                URL.revokeObjectURL(song.url);
-                            }
-                            song.url = URL.createObjectURL(request.result.file);
-            
-                            // set up player UI
-                            audioPlayer.src = song.url;
-                            audioPlayer.currentTime = 0;
-                            musicTitle.textContent = song.name;
-                            musicArtist.textContent = song.artist;
-            
-                            const backgroundElement = document.querySelector('.background-blur');
-                            backgroundElement.classList.add('changing');
-                            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-                            albumArtImg.src = song.albumArt;
-            
-                            if (typeof updateFavicon === 'function') {
-                                updateFavicon(song.albumArt);
-                            }
-            
-                            setTimeout(() => {
-                                backgroundElement.classList.remove('changing');
-                            }, 500);
-            
-                            // small delay to ensure metadata etc. are ready
-                            setTimeout(() => {
-                                const playPromise = audioPlayer.play();
-                                if (playPromise !== undefined) {
-                                    playPromise
-                                        .then(() => {
-                                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                                            playPauseBtn.classList.add('playing');
-                                            document.querySelector('.background-blur').classList.add('rotating');
-                
-                                            if ('mediaSession' in navigator && typeof updateMediaSessionMetadata === 'function') {
-                                                updateMediaSessionMetadata(song);
-                                                updateMediaSessionPlaybackState('playing');
-                                            }
-                                        })
-                                        .catch(error => {
-                                            console.log("Playback was prevented:", error.message);
-                                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-                                            playPauseBtn.classList.remove('playing');
-                                        });
-                                }
-                            }, 50);
-            
-                            renderSongs();
-                        }
-                    };
-                    // === END original A logic ===
-                }
-            }
-        }, { passive: true });
-      
-        // (Optional) keep the desktop click fallback
-        item.addEventListener('click', async () => {
-            const songId = parseFloat(item.dataset.id);
-            const song = songs.find(s => s.id === songId);
-            if (song) {
-                // You could either DRY this by extracting the above into a function
-                // or just duplicate the same logic here for non-touch devices.
-                audioPlayer.pause();
-                currentSongId = song.id;
-                updatePlayQueue();
-        
-                const transaction = db.transaction(['musicFiles'], 'readonly');
-                const store = transaction.objectStore('musicFiles');
-                const request = store.get(songId);
-        
-                request.onsuccess = () => {
-                    if (request.result) {
-                        if (song.url) URL.revokeObjectURL(song.url);
-                        song.url = URL.createObjectURL(request.result.file);
-        
-                        audioPlayer.src = song.url;
-                        audioPlayer.currentTime = 0;
-                        musicTitle.textContent = song.name;
-                        musicArtist.textContent = song.artist;
-        
-                        const backgroundElement = document.querySelector('.background-blur');
-                        backgroundElement.classList.add('changing');
-                        backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-                        albumArtImg.src = song.albumArt;
-                        if (typeof updateFavicon === 'function') {
-                            updateFavicon(song.albumArt);
-                        }
-                        setTimeout(() => backgroundElement.classList.remove('changing'), 500);
-        
-                        setTimeout(() => {
-                            const playPromise = audioPlayer.play();
-                            if (playPromise !== undefined) {
-                                playPromise
-                                    .then(() => {
-                                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                                        playPauseBtn.classList.add('playing');
-                                        document.querySelector('.background-blur').classList.add('rotating');
-                                        if ('mediaSession' in navigator && typeof updateMediaSessionMetadata === 'function') {
-                                            updateMediaSessionMetadata(song);
-                                            updateMediaSessionPlaybackState('playing');
-                                        }
-                                    })
-                                    .catch(error => {
-                                        console.log("Playback was prevented:", error.message);
-                                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-                                        playPauseBtn.classList.remove('playing');
-                                    });
-                            }
-                        }, 50);
-
-                        renderSongs();
-                    }
-                };
-
-                request.onerror = (error) => {
-                    console.error(`Failed to load song with ID: ${songId}`, error);
-                };
-            }
-        });
-    });
-    
-    // Delete album functionality
-    document.querySelectorAll('.delete-album').forEach(button => {
-        button.addEventListener('click', async (e) => {
-            const albumName = button.dataset.album;
-
-            if (confirm(`Are you sure you want to delete the album "${albumName}"?`)) {
-                const albumSongs = songs.filter(song => song.album === albumName);
-
-                const transaction = db.transaction(['musicFiles', 'songs'], 'readwrite');
-                const fileStore = transaction.objectStore('musicFiles');
-                const songStore = transaction.objectStore('songs');
-
-                albumSongs.forEach(song => {
-                    fileStore.delete(song.id);
-                    if (song.url) URL.revokeObjectURL(song.url);
-                });
-
-                songs = songs.filter(song => song.album !== albumName);
-                await saveSongs();
-                renderSongs();
-            }
-        });
-    });
-
-    // More button functionality (if it exists)
-    const moreButton = document.querySelector('.more-button');
-    if (moreButton) {
-        moreButton.addEventListener('click', async () => {
-            // Check if there's a currently playing song
-            if (currentSongId) {
-                if (confirm('Delete the current song?')) {
-                    await deleteSong(currentSongId);
-                }
-            } else {
-                alert('No song is currently playing');
-            }
-        });
+  // Key events for showing album actions
+  document.addEventListener('keydown', (e) => {
+    if (e.shiftKey) {
+      document.querySelectorAll('.album-actions').forEach(el => {
+        el.style.display = 'block';
+      });
     }
+  });
+  
+  document.addEventListener('keyup', (e) => {
+    if (!e.shiftKey) {
+      document.querySelectorAll('.album-actions').forEach(el => {
+        el.style.display = 'none';
+      });
+    }
+  });
+  
+  // More button action if it exists
+  const moreButton = document.querySelector('.more-button');
+  if (moreButton) {
+    moreButton.addEventListener('click', async () => {
+      if (currentSongId) {
+        if (confirm('Delete the current song?')) {
+          await deleteSong(currentSongId);
+        }
+      } else {
+        alert('No song is currently playing');
+      }
+    });
+  }
+  
+  // Ensure we call our specific function for song and album events
+  attachSongAndAlbumEventListeners();
 }
 
 async function deleteSong(songId) {
