@@ -1881,56 +1881,58 @@ async function saveSongs() {
   });
 }
 
-function renderSongs() {
-    const albums = groupSongsByAlbum(songs);
-
-    if (songs.length === 0) {
-        musicList.innerHTML = `
-            <div class="no-results">
-                <span class="material-symbols-rounded">search_off</span>
-                <p>No songs found</p>
-            </div>`;
-        return;
-    }
-
-    albums.sort((a, b) => {
-        const aFirstSong = a.songs[0];
-        const bFirstSong = b.songs[0];
-        return aFirstSong.dateAdded - bFirstSong.dateAdded;
-    });
-
-    musicList.innerHTML = albums.map(album => `
-        <div class="album-section">
-            <div class="album-header">
-                <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
-                <div class="album-info">
-                    <div class="album-name">${album.name}</div>
-                    <div class="album-artist">${album.artist}</div>
-                    <div class="album-year">${album.year}</div>
-                </div>
-                <div class="album-actions" style="display: none;">
-                    <button class="delete-album" data-album="${album.name}">
-                        <span class="material-symbols-rounded">delete</span>
-                    </button>
-                </div>
-            </div>
-            <div class="album-songs">
-                ${album.songs.map(song => `
-                    <div class="music-item ${song.id === currentSongId ? 'active' : ''}" 
-                         data-id="${song.id}">
-                        <div class="song-info">
-                            ${song.trackNumber ? `<span class="track-number">${song.trackNumber}.</span>` : ''}
-                            <span class="song-title">${song.name}</span>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
+function renderSongs(e=null){
+  let t=e||songs,
+      a=groupSongsByAlbum(t);
+  
+  if(0===t.length){
+    musicList.innerHTML='<div class="no-results"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>';
+    return;
+  }
+  
+  a.sort((e,t)=>{
+    let a=e.songs[0],
+        n=t.songs[0];
+    return void 0!==a.albumOrder&&void 0!==n.albumOrder?a.albumOrder-n.albumOrder:a.dateAdded-n.dateAdded;
+  });
+  
+  musicList.innerHTML=a.map(e=>`
+    <div class="album-section">
+      <div class="album-header">
+        <img src="${e.albumArt}" alt="${e.name}" class="album-thumbnail">
+        <div class="album-info">
+          <div class="album-name">${e.name}</div>
+          <div class="album-artist">${e.artist}</div>
+          <div class="album-year">${e.year}</div>
         </div>
-    `).join('');
-
-    if (playQueue.length === 0) {
-        updatePlayQueue();
-    }
+        <div class="album-actions" style="display: none;">
+          <button class="delete-album" data-album="${e.name}">
+            <span class="material-symbols-rounded">delete</span>
+          </button>
+        </div>
+      </div>
+      <div class="album-songs">
+        ${e.songs.map(e=>`
+          <div class="music-item ${e.id===currentSongId?"active":""}" data-id="${e.id}">
+            <div class="song-info">
+              <span class="track-number">${e.trackNumber?e.trackNumber+".":""}</span>
+              <span class="song-title">${e.name}</span>
+              <span class="play-control" style="display:none;"></span>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `).join("");
+  
+  if(0===playQueue.length) {
+    updatePlayQueue();
+  }
+  
+  makeElementsDraggable();
+  
+  // Add this line to reattach event listeners after rendering
+  attachEventListeners();
 }
 
 function renderSongs(filteredSongs=null) {
@@ -1989,24 +1991,34 @@ function renderSongs(filteredSongs=null) {
   }
   makeElementsDraggable();
 }
-        
-function attachEventListeners() {
-    // Toggle album actions visibility with Shift key
-    document.addEventListener('keydown', (e) => {
-        if (e.shiftKey) {
-            document.querySelectorAll('.album-actions').forEach(el => {
-                el.style.display = 'block';
+      
+function attachEventListeners(){
+    // Use event delegation for shift key functionality
+    document.addEventListener("keydown", e => {
+        if(e.shiftKey) {
+            document.querySelectorAll(".album-actions").forEach(e => {
+                e.style.display = "block";
+            });
+        }
+    });
+    
+    document.addEventListener("keyup", e => {
+        if(!e.shiftKey) {
+            document.querySelectorAll(".album-actions").forEach(e => {
+                e.style.display = "none";
             });
         }
     });
 
-    document.addEventListener('keyup', (e) => {
-        if (!e.shiftKey) {
-            document.querySelectorAll('.album-actions').forEach(el => {
-                el.style.display = 'none';
-            });
-        }
-    });
+    // Clear existing listeners and attach new ones
+    musicList.querySelectorAll(".music-item").forEach(e => {
+        let t, a, n;
+        
+        e.addEventListener("touchstart", e => {
+            t = Date.now();
+            a = e.touches[0].clientX;
+            n = e.touches[0].clientY;
+        }, {passive: true});
 
     document.querySelectorAll('.music-item').forEach(item => {
       // Variables to detect a genuine tap (vs. a drag)
