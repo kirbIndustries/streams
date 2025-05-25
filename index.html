@@ -2569,14 +2569,11 @@ audioPlayer.addEventListener('timeupdate', async () => {
             song.timestamp = audioPlayer.currentTime;
             await saveSongs();
         }
-
-        let percentage = (audioPlayer.currentTime / audioPlayer.duration) * 100;
-        percentage = Math.max(1.5, percentage); // <- boom, min width guaranteed
+        const percentage = (audioPlayer.currentTime / audioPlayer.duration) * 100;
         progress.style.width = `${percentage}%`;
-
         currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
         durationDisplay.textContent = formatTime(audioPlayer.duration);
-        updatePageTitle();
+        updatePageTitle(); // Add this line
     }
 });
 
@@ -2626,13 +2623,10 @@ function seekAudio(e) {
     const width = rect.width;
     const percent = Math.max(0, Math.min(1, clickX / width));
     const seekTime = percent * audioPlayer.duration;
-
+    
     if (isFinite(seekTime)) {
         audioPlayer.currentTime = seekTime;
-
-        let visualPercent = Math.max(0.015, percent); // 1.5% = 0.015
-        progress.style.width = `${visualPercent * 100}%`;
-
+        progress.style.width = `${percent * 100}%`;
         currentTimeDisplay.textContent = formatTime(seekTime);
     }
 }
@@ -2643,7 +2637,7 @@ function handleProgressDrag(e) {
         seekAudio(e);
     }
 }
-
+        
 // Function to handle keyboard controls (disabled)
 /* function handleKeyboardControls(e) {
     switch (e.key.toLowerCase()) {
