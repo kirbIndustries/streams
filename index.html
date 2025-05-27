@@ -1560,47 +1560,51 @@ function updateFavicon(albumArt) {
   const ctx = canvas.getContext('2d');
   const size = 32; // Standard favicon size
   const radius = 10; // Corner radius
+
   canvas.width = size;
   canvas.height = size;
-  
+
   // Create a new image from the album art
   const img = new Image();
+
   // Set crossOrigin to anonymous for CORS if needed
   if (!albumArt.startsWith('data:')) {
     img.crossOrigin = 'anonymous';
   }
-  
+
   img.onload = function() {
     // Clear the canvas
     ctx.clearRect(0, 0, size, size);
+
     // Create a rounded rectangle clipping path
     ctx.beginPath();
     ctx.roundRect(0, 0, size, size, radius);
     ctx.closePath();
     ctx.clip();
+
     // Draw the image with proper scaling
     ctx.drawImage(img, 0, 0, size, size);
+
     // Get the rounded image as a data URL
     const roundedImageURL = canvas.toDataURL('image/png');
-    
+
     // Remove any existing favicon links
     const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
     links.forEach(link => link.parentNode.removeChild(link));
+
     // Create a new favicon link element
     const newFavicon = document.createElement('link');
     newFavicon.rel = 'icon';
     newFavicon.type = 'image/png';
     newFavicon.href = roundedImageURL;
+
     // Add the new favicon to the document
     document.head.appendChild(newFavicon);
-    
-    // Send album art to parent for persistent clock display
-    updatePersistentAlbumArt(roundedImageURL);
   };
-  
+
   // Set the source to load the image
   img.src = albumArt;
-  
+
   // Handle image loading errors
   img.onerror = function() {
     console.error('Error loading album art for favicon');
@@ -1608,17 +1612,15 @@ function updateFavicon(albumArt) {
     // Set the default favicon
     const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
     links.forEach(link => link.parentNode.removeChild(link));
+
     const defaultFavicon = document.createElement('link');
     defaultFavicon.rel = 'icon';
     defaultFavicon.type = 'image/png';
     defaultFavicon.href = '/music/favicon.png';
     document.head.appendChild(defaultFavicon);
-    
-    // Clear album art from parent
-    clearPersistentDisplay();
   };
 }
-        
+
 function setUpSongPlayback(song) {
     audioPlayer.src = song.url;
     audioPlayer.currentTime = 0;
@@ -2764,92 +2766,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-        // Gurasuraisu Enhanced Functionality
-        
-        // Utility function to send messages to parent
-        function sendToParent(payload) {
-          window.parent.postMessage(payload, window.location.origin);
-        }
-        
-        // Get current app ID from the iframe's data attribute
-        function getCurrentAppId() {
-          // Try to get the app ID from the parent's iframe element
-          try {
-            // The parent sets iframe.dataset.appId = appId in createFullscreenEmbed
-            return window.frameElement?.getAttribute('data-app-id') || 
-                   window.frameElement?.dataset?.appId ||
-                   'unknown-app';
-          } catch (error) {
-            // Fallback if we can't access frameElement
-            console.warn('Could not determine app ID:', error);
-            return 'unknown-app';
-          }
-        }
-        
-        // Send album art to persistent clock
-        function updatePersistentAlbumArt(albumArtUrl) {
-          sendToParent({
-            type: 'persistentDisplay',
-            action: 'updateAlbumArt',
-            data: {
-              albumArt: albumArtUrl,
-              appId: getCurrentAppId()
-            }
-          });
-        }
-        
-        // Send icon to persistent clock
-        function updatePersistentIcon(iconName) {
-          sendToParent({
-            type: 'persistentDisplay',
-            action: 'updateIcon',
-            data: {
-              icon: iconName,
-              appId: getCurrentAppId()
-            }
-          });
-        }
-        
-        // Send custom HTML content to persistent clock
-        function updatePersistentCustom(htmlContent) {
-          sendToParent({
-            type: 'persistentDisplay',
-            action: 'updateCustom',
-            data: {
-              content: htmlContent,
-              appId: getCurrentAppId()
-            }
-          });
-        }
-        
-        // Clear persistent display (remove app data from clock)
-        function clearPersistentDisplay() {
-          sendToParent({
-            type: 'persistentDisplay',
-            action: 'clear',
-            data: {
-              appId: getCurrentAppId()
-            }
-          });
-        }
-        
-        // Clear persistent display when the app is minimized/closed
-        function handleAppVisibilityChange() {
-          // Clear the persistent display when app becomes hidden
-          if (document.hidden || !document.hasFocus()) {
-            clearPersistentDisplay();
-          }
-        }
-        
-        // Auto-clear when app loses focus or is hidden
-        document.addEventListener('visibilitychange', handleAppVisibilityChange);
-        window.addEventListener('blur', handleAppVisibilityChange);
-        
-        // Also clear when the iframe is about to be removed (cleanup)
-        window.addEventListener('beforeunload', () => {
-          clearPersistentDisplay();
-        });
-
       // Theme synchronization for Gurapp side
       document.addEventListener('DOMContentLoaded', () => {
           // Initial theme application based on localStorage
@@ -2876,8 +2792,6 @@ document.addEventListener('DOMContentLoaded', async () => {
               }
           });
       });
-
-    // (END) Gurasuraisu Enhanced Functionality
 
         initDB();
         updatePlayQueue();
