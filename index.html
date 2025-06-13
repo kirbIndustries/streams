@@ -1810,10 +1810,13 @@ async function loadSong(song) {
         
 async function extractMetadata(file) {
     return new Promise((resolve) => {
+        // We will read all tags to ensure we don't miss anything.
         new jsmediatags.Reader(file)
-            .setTagsToRead(['title', 'artist', 'album', 'year', 'picture', 'track', 'lyrics'])
             .read({
                 onSuccess: async function(tag) {
+                    // --- DEBUGGING LOG ---
+                    console.log("jsmediatags FULL RAW output for:", file.name, tag.tags);
+
                     let albumArt;
                     if (tag.tags.picture) {
                         const { data, format } = tag.tags.picture;
@@ -1847,7 +1850,26 @@ async function extractMetadata(file) {
                     }
                     
                     let trackNumber = parseInt(tag.tags.track, 10) || null;
-                    let lyricsText = tag.tags.lyrics ? (typeof tag.tags.lyrics === 'object' ? tag.tags.lyrics.lyrics : tag.tags.lyrics) : null;
+                    
+                    // --- BULLETPROOF LYRICS EXTRACTION ---
+                    // Create a fallback chain to find the lyrics text.
+                    let lyricsText = null;
+                    if (tag.tags.lyrics) {
+                        // Method 1: The simple alias (works for some MP3s).
+                        lyricsText = typeof tag.tags.lyrics === 'object' ? tag.tags.lyrics.lyrics : tag.tags.lyrics;
+                        console.log("Found lyrics via 'lyrics' alias.");
+                    } else if (tag.tags.USLT) {
+                        // Method 2: The raw ID3v2 frame (most reliable for MP3).
+                        // USLT can be an object with a 'text' property.
+                        lyricsText = typeof tag.tags.USLT === 'object' ? tag.tags.USLT.text : tag.tags.USLT;
+                        console.log("Found lyrics via 'USLT' tag.");
+                    } else if (tag.tags.LYRICS) {
+                        // Method 3: The Vorbis comment tag (for FLAC).
+                        lyricsText = tag.tags.LYRICS;
+                        console.log("Found lyrics via 'LYRICS' tag.");
+                    }
+                    
+                    // Now that we have the correct text, parse it.
                     let lrcData = parseLRC(lyricsText);
 
                     resolve({
@@ -1857,11 +1879,14 @@ async function extractMetadata(file) {
                         year: tag.tags.year || '',
                         albumArt: albumArt,
                         trackNumber: trackNumber,
-                        lyrics: lyricsText,
-                        lrcData: lrcData // Store the parsed data
+                        lyrics: lyricsText, // Store the raw text
+                        lrcData: lrcData    // Store the parsed data
                     });
                 },
-                onError: (error) => resolve({ /* ... error object ... */ })
+                onError: (error) => {
+                    console.error("jsmediatags ERROR for:", file.name, error);
+                    resolve({ /* ... error object ... */ });
+                }
             });
     });
 }
