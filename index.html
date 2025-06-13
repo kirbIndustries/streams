@@ -127,8 +127,14 @@
             width: 40px;
             height: auto;
             display: block;
-        }        
-        
+        }       
+
+        queue-list-container {
+            gap: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+                    
         .main-content {
             flex-grow: 1;
             display: flex;
@@ -721,9 +727,6 @@
                 
         .sidebar-title {
             color: var(--text-color);
-            font-size: 24px;
-            font-weight: bold;
-            padding: 10px 0;
         }
                 
         .material-symbols-rounded {
@@ -955,7 +958,7 @@
 </div>
     <div class="sidebar">
         <img src="/music/favicon.png" alt="Music Icon" class="sidebar-logo">
-        <h1 class="sidebar-title">Music</h1>
+        <h1 class="sidebar-title">Library</h1>
         <div class="search-container">
             <span class="material-symbols-rounded search-icon">search</span>
             <input type="text" id="searchInput" placeholder="Search" class="search-input">
@@ -2010,7 +2013,7 @@ function renderSidebar() {
         default:
             searchContainer.style.display = 'block';
             uploadBtn.style.display = 'flex';
-            sidebarTitleEl.textContent = 'Music';
+            sidebarTitleEl.textContent = 'Library';
             const query = searchInput ? searchInput.value.toLowerCase() : '';
             const filtered = query ? songs.filter(s => 
                 s.name.toLowerCase().includes(query) ||
