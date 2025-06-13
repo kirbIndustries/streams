@@ -1793,12 +1793,11 @@ async function loadSong(song) {
         
 async function extractMetadata(file) {
     return new Promise((resolve) => {
+        // DO NOT specify tags to read. This will force the library to read everything it can find.
         new jsmediatags.Reader(file)
-            .setTagsToRead(['title', 'artist', 'album', 'year', 'picture', 'track', 'lyrics'])
             .read({
                 onSuccess: async function(tag) {
-                    // --- DEBUGGING LOG ---
-                    console.log("jsmediatags RAW output for:", file.name, tag.tags);
+                    console.log("jsmediatags FULL RAW output for:", file.name, tag.tags);
 
                     let albumArt;
                     if (tag.tags.picture) {
@@ -1809,8 +1808,7 @@ async function extractMetadata(file) {
                         
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
-                        canvas.width = 500;
-                        canvas.height = 500;
+                        canvas.width = 500; canvas.height = 500;
                         
                         await new Promise(resolve => {
                             tempImage.onload = () => {
@@ -1842,11 +1840,12 @@ async function extractMetadata(file) {
                         trackNumber = parseInt(tag.tags.track.split('/')[0]) || null;
                     }
                     
-                    // --- ROBUST LYRICS HANDLING ---
+                    // --- THE REAL FIX: Manually check for MP3 and FLAC lyric tags ---
                     let lyricsText = null;
-                    if (tag.tags.lyrics) {
-                        // The 'lyrics' tag can be a string or an object { lyrics: '...' }
+                    if (tag.tags.lyrics) { // Handles MP3s and some formats
                         lyricsText = typeof tag.tags.lyrics === 'object' ? tag.tags.lyrics.lyrics : tag.tags.lyrics;
+                    } else if (tag.tags.LYRICS) { // Explicitly handles FLAC Vorbis Comment "LYRICS"
+                        lyricsText = tag.tags.LYRICS;
                     }
 
                     resolve({
@@ -1856,7 +1855,7 @@ async function extractMetadata(file) {
                         year: tag.tags.year || '',
                         albumArt: albumArt,
                         trackNumber: trackNumber,
-                        lyrics: lyricsText // Use the processed text
+                        lyrics: lyricsText // Use the manually found text
                     });
                 },
                 onError: function(error) {
@@ -1868,7 +1867,7 @@ async function extractMetadata(file) {
                         year: '',
                         albumArt: generateRandomGradient(),
                         trackNumber: null,
-                        lyrics: null // Ensure lyrics is null on error
+                        lyrics: null
                     });
                 }
             });
