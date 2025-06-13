@@ -383,16 +383,46 @@
             font-size: 0.9rem;
         }
         
+        .controls-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 20px 0 0;
+            background: var(--search-background);
+            border-radius: 50px;
+            padding: 7.5px;
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+        }
+        
+        .controls-container span {
+            color: var(--text-color);
+            font-size: 1.5rem;
+        }
+
+        .lyrics-button, .queue-button {
+            background: var(--search-background);
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+            width: 37px;
+            height: 37px;
+            color: var(--text-color);
+            border-radius: 50%;
+            transition: background 0.2s ease;
+            backdrop-filter: blur(10px);
+        }
+
         .volume-control {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin: 20px 0 0;
             background: var(--search-background);
             border-radius: 25px;
             padding: 5px 10px 5px 10px;
             backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
+            height: 37px;
+            width: 100px;
         }
         
         .volume-control span {
@@ -908,9 +938,17 @@
                 <span class="material-symbols-rounded">repeat</span>
             </button>
         </div>
-        <div class="volume-control">
-            <span class="material-symbols-rounded" id="volumeIcon">volume_up</span>
-            <input type="range" class="volume-slider" min="0" max="100" value="100">
+        <div class="controls-container">
+            <div class="volume-control">
+                <button class="lyrics-button">
+                    <span class="material-symbols-rounded">tooltip_2</span>
+                </button>
+                <button class="queue-button">
+                    <span class="material-symbols-rounded">queue_music</span>
+                </button>
+                <span class="material-symbols-rounded" id="volumeIcon">volume_up</span>
+                <input type="range" class="volume-slider" min="0" max="100" value="100">
+            </div>
         </div>
     </div>
 
