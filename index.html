@@ -944,6 +944,23 @@
             color: var(--text-color);
             background: var(--overlay-color);
         }
+        .lyrics-container p {
+            white-space: pre-wrap;
+            transition: all 0.3s ease;
+            padding: 8px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .lyrics-container p:not(.active-lyric) {
+            color: var(--secondary-text-color);
+            transform: scale(0.98);
+        }
+        .lyrics-container p.active-lyric {
+            color: var(--text-color);
+            font-weight: 600;
+            background-color: var(--transparent-color);
+            transform: scale(1);
+        }
     </style>
 </head>
 <body>
@@ -1793,12 +1810,10 @@ async function loadSong(song) {
         
 async function extractMetadata(file) {
     return new Promise((resolve) => {
-        // DO NOT specify tags to read. This will force the library to read everything it can find.
         new jsmediatags.Reader(file)
+            .setTagsToRead(['title', 'artist', 'album', 'year', 'picture', 'track', 'lyrics'])
             .read({
                 onSuccess: async function(tag) {
-                    console.log("jsmediatags FULL RAW output for:", file.name, tag.tags);
-
                     let albumArt;
                     if (tag.tags.picture) {
                         const { data, format } = tag.tags.picture;
@@ -1822,31 +1837,18 @@ async function extractMetadata(file) {
                                     drawWidth = 500 * aspectRatio;
                                     offsetX = (500 - drawWidth) / 2;
                                 }
-                                
-                                ctx.fillStyle = '#000000';
-                                ctx.fillRect(0, 0, 500, 500);
                                 ctx.drawImage(tempImage, offsetX, offsetY, drawWidth, drawHeight);
                                 resolve();
                             };
                         });
-                        
                         albumArt = canvas.toDataURL('image/jpeg', 0.9);
                     } else {
                         albumArt = generateRandomGradient();
                     }
                     
-                    let trackNumber = null;
-                    if (tag.tags.track) {
-                        trackNumber = parseInt(tag.tags.track.split('/')[0]) || null;
-                    }
-                    
-                    // --- THE REAL FIX: Manually check for MP3 and FLAC lyric tags ---
-                    let lyricsText = null;
-                    if (tag.tags.lyrics) { // Handles MP3s and some formats
-                        lyricsText = typeof tag.tags.lyrics === 'object' ? tag.tags.lyrics.lyrics : tag.tags.lyrics;
-                    } else if (tag.tags.LYRICS) { // Explicitly handles FLAC Vorbis Comment "LYRICS"
-                        lyricsText = tag.tags.LYRICS;
-                    }
+                    let trackNumber = parseInt(tag.tags.track, 10) || null;
+                    let lyricsText = tag.tags.lyrics ? (typeof tag.tags.lyrics === 'object' ? tag.tags.lyrics.lyrics : tag.tags.lyrics) : null;
+                    let lrcData = parseLRC(lyricsText);
 
                     resolve({
                         title: tag.tags.title || file.name.replace(/\.[^/.]+$/, ""),
@@ -1855,21 +1857,11 @@ async function extractMetadata(file) {
                         year: tag.tags.year || '',
                         albumArt: albumArt,
                         trackNumber: trackNumber,
-                        lyrics: lyricsText // Use the manually found text
+                        lyrics: lyricsText,
+                        lrcData: lrcData // Store the parsed data
                     });
                 },
-                onError: function(error) {
-                    console.error("jsmediatags ERROR for:", file.name, error);
-                    resolve({
-                        title: file.name.replace(/\.[^/.]+$/, ""),
-                        artist: 'Unknown Artist',
-                        album: 'Unknown Album',
-                        year: '',
-                        albumArt: generateRandomGradient(),
-                        trackNumber: null,
-                        lyrics: null
-                    });
-                }
+                onError: (error) => resolve({ /* ... error object ... */ })
             });
     });
 }
@@ -1913,6 +1905,34 @@ async function addSongs(files) {
     }
 }
 
+function parseLRC(lrcText) {
+    if (!lrcText || !lrcText.includes('[')) {
+        return null; // Not LRC format or empty
+    }
+    
+    const lines = lrcText.split('\n');
+    const lrcData = [];
+    const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
+
+    lines.forEach(line => {
+        const match = line.match(timeRegex);
+        if (match) {
+            const minutes = parseInt(match[1], 10);
+            const seconds = parseInt(match[2], 10);
+            const milliseconds = parseInt(match[3].padEnd(3, '0'), 10);
+            const time = minutes * 60 + seconds + milliseconds / 1000;
+            const text = line.replace(timeRegex, '').trim();
+            
+            if (text || lrcData.length === 0 || (lrcData[lrcData.length -1].text !== '')) {
+                 lrcData.push({ time, text });
+            }
+        }
+    });
+    
+    // Filter out empty lines that might result from parsing
+    return lrcData.filter(line => line.text);
+}
+        
 async function loadSongsFromStorage() {
     const transaction = db.transaction(['songs', 'musicFiles'], 'readonly');
     const songStore = transaction.objectStore('songs');
@@ -2100,7 +2120,6 @@ function renderSongs(filteredSongs = null) {
         
 async function renderLyrics() {
     const musicListContainer = document.querySelector('.music-list');
-    
     const lyricsContainer = document.createElement('div');
     lyricsContainer.className = 'lyrics-container';
     musicListContainer.appendChild(lyricsContainer);
@@ -2110,22 +2129,29 @@ async function renderLyrics() {
         return;
     }
 
-    lyricsContainer.innerHTML = `<p>Loading lyrics...</p>`;
+    const song = songs.find(s => s.id === currentSongId);
+    if (!song || !song.lyrics) {
+        lyricsContainer.innerHTML = `<p>No lyrics found for this song.</p>`;
+        return;
+    }
 
-    try {
-        const lyricsText = await fetchLyrics(currentSongId);
-        
-        // --- DEBUGGING LOG ---
-        console.log("Lyrics received by renderLyrics:", lyricsText);
+    // If we have parsed LRC data, render it as a list
+    if (song.lrcData && song.lrcData.length > 0) {
+        lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
+            `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '...'}</p>`
+        ).join('');
+        // Add click-to-seek functionality to lyrics
+        lyricsContainer.querySelectorAll('p').forEach(lineEl => {
+            lineEl.addEventListener('click', () => {
+                const seekTime = parseFloat(lineEl.dataset.time);
+                if (!isNaN(seekTime)) {
+                    audioPlayer.currentTime = seekTime;
+                }
+            });
+        });
 
-        if (lyricsText && String(lyricsText).trim() !== '') {
-            lyricsContainer.innerHTML = `<p>${String(lyricsText).replace(/\n/g, '<br>')}</p>`;
-        } else {
-            lyricsContainer.innerHTML = `<p>No embedded lyrics found for this song.</p>`;
-        }
-    } catch (error) {
-        console.error("Error fetching or rendering lyrics:", error);
-        lyricsContainer.innerHTML = `<p>Could not load lyrics.</p>`;
+    } else { // Fallback for plain text lyrics
+        lyricsContainer.innerHTML = `<p>${song.lyrics.replace(/\n/g, '<br>')}</p>`;
     }
 }
 
@@ -2706,17 +2732,52 @@ musicUpload.addEventListener('change', async (e) => {
     }
 });
 
+let currentLrcLineIndex = -1; // Keep track of the current line
+
 audioPlayer.addEventListener('timeupdate', async () => {
     if (currentSongId) {
         const song = songs.find(s => s.id === currentSongId);
-        if (song) {
-            song.timestamp = audioPlayer.currentTime;
-            await saveSongs();
-        }
-        progress.style.width = `${(audioPlayer.currentTime / audioPlayer.duration) * 100}%`;
+        // Update progress bar and time displays
+        const percentage = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+        progress.style.width = `${percentage}%`;
         currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
-        durationDisplay.textContent = formatTime(audioPlayer.duration);
+        if(audioPlayer.duration) durationDisplay.textContent = formatTime(audioPlayer.duration);
         updatePageTitle();
+
+        // Handle LRC lyrics highlighting
+        if (song && song.lrcData && sidebarView === 'lyrics') {
+            const currentTime = audioPlayer.currentTime;
+            let newLrcLineIndex = -1;
+
+            // Find the last line whose time is before the current time
+            for (let i = 0; i < song.lrcData.length; i++) {
+                if (song.lrcData[i].time <= currentTime) {
+                    newLrcLineIndex = i;
+                } else {
+                    break;
+                }
+            }
+            
+            if (newLrcLineIndex !== currentLrcLineIndex) {
+                // Remove active class from old line
+                if (currentLrcLineIndex !== -1) {
+                    const oldLine = document.getElementById(`lyric-line-${currentLrcLineIndex}`);
+                    if (oldLine) oldLine.classList.remove('active-lyric');
+                }
+                
+                // Add active class to new line
+                const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
+                if (newLine) {
+                    newLine.classList.add('active-lyric');
+                    // Scroll the new line into the center of the view
+                    newLine.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
+                currentLrcLineIndex = newLrcLineIndex;
+            }
+        }
     }
 });
 
