@@ -1887,6 +1887,7 @@ async function addSongs(files) {
             year: metadata.year,
             albumArt: metadata.albumArt,
             trackNumber: metadata.trackNumber,
+            lyrics: metadata.lyrics,
             type: file.type,
             dateAdded: timestamp
         };
@@ -1922,7 +1923,8 @@ async function loadSongsFromStorage() {
             album: song.album || 'Unknown Album',
             artist: song.artist || 'Unknown Artist',
             year: song.year || '',
-            trackNumber: song.trackNumber || null
+            trackNumber: song.trackNumber || null,
+            lyrics: song.lyrics || null
         })).filter(song => {
             if (song.type) {
                 const dummyFile = { type: song.type, name: song.name };
@@ -1960,6 +1962,7 @@ async function saveSongs() {
           year: song.year,
           albumArt: song.albumArt,
           trackNumber: song.trackNumber,
+          lyrics: song.lyrics,
           albumOrder: song.albumOrder,
           type: song.type,
           dateAdded: song.dateAdded
@@ -2094,6 +2097,8 @@ async function renderLyrics() {
     // Create the container element first, get a reference, and append it.
     const lyricsContainer = document.createElement('div');
     lyricsContainer.className = 'lyrics-container';
+    // Append it to the main content area for lyrics.
+    // Ensure the back button is handled by addBackButtonToSidebar
     musicListContainer.appendChild(lyricsContainer);
 
     if (!currentSongId) {
@@ -2106,15 +2111,9 @@ async function renderLyrics() {
     try {
         const lyrics = await fetchLyrics(currentSongId);
         
-        if (lyrics) {
-            // jsmediatags can return an object {lyrics: "..."} or just a string.
-            // This handles both cases and checks for empty lyrics.
+        if (lyrics && String(lyrics).trim() !== '') {
             const lyricsText = (typeof lyrics === 'object' && lyrics.lyrics) ? lyrics.lyrics : lyrics;
-            if (lyricsText && String(lyricsText).trim() !== '') {
-                lyricsContainer.innerHTML = `<p>${String(lyricsText).replace(/\n/g, '<br>')}</p>`;
-            } else {
-                lyricsContainer.innerHTML = `<p>No embedded lyrics found for this song.</p>`;
-            }
+            lyricsContainer.innerHTML = `<p>${String(lyricsText).replace(/\n/g, '<br>')}</p>`;
         } else {
             lyricsContainer.innerHTML = `<p>No embedded lyrics found for this song.</p>`;
         }
@@ -2316,22 +2315,10 @@ async function deleteSong(songId) {
 }
 
 async function fetchLyrics(songId) {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['musicFiles'], 'readonly');
-        const request = transaction.objectStore('musicFiles').get(songId);
-        request.onsuccess = () => {
-            if (request.result && request.result.file) {
-                new jsmediatags.Reader(request.result.file).setTagsToRead(['lyrics']).read({
-                    onSuccess: (tag) => resolve(tag.tags.lyrics || null),
-                    onError: (error) => {
-                        console.error('Error reading lyrics tag:', error);
-                        resolve(null);
-                    }
-                });
-            } else reject('Song file not found');
-        };
-        request.onerror = (e) => reject('DB request error: ' + e.target.error);
-    });
+    // Find the song in the main `songs` array (already in memory)
+    const song = songs.find(s => s.id === songId);
+    // Return the lyrics property if the song is found
+    return song ? song.lyrics : null;
 }
 
 function addQueueItemEventListeners() {
