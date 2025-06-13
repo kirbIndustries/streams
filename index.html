@@ -1796,7 +1796,10 @@ async function extractMetadata(file) {
         new jsmediatags.Reader(file)
             .setTagsToRead(['title', 'artist', 'album', 'year', 'picture', 'track', 'lyrics'])
             .read({
-                onSuccess: async function(tag) {  // Mark this callback as async
+                onSuccess: async function(tag) {
+                    // --- DEBUGGING LOG ---
+                    console.log("jsmediatags RAW output for:", file.name, tag.tags);
+
                     let albumArt;
                     if (tag.tags.picture) {
                         const { data, format } = tag.tags.picture;
@@ -1812,10 +1815,7 @@ async function extractMetadata(file) {
                         await new Promise(resolve => {
                             tempImage.onload = () => {
                                 const aspectRatio = tempImage.width / tempImage.height;
-                                let drawWidth = 500;
-                                let drawHeight = 500;
-                                let offsetX = 0;
-                                let offsetY = 0;
+                                let drawWidth = 500, drawHeight = 500, offsetX = 0, offsetY = 0;
                                 
                                 if (aspectRatio > 1) {
                                     drawHeight = 500 / aspectRatio;
@@ -1842,6 +1842,13 @@ async function extractMetadata(file) {
                         trackNumber = parseInt(tag.tags.track.split('/')[0]) || null;
                     }
                     
+                    // --- ROBUST LYRICS HANDLING ---
+                    let lyricsText = null;
+                    if (tag.tags.lyrics) {
+                        // The 'lyrics' tag can be a string or an object { lyrics: '...' }
+                        lyricsText = typeof tag.tags.lyrics === 'object' ? tag.tags.lyrics.lyrics : tag.tags.lyrics;
+                    }
+
                     resolve({
                         title: tag.tags.title || file.name.replace(/\.[^/.]+$/, ""),
                         artist: tag.tags.artist || 'Unknown Artist',
@@ -1849,10 +1856,11 @@ async function extractMetadata(file) {
                         year: tag.tags.year || '',
                         albumArt: albumArt,
                         trackNumber: trackNumber,
-                        lyrics: tag.tags.lyrics || null
+                        lyrics: lyricsText // Use the processed text
                     });
                 },
                 onError: function(error) {
+                    console.error("jsmediatags ERROR for:", file.name, error);
                     resolve({
                         title: file.name.replace(/\.[^/.]+$/, ""),
                         artist: 'Unknown Artist',
@@ -1860,7 +1868,7 @@ async function extractMetadata(file) {
                         year: '',
                         albumArt: generateRandomGradient(),
                         trackNumber: null,
-                        lyrics: null
+                        lyrics: null // Ensure lyrics is null on error
                     });
                 }
             });
@@ -2094,11 +2102,8 @@ function renderSongs(filteredSongs = null) {
 async function renderLyrics() {
     const musicListContainer = document.querySelector('.music-list');
     
-    // Create the container element first, get a reference, and append it.
     const lyricsContainer = document.createElement('div');
     lyricsContainer.className = 'lyrics-container';
-    // Append it to the main content area for lyrics.
-    // Ensure the back button is handled by addBackButtonToSidebar
     musicListContainer.appendChild(lyricsContainer);
 
     if (!currentSongId) {
@@ -2109,10 +2114,12 @@ async function renderLyrics() {
     lyricsContainer.innerHTML = `<p>Loading lyrics...</p>`;
 
     try {
-        const lyrics = await fetchLyrics(currentSongId);
+        const lyricsText = await fetchLyrics(currentSongId);
         
-        if (lyrics && String(lyrics).trim() !== '') {
-            const lyricsText = (typeof lyrics === 'object' && lyrics.lyrics) ? lyrics.lyrics : lyrics;
+        // --- DEBUGGING LOG ---
+        console.log("Lyrics received by renderLyrics:", lyricsText);
+
+        if (lyricsText && String(lyricsText).trim() !== '') {
             lyricsContainer.innerHTML = `<p>${String(lyricsText).replace(/\n/g, '<br>')}</p>`;
         } else {
             lyricsContainer.innerHTML = `<p>No embedded lyrics found for this song.</p>`;
