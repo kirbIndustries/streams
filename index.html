@@ -388,7 +388,7 @@
             align-items: center;
             gap: 8px;
             margin: 20px 0 0;
-            background: var(--search-background);
+            background: var(--overlay-color);
             border-radius: 50px;
             padding: 7.5px;
             backdrop-filter: blur(10px);
@@ -939,13 +939,13 @@
             </button>
         </div>
         <div class="controls-container">
+            <button class="lyrics-button">
+                <span class="material-symbols-rounded">tooltip_2</span>
+            </button>
+            <button class="queue-button">
+                <span class="material-symbols-rounded">queue_music</span>
+            </button>
             <div class="volume-control">
-                <button class="lyrics-button">
-                    <span class="material-symbols-rounded">tooltip_2</span>
-                </button>
-                <button class="queue-button">
-                    <span class="material-symbols-rounded">queue_music</span>
-                </button>
                 <span class="material-symbols-rounded" id="volumeIcon">volume_up</span>
                 <input type="range" class="volume-slider" min="0" max="100" value="100">
             </div>
