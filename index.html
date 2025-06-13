@@ -1906,31 +1906,46 @@ async function addSongs(files) {
 }
 
 function parseLRC(lrcText) {
+    // Guard clause: If there's no text or no timestamps, it's not LRC.
     if (!lrcText || !lrcText.includes('[')) {
-        return null; // Not LRC format or empty
+        return null;
     }
-    
-    const lines = lrcText.split('\n');
-    const lrcData = [];
-    const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
 
-    lines.forEach(line => {
-        const match = line.match(timeRegex);
-        if (match) {
-            const minutes = parseInt(match[1], 10);
-            const seconds = parseInt(match[2], 10);
-            const milliseconds = parseInt(match[3].padEnd(3, '0'), 10);
-            const time = minutes * 60 + seconds + milliseconds / 1000;
-            const text = line.replace(timeRegex, '').trim();
-            
-            if (text || lrcData.length === 0 || (lrcData[lrcData.length -1].text !== '')) {
-                 lrcData.push({ time, text });
-            }
-        }
-    });
+    const lrcData = [];
+    // Use a global regex to find ALL timestamp occurrences in the text.
+    const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/g;
     
-    // Filter out empty lines that might result from parsing
-    return lrcData.filter(line => line.text);
+    // The matchAll method is perfect for this, as it provides the index of each match.
+    const matches = [...lrcText.matchAll(timeRegex)];
+
+    // If the regex finds no timestamps, treat it as plain text.
+    if (matches.length === 0) {
+        return null;
+    }
+
+    // Iterate through each timestamp match to extract the time and associated text.
+    matches.forEach((match, index) => {
+        const minutes = parseInt(match[1], 10);
+        const seconds = parseInt(match[2], 10);
+        // Handle both 2-digit (e.g., .07) and 3-digit (e.g., .078) milliseconds.
+        const milliseconds = parseInt(match[3].padEnd(3, '0'), 10);
+        const time = minutes * 60 + seconds + milliseconds / 1000;
+
+        // The lyric text starts right after the timestamp.
+        const textStartIndex = match.index + match[0].length;
+        
+        // The lyric text ends right before the next timestamp starts, or at the very end of the string.
+        const nextMatch = matches[index + 1];
+        const textEndIndex = nextMatch ? nextMatch.index : lrcText.length;
+        
+        const text = lrcText.substring(textStartIndex, textEndIndex).trim();
+
+        // Add the parsed data. We now allow empty text lines for instrumental breaks.
+        lrcData.push({ time, text });
+    });
+
+    // Only return the data if we successfully parsed at least one line.
+    return lrcData.length > 0 ? lrcData : null;
 }
         
 async function loadSongsFromStorage() {
