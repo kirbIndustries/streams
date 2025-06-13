@@ -2087,29 +2087,40 @@ function renderSongs(filteredSongs = null) {
   attachSongAndAlbumEventListeners();
   makeElementsDraggable();
 }
-
+        
 async function renderLyrics() {
     const musicListContainer = document.querySelector('.music-list');
     
+    // Create the container element first, get a reference, and append it.
+    const lyricsContainer = document.createElement('div');
+    lyricsContainer.className = 'lyrics-container';
+    musicListContainer.appendChild(lyricsContainer);
+
     if (!currentSongId) {
-        musicListContainer.insertAdjacentHTML('beforeend', `<div class="lyrics-container"><p>No song is currently playing.</p></div>`);
+        lyricsContainer.innerHTML = `<p>No song is currently playing.</p>`;
         return;
     }
 
-    musicListContainer.insertAdjacentHTML('beforeend', `<div class="lyrics-container"><p>Loading lyrics...</p></div>`);
+    lyricsContainer.innerHTML = `<p>Loading lyrics...</p>`;
 
     try {
         const lyrics = await fetchLyrics(currentSongId);
-        const lyricsContainer = musicListContainer.querySelector('.lyrics-container');
+        
         if (lyrics) {
-            const formattedLyrics = typeof lyrics === 'object' ? lyrics.lyrics : lyrics;
-            lyricsContainer.innerHTML = `<p>${formattedLyrics.replace(/\n/g, '<br>')}</p>`;
+            // jsmediatags can return an object {lyrics: "..."} or just a string.
+            // This handles both cases and checks for empty lyrics.
+            const lyricsText = (typeof lyrics === 'object' && lyrics.lyrics) ? lyrics.lyrics : lyrics;
+            if (lyricsText && String(lyricsText).trim() !== '') {
+                lyricsContainer.innerHTML = `<p>${String(lyricsText).replace(/\n/g, '<br>')}</p>`;
+            } else {
+                lyricsContainer.innerHTML = `<p>No embedded lyrics found for this song.</p>`;
+            }
         } else {
             lyricsContainer.innerHTML = `<p>No embedded lyrics found for this song.</p>`;
         }
     } catch (error) {
-        console.error(error);
-        musicListContainer.querySelector('.lyrics-container').innerHTML = `<p>Could not load lyrics.</p>`;
+        console.error("Error fetching or rendering lyrics:", error);
+        lyricsContainer.innerHTML = `<p>Could not load lyrics.</p>`;
     }
 }
 
