@@ -929,16 +929,24 @@
             width: fit-content;
         }
 
-        .lyrics-container {
-            padding: 10px;
-            color: var(--secondary-text-color);
-            line-height: 1.7;
-            font-size: 1.1em;
-            height: 100%;
-            overflow-y: auto;
-        }
         .lyrics-container p {
             white-space: pre-wrap;
+            transition: all 0.3s ease;
+            padding: 8px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        
+        .lyrics-container p:not(.active-lyric) {
+            color: var(--secondary-text-color);
+            transform: scale(0.98);
+        }
+        
+        .lyrics-container p.active-lyric {
+            color: var(--text-color);
+            font-weight: 600;
+            background-color: var(--transparent-color);
+            transform: scale(1);
         }
 
         .queue-item .song-info {
@@ -974,23 +982,6 @@
         .remove-from-queue-btn:hover {
             color: var(--text-color);
             background: var(--overlay-color);
-        }
-        .lyrics-container p {
-            white-space: pre-wrap;
-            transition: all 0.3s ease;
-            padding: 8px 10px;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-        .lyrics-container p:not(.active-lyric) {
-            color: var(--secondary-text-color);
-            transform: scale(0.98);
-        }
-        .lyrics-container p.active-lyric {
-            color: var(--text-color);
-            font-weight: 600;
-            background-color: var(--transparent-color);
-            transform: scale(1);
         }
     </style>
 </head>
@@ -1295,206 +1286,8 @@ function resetPlayer() {
         }
         
 function makeElementsDraggable() {
-  // Make album sections draggable
-  document.querySelectorAll('.album-section').forEach(albumSection => {
-    albumSection.setAttribute('draggable', 'true');
-    
-    // Mouse events for albums
-    albumSection.addEventListener('dragstart', e => {
-      draggedItem = albumSection;
-      isDraggingAlbum = true;
-      e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => {
-        albumSection.classList.add('dragging');
-      }, 0);
-    });
-    
-    albumSection.addEventListener('dragend', () => {
-      // Check if draggedItem exists before accessing its properties
-      if (draggedItem) {
-        draggedItem.classList.remove('dragging');
-        draggedItem = null;
-      }
-      isDraggingAlbum = false;
-      updateSongsArrayFromDOM();
-    });
-    
-    albumSection.addEventListener('dragover', e => {
-      e.preventDefault();
-      if (isDraggingAlbum && draggedItem !== albumSection) {
-        const rect = albumSection.getBoundingClientRect();
-        const midY = rect.y + rect.height / 2;
-        
-        if (e.clientY - midY > 0) {
-          albumSection.parentNode.insertBefore(draggedItem, albumSection.nextSibling);
-        } else {
-          albumSection.parentNode.insertBefore(draggedItem, albumSection);
-        }
-      }
-    });
-    
-    // Touch events for albums
-    albumSection.addEventListener('touchstart', e => {
-      if (e.target.closest('.album-header')) {
-        touchTarget = albumSection;
-        isDraggingAlbum = true;
-        touchStartY = e.touches[0].clientY;
-        initialY = albumSection.getBoundingClientRect().top;
-        
-        setTimeout(() => {
-          albumSection.classList.add('dragging');
-        }, 200);
-      }
-    }, { passive: false });
-    
-    albumSection.addEventListener('touchmove', e => {
-      if (touchTarget === albumSection) {
-        e.preventDefault();
-        const touchY = e.touches[0].clientY;
-        const offsetY = touchY - touchStartY;
-        
-        albumSection.style.transform = `translateY(${offsetY}px)`;
-        albumSection.style.zIndex = '1000';
-        
-        document.querySelectorAll('.album-section').forEach(el => {
-          if (el !== albumSection) {
-            const elRect = el.getBoundingClientRect();
-            const albumRect = albumSection.getBoundingClientRect();
-            
-            if (albumRect.top <= elRect.top + elRect.height/2 && albumRect.bottom >= elRect.top) {
-              albumSection.parentNode.insertBefore(albumSection, el);
-            } else if (albumRect.bottom >= elRect.bottom - elRect.height/2 && albumRect.top <= elRect.bottom) {
-              albumSection.parentNode.insertBefore(albumSection, el.nextSibling);
-            }
-          }
-        });
-      }
-    }, { passive: false });
-    
-    albumSection.addEventListener('touchend', () => {
-      if (touchTarget === albumSection) {
-        albumSection.classList.remove('dragging');
-        albumSection.style.transform = '';
-        albumSection.style.zIndex = '';
-        touchTarget = null;
-        isDraggingAlbum = false;
-        updateSongsArrayFromDOM();
-      }
-    });
-  });
-  
-  // Make music items draggable
-  document.querySelectorAll('.music-item').forEach(item => {
-    item.setAttribute('draggable', 'true');
-    
-    // Mouse events for music items
-    item.addEventListener('dragstart', e => {
-      if (e.target.closest('.play-control')) {
-        e.preventDefault();
-        return;
-      }
-      draggedItem = item;
-      isDraggingAlbum = false;
-      e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => {
-        item.classList.add('dragging');
-      }, 0);
-    });
-    
-    item.addEventListener('dragend', () => {
-      // Check if draggedItem exists before accessing its properties
-      if (draggedItem) {
-        draggedItem.classList.remove('dragging');
-        draggedItem = null;
-      }
-      updateSongsArrayFromDOM();
-    });
-    
-    item.addEventListener('dragover', e => {
-      e.preventDefault();
-      if (!isDraggingAlbum && draggedItem !== item) {
-        const albumContainer = item.closest('.album-songs');
-        const draggedAlbumContainer = draggedItem ? draggedItem.closest('.album-songs') : null;
-        
-        if (albumContainer === draggedAlbumContainer) {
-          const rect = item.getBoundingClientRect();
-          const midY = rect.y + rect.height / 2;
-          
-          if (e.clientY - midY > 0) {
-            albumContainer.insertBefore(draggedItem, item.nextSibling);
-          } else {
-            albumContainer.insertBefore(draggedItem, item);
-          }
-        }
-      }
-    });
-    
-    // Touch events for music items
-    let longPressTimer;
-    
-    item.addEventListener('touchstart', e => {
-      if (!e.target.closest('.play-control')) {
-        touchTarget = item;
-        touchStartY = e.touches[0].clientY;
-        initialY = item.getBoundingClientRect().top;
-        
-        longPressTimer = setTimeout(() => {
-          item.classList.add('dragging');
-        }, 200);
-      }
-    }, { passive: true });
-    
-    item.addEventListener('touchmove', e => {
-      if (touchTarget === item && item.classList.contains('dragging')) {
-        clearTimeout(longPressTimer);
-        e.preventDefault();
-        
-        const touchY = e.touches[0].clientY;
-        const offsetY = touchY - touchStartY;
-        
-        item.style.transform = `translateY(${offsetY}px)`;
-        item.style.zIndex = '1000';
-        
-        const albumContainer = item.closest('.album-songs');
-        albumContainer.querySelectorAll('.music-item').forEach(el => {
-          if (el !== item) {
-            const elRect = el.getBoundingClientRect();
-            const itemRect = item.getBoundingClientRect();
-            
-            if (itemRect.top <= elRect.top + elRect.height/2 && itemRect.bottom >= elRect.top) {
-              albumContainer.insertBefore(item, el);
-            } else if (itemRect.bottom >= elRect.bottom - elRect.height/2 && itemRect.top <= elRect.bottom) {
-              albumContainer.insertBefore(item, el.nextSibling);
-            }
-          }
-        });
-      }
-    }, { passive: false });
-    
-    item.addEventListener('touchend', () => {
-      if (touchTarget === item) {
-        clearTimeout(longPressTimer);
-        item.classList.remove('dragging');
-        item.style.transform = '';
-        item.style.zIndex = '';
-        touchTarget = null;
-        
-        if (item.classList.contains('dragging')) {
-          updateSongsArrayFromDOM();
-        }
-      }
-    });
-    
-    item.addEventListener('touchcancel', () => {
-      if (touchTarget === item) {
-        clearTimeout(longPressTimer);
-        item.classList.remove('dragging');
-        item.style.transform = '';
-        item.style.zIndex = '';
-        touchTarget = null;
-      }
-    });
-  });
+      // This function is intentionally left blank to disable drag-and-drop for the library view.
+      // Drag-and-drop for the queue is handled by a separate function.
 }
 
 // Function to update the songs array based on the DOM order
@@ -1838,75 +1631,44 @@ async function loadSong(song) {
         
 async function extractMetadata(file) {
     return new Promise((resolve) => {
-        // Read all tags to ensure we get the full picture.
         new jsmediatags.Reader(file)
             .read({
                 onSuccess: async function(tag) {
-                    // Log the full output for final verification.
-                    console.log("jsmediatags FULL RAW output for:", file.name, tag.tags);
-
                     let albumArt;
                     if (tag.tags.picture) {
                         const { data, format } = tag.tags.picture;
                         const base64String = data.reduce((acc, curr) => acc + String.fromCharCode(curr), '');
-                        const tempImage = new Image();
-                        tempImage.src = `data:${format};base64,${btoa(base64String)}`;
-                        
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        canvas.width = 500; canvas.height = 500;
-                        
-                        await new Promise(resolve => {
-                            tempImage.onload = () => {
-                                const aspectRatio = tempImage.width / tempImage.height;
-                                let drawWidth = 500, drawHeight = 500, offsetX = 0, offsetY = 0;
-                                
-                                if (aspectRatio > 1) {
-                                    drawHeight = 500 / aspectRatio;
-                                    offsetY = (500 - drawHeight) / 2;
-                                } else {
-                                    drawWidth = 500 * aspectRatio;
-                                    offsetX = (500 - drawWidth) / 2;
-                                }
-                                ctx.drawImage(tempImage, offsetX, offsetY, drawWidth, drawHeight);
-                                resolve();
-                            };
-                        });
-                        albumArt = canvas.toDataURL('image/jpeg', 0.9);
+                        albumArt = `data:${format};base64,${btoa(base64String)}`;
                     } else {
                         albumArt = generateRandomGradient();
                     }
-                    
-                    let trackNumber = parseInt(tag.tags.track, 10) || null;
-                    
-                    // --- DEFINITIVE LYRICS EXTRACTION LOGIC ---
+
+                    // --- FIXED LYRICS EXTRACTION LOGIC ---
                     let lyricsText = null;
                     let lrcData = null;
+                    let foundSyncedLyrics = false;
 
-                    // Priority 1: Check the standard USLT frame, which often holds synced lyrics.
-                    // The log confirms the data is in `tag.tags.USLT.lyrics`.
-                    if (tag.tags.USLT && typeof tag.tags.USLT === 'object' && tag.tags.USLT.lyrics) {
-                        const potentialLrcText = tag.tags.USLT.lyrics;
-                        // Attempt to parse it as LRC.
-                        const parsedData = parseLRC(potentialLrcText);
-                        
-                        // If parsing is successful, we have synced lyrics.
-                        if (parsedData) {
-                            console.log("Successfully parsed USLT tag as SYNCED lyrics.");
-                            lrcData = parsedData;
+                    const lrcCandidates = [
+                        tag.tags.USLT?.lyrics,
+                        (typeof tag.tags.lyrics === 'object' ? tag.tags.lyrics.lyrics : tag.tags.lyrics),
+                        tag.tags.LYRICS // Common in FLAC files
+                    ];
+
+                    for (const candidate of lrcCandidates) {
+                        if (candidate) {
+                            const parsed = parseLRC(candidate);
+                            if (parsed) {
+                                lrcData = parsed;
+                                lyricsText = candidate;
+                                foundSyncedLyrics = true;
+                                break; // Stop after finding the first valid synced lyrics
+                            }
                         }
-                        // Always store the raw text as a fallback.
-                        lyricsText = potentialLrcText;
                     }
-
-                    // Priority 2: If no synced lyrics were found, fall back to any other lyric tag.
-                    if (!lrcData) {
-                        console.log("Could not parse USLT as synced, or USLT tag not found. Checking fallbacks.");
-                        if (tag.tags.lyrics) { // Check the generic alias
-                           lyricsText = typeof tag.tags.lyrics === 'object' ? tag.tags.lyrics.lyrics : tag.tags.lyrics;
-                        } else if (tag.tags.LYRICS) { // Check for FLAC tag
-                           lyricsText = tag.tags.LYRICS;
-                        }
+                    
+                    // If no synced lyrics were found, find the first available unsynced text
+                    if (!foundSyncedLyrics) {
+                        lyricsText = lrcCandidates.find(text => typeof text === 'string' && text.trim() !== '') || null;
                     }
 
                     resolve({
@@ -1915,14 +1677,24 @@ async function extractMetadata(file) {
                         album: tag.tags.album || 'Unknown Album',
                         year: tag.tags.year || '',
                         albumArt: albumArt,
-                        trackNumber: trackNumber,
-                        lyrics: lyricsText, // Store the raw text
-                        lrcData: lrcData     // Store the parsed data (will be null if not synced)
+                        trackNumber: parseInt(tag.tags.track, 10) || null,
+                        lyrics: lyricsText,
+                        lrcData: lrcData
                     });
                 },
                 onError: (error) => {
                     console.error("jsmediatags ERROR for:", file.name, error);
-                    resolve({ /* ... error object ... */ });
+                    // Fallback for files that can't be read (e.g., some WAVs)
+                    resolve({
+                        title: file.name.replace(/\.[^/.]+$/, ""),
+                        artist: 'Unknown Artist',
+                        album: 'Unknown Album',
+                        year: '',
+                        albumArt: generateRandomGradient(),
+                        trackNumber: null,
+                        lyrics: null,
+                        lrcData: null
+                    });
                 }
             });
     });
@@ -2363,7 +2135,6 @@ function renderSongs(filteredSongs = null) {
   }
   
   attachSongAndAlbumEventListeners();
-  makeElementsDraggable();
 }
         
 async function renderLyrics() {
@@ -2951,7 +2722,10 @@ window.addEventListener("load", async () => {
                     musicTitle.textContent = song.name;
                     musicArtist.textContent = song.artist;
                     albumArtImg.src = song.albumArt;
-                    document.querySelector('.background-blur').style.backgroundImage = `url('${song.albumArt}')`;
+                    
+                    // FIX: Call updateAllBackgrounds to correctly set the main art and the animated shards.
+                    updateAllBackgrounds(song.albumArt);
+                    
                     currentSongId = song.id;
                     playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
                     playPauseBtn.classList.remove('playing');
@@ -2961,17 +2735,6 @@ window.addEventListener("load", async () => {
         }
     } catch (error) {
         console.error('Error loading saved song:', error);
-    }
-});
-        
-musicUpload.addEventListener('change', async (e) => {
-    if (e.target.files.length > 0) {
-        try {
-            await preloadSongs(e.target.files);
-            await addSongs(e.target.files);
-        } catch (error) {
-            console.error('Error uploading songs:', error);
-        }
     }
 });
 
