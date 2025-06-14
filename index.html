@@ -2102,36 +2102,47 @@ function initVisualizer() {
         analyser.connect(audioContext.destination);
     }
 
-    analyser.fftSize = 6; // Number of bars
+    analyser.fftSize = 32; // Number of bars
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
-
+    const desiredBars = 6;
+    
     function draw() {
         requestAnimationFrame(draw);
-
+    
         analyser.getByteFrequencyData(dataArray);
-
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-
-        const barWidth = (canvas.width / bufferLength) * 1.5;
+    
+        const barWidth = (canvas.width / desiredBars) * 1.5;
         let x = 0;
-
+    
         // CSS variable color
         const style = getComputedStyle(document.documentElement);
         const textColor = style.getPropertyValue('--text-color').trim();
-
-        for (let i = 0; i < bufferLength; i++) {
-            const barHeight = dataArray[i] / 2.5;
-
+    
+        const binsPerBar = Math.floor(bufferLength / desiredBars);
+    
+        for (let i = 0; i < desiredBars; i++) {
+            let sum = 0;
+    
+            // Sum bins for this bar
+            for (let j = 0; j < binsPerBar; j++) {
+                sum += dataArray[(i * binsPerBar) + j];
+            }
+    
+            // Average them
+            const average = sum / binsPerBar;
+            const barHeight = average / 2.5;
+    
             canvasCtx.fillStyle = textColor;
-
+    
             const radius = 4;
             const centerY = canvas.height / 2;
             const y = centerY - barHeight / 2;
-
+    
             canvasCtx.beginPath();
             canvasCtx.moveTo(x + radius, y);
             canvasCtx.lineTo(x + barWidth - radius, y);
@@ -2144,7 +2155,7 @@ function initVisualizer() {
             canvasCtx.quadraticCurveTo(x, y, x + radius, y);
             canvasCtx.closePath();
             canvasCtx.fill();
-
+    
             x += barWidth + 1;
         }
     }
