@@ -2139,6 +2139,11 @@ function initVisualizer() {
     const canvasCtx = canvas.getContext('2d');
     const numBars = 6;
     const barIndices = [2, 10, 30, 100, 200, 400];
+    
+    // --- NEW: Sensitivity multipliers to balance the visualizer ---
+    // Higher frequencies naturally have lower energy, so we boost them.
+    const sensitivityMultipliers = [1.0, 1.3, 1.6, 2.2, 2.8, 3.8];
+
 
     function draw() {
         requestAnimationFrame(draw);
@@ -2163,36 +2168,49 @@ function initVisualizer() {
 
         turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
-        // --- Bar Visualizer Logic (FIXED) ---
+        // --- Bar Visualizer Logic (UPDATED) ---
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
         
         const gap = 2;
         const barWidth = (canvas.width - (numBars - 1) * gap) / numBars;
-        const pillRadius = barWidth / 2;
         const style = getComputedStyle(document.body);
         const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
-        // REMOVED: let x = 0;
+        canvasCtx.fillStyle = textColor;
+
 
         for (let i = 0; i < numBars; i++) {
-            // FIXED: Calculate x position inside the loop based on the index `i`.
-            // This guarantees each bar has its own slot, drawn or not.
             const x = i * (barWidth + gap);
 
-            const barHeight = Math.pow(dataArray[barIndices[i]] / 255, 2.5) * canvas.height * 0.9;
+            // Apply sensitivity multiplier and clamp the value to the 0-255 range
+            const value = Math.min(dataArray[barIndices[i]] * sensitivityMultipliers[i], 255);
+            const barHeight = Math.pow(value / 255, 2.5) * canvas.height * 0.9;
             
-            // This condition is now safe to use.
+            // --- NEW: Draw a dot for small bars, a full bar for large ones ---
             if (barHeight < barWidth) {
-                continue;
-            }
+                // If the bar is shorter than its own width, draw it as a circle (dot).
+                // The dot's radius and opacity are based on its height for a smooth transition.
+                const dotRadius = barHeight / 2;
+                if (dotRadius < 1) continue; // Don't draw if it's invisibly small
 
-            const y = (canvas.height - barHeight) / 2;
-            canvasCtx.fillStyle = textColor;
-            canvasCtx.beginPath();
-            canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
-            canvasCtx.fill();
+                canvasCtx.globalAlpha = barHeight / barWidth; // Fade in opacity
+                canvasCtx.beginPath();
+                canvasCtx.arc(x + barWidth / 2, canvas.height / 2, dotRadius, 0, 2 * Math.PI);
+                canvasCtx.fill();
+
+            } else {
+                // Otherwise, draw the standard pill-shaped bar.
+                const y = (canvas.height - barHeight) / 2;
+                const pillRadius = barWidth / 2;
+                canvasCtx.globalAlpha = 1.0; // Ensure it's fully opaque
+                canvasCtx.beginPath();
+                canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
+                canvasCtx.fill();
+            }
         }
+        // Reset global alpha to avoid affecting other canvas drawings if any
+        canvasCtx.globalAlpha = 1.0; 
 
         lastBassEnergy = bassEnergy;
         if (beatCooldown > 0) beatCooldown--;
