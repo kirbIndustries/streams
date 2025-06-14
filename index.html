@@ -639,7 +639,7 @@
         /* Light theme background blur with reduced opacity */
         body.light-theme .background-blur {
             opacity: 0.6; /* 60% opacity for light theme */
-            filter: blur(50px) brightness(0.8);
+            filter: blur(40px) brightness(0.8) url(#albumArtDistortion);
         }
         
         @keyframes fadeIn {
@@ -2111,6 +2111,7 @@ async function saveSongs() {
   });
 }
 
+// Replace your entire initVisualizer function with this one
 function initVisualizer() {
     if (isVisualizerInitialized) return;
 
@@ -2124,21 +2125,22 @@ function initVisualizer() {
     }
 
     analyser.fftSize = 32;
-    analyser.smoothingTimeConstant = 0.8; 
-    const bufferLength = analyser.frequencyBinCount; // 16
+    analyser.smoothingTimeConstant = 0.8;
+    const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
-    // --- Get Filter Elements ---
     const displacementFilter = document.getElementById('displacement');
     const turbulenceFilter = document.getElementById('turbulence');
 
-    // --- Beat Detection Variables ---
+    // --- NEW: Define the distortion's baseline and state ---
+    const baselineDistortion = 15; // The constant amount of distortion
+    const peakDistortion = 90;     // The amount to spike to on a beat
+    const decayFactor = 0.94;      // How quickly the peak returns to baseline
+    let currentDistortion = baselineDistortion;
+
     let beatCooldown = 0;
     let lastBassEnergy = 0;
-    let beatThreshold = 1.15;
-    let currentDistortion = 0;
 
-    // --- Bar Visualizer Variables ---
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
     const numBars = 6;
@@ -2150,29 +2152,33 @@ function initVisualizer() {
         analyser.getByteFrequencyData(dataArray);
 
         // --- Beat Detection Logic ---
-        const bassEnergy = (dataArray[1] + dataArray[2] + dataArray[3]) / 3;
-        if (bassEnergy > lastBassEnergy * beatThreshold && beatCooldown === 0) {
-            // BEAT DETECTED
-            currentDistortion = 80; // Peak distortion amount
-            turbulenceFilter.setAttribute('seed', Math.random() * 100); // Change the noise pattern
-            beatCooldown = 15; // Wait 15 frames before next beat
+        const bassEnergy = dataArray[1] * 1.2 + dataArray[2]; // Focus on low-end frequencies
+        if (bassEnergy > lastBassEnergy * 1.15 && beatCooldown === 0) {
+            // BEAT DETECTED: Spike the distortion to its peak
+            currentDistortion = peakDistortion;
+            // SHIFT: Change the turbulence pattern on the beat
+            turbulenceFilter.setAttribute('seed', Math.random() * 100);
+            beatCooldown = 12; // Wait for a few frames before the next beat
         }
 
-        // --- Update Distortion ---
-        // Smoothly decrease distortion back to a base level
-        currentDistortion *= 0.92; 
+        // --- ALWAYS ON: Smoothly return to the baseline distortion ---
+        // This ensures it's always distorted, even between beats.
+        currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
-        
-        // Slowly "boil" the turbulence for a constant subtle motion
-        const newBaseFrequency = 0.01 + Math.sin(Date.now() / 800) * 0.005;
-        turbulenceFilter.setAttribute('baseFrequency', `${newBaseFrequency} 0.04`);
 
-        // --- Draw the 6-Bar Visualizer ---
+        // --- ALWAYS ON: Make the turbulence "wavy" over time ---
+        // This creates the constant, fluid motion.
+        const time = Date.now() / 1000;
+        const baseFrequencyX = 0.01 + Math.sin(time * 0.5) * 0.005;
+        const baseFrequencyY = 0.02 + Math.cos(time * 0.3) * 0.008;
+        turbulenceFilter.setAttribute('baseFrequency', `${baseFrequencyX} ${baseFrequencyY}`);
+        
+        // --- Bar Visualizer Logic (Unchanged) ---
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
         
-        const gap = 3;
+        const gap = 2;
         const barWidth = (canvas.width - (numBars - 1) * gap) / numBars;
         const pillRadius = barWidth / 2;
         const style = getComputedStyle(document.body);
@@ -2180,18 +2186,15 @@ function initVisualizer() {
         let x = 0;
 
         for (let i = 0; i < numBars; i++) {
-            const barHeight = Math.pow(dataArray[barIndices[i]] / 255, 2.5) * canvas.height;
+            const barHeight = Math.pow(dataArray[barIndices[i]] / 255, 2.5) * canvas.height * 0.9;
             if (barHeight < barWidth) continue;
-
             canvasCtx.fillStyle = textColor;
-            const y = (canvas.height - barHeight) / 2;
             canvasCtx.beginPath();
             canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
             canvasCtx.fill();
             x += barWidth + gap;
         }
 
-        // Update beat detection variables for next frame
         lastBassEnergy = bassEnergy;
         if (beatCooldown > 0) beatCooldown--;
     }
@@ -2199,7 +2202,7 @@ function initVisualizer() {
     draw();
     isVisualizerInitialized = true;
 }
-
+        
 function renderSidebar() {
     const musicListContainer = document.querySelector('.music-list');
     const searchContainer = document.querySelector('.search-container');
