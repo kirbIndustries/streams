@@ -1863,40 +1863,60 @@ async function extractMetadata(file) {
     });
 }
         
-        async function addSongs(files, storageType) {
-            const newSongs = [];
-            for (let fileHandleOrFile of files) {
-                try {
-                    const file = storageType === 'filesystem' ? await fileHandleOrFile.getFile() : fileHandleOrFile;
-                    if (!isAudioFile(file)) continue;
-        
-                    const metadata = await extractMetadata(file);
-                    newSongs.push({
-                        id: Date.now() + Math.random(),
-                        name: metadata.title,
-                        artist: metadata.artist,
-                        album: metadata.album || 'Unknown Album',
-                        year: metadata.year,
-                        albumArt: metadata.albumArt,
-                        trackNumber: metadata.trackNumber,
-                        lyrics: metadata.lyrics,
-                        lrcData: metadata.lrcData,
-                        storage: storageType,
-                        handleName: storageType === 'filesystem' ? fileHandleOrFile.name : file.name,
-                        dateAdded: Date.now()
-                    });
-                } catch (error) {
-                    console.error("Could not process file:", fileHandleOrFile.name, error);
-                }
+async function addSongs(files, storageType) {
+    const newSongs = [];
+    const songFilesToStore = []; // Only for legacy fallback
+
+    for (let fileHandleOrFile of files) {
+        try {
+            const file = storageType === 'filesystem' ? await fileHandleOrFile.getFile() : fileHandleOrFile;
+            if (!isAudioFile(file)) continue;
+
+            const metadata = await extractMetadata(file);
+            const newSongId = Date.now() + Math.random();
+
+            newSongs.push({
+                id: newSongId,
+                name: metadata.title,
+                artist: metadata.artist,
+                album: metadata.album,
+                storage: storageType,
+                handleName: file.name,
+                dateAdded: Date.now(),
+                // ... other metadata
+                year: metadata.year,
+                albumArt: metadata.albumArt,
+                trackNumber: metadata.trackNumber,
+                lyrics: metadata.lyrics,
+                lrcData: metadata.lrcData,
+            });
+
+            // IMPORTANT: Only store the file blob if using the legacy method
+            if (storageType === 'indexeddb') {
+                songFilesToStore.push({ id: newSongId, file: file });
             }
-        
-            if (newSongs.length > 0) {
-                songs.push(...newSongs); // Add all new songs at once
-                await saveSongs();      // Save the complete, updated list
-            }
-            
-            renderSidebar();
+
+        } catch (error) {
+            console.error("Could not process file:", fileHandleOrFile.name, error);
         }
+    }
+
+    if (newSongs.length > 0) {
+        // Add metadata to the main array
+        songs.push(...newSongs);
+        // Save the updated metadata list
+        await saveSongs();
+
+        // If there are any files for the legacy fallback, save them now
+        if (songFilesToStore.length > 0) {
+            const tx = db.transaction(['musicFiles'], 'readwrite');
+            songFilesToStore.forEach(item => tx.objectStore('musicFiles').put(item));
+            await tx.done;
+        }
+    }
+    
+    renderSidebar();
+}
 
 function parseLRC(lrcText) {
     // Guard clause: If there's no text or no timestamps, it's not LRC.
@@ -2008,6 +2028,48 @@ async function saveSongs() {
             resolve();
         };
     });
+}
+
+async function migrateToFSA() {
+    if (!directoryHandle) return; // Cannot migrate without a handle
+
+    const songsToMigrate = songs.filter(s => s.storage === 'indexeddb');
+    if (songsToMigrate.length === 0) {
+        console.log("No songs to migrate.");
+        return;
+    }
+
+    console.log(`Starting migration for ${songsToMigrate.length} songs...`);
+    const blobIdsToDelete = [];
+    let migrationOccurred = false;
+
+    for (const song of songsToMigrate) {
+        try {
+            // Check if the file exists in the user-provided directory
+            await directoryHandle.getFileHandle(song.handleName);
+            // If it exists, we can safely upgrade its status and mark the blob for deletion
+            song.storage = 'filesystem';
+            blobIdsToDelete.push(song.id);
+            migrationOccurred = true;
+            console.log(`Migrated "${song.name}" to File System Access.`);
+        } catch (e) {
+            console.warn(`Could not find "${song.handleName}" in the directory. It will remain in browser storage.`);
+        }
+    }
+
+    // If we successfully migrated at least one song, update the database
+    if (migrationOccurred) {
+        // 1. Delete the now-redundant blobs from the `musicFiles` store
+        const deleteTx = db.transaction('musicFiles', 'readwrite');
+        const fileStore = deleteTx.objectStore('musicFiles');
+        blobIdsToDelete.forEach(id => fileStore.delete(id));
+        await deleteTx.done;
+        
+        // 2. Save the updated metadata with the new 'filesystem' storage type
+        await saveSongs();
+
+        alert(`Successfully migrated ${blobIdsToDelete.length} songs to use direct file access, freeing up browser storage!`);
+    }
 }
 
 function initializeShards() {
@@ -2605,25 +2667,27 @@ async function playSong(song, isTransition = false) {
         async function deleteSong(songId) {
             const songIndex = songs.findIndex(s => s.id === songIdToDelete);
             if (songIndex === -1) return;
-
+        
             const songToDelete = songs[songIndex];
-
-            // If the song was from IndexedDB, remove its file data
+        
+            // If the song was a legacy file, remove its data from the dedicated store
             if (songToDelete.storage === 'indexeddb') {
                 const tx = db.transaction('musicFiles', 'readwrite');
                 tx.objectStore('musicFiles').delete(songIdToDelete);
                 await tx.done;
+                console.log("Deleted legacy file blob for:", songToDelete.name);
             }
-
-            // Remove song from main array
+        
+            // Remove the song's metadata from the main array
             songs.splice(songIndex, 1);
             
-            // Save updated song metadata
+            // Save the updated metadata list
             await saveSongs();
-
+        
             // Handle player state
             if (songIdToDelete === currentSongId) {
-                playNextSong(); // This will either play the next song or reset the player
+                // This will either play the next song or reset the player if the queue is empty
+                playNextSong(); 
             } else {
                 // If we deleted a different song, just rebuild the queue
                 updatePlayQueue();
@@ -3017,71 +3081,57 @@ window.addEventListener("beforeunload", () => {
     }
 });
 
-        window.addEventListener("load", async () => {
-            try {
-                await initDB();
+window.addEventListener("load", async () => {
+    try {
+        await initDB();
+        initModalVariables();
 
-                // Initialize all modal variables
-                initModalVariables();
-
-                // --- Persistent Permissions & Handle Verification ---
-                if ('showDirectoryPicker' in window) {
-                    const tx = db.transaction('config', 'readonly');
-                    const handleReq = tx.objectStore('config').get('directoryHandle');
-                    const configResult = await new Promise(r => { handleReq.onsuccess = () => r(handleReq.result) });
-                    
-                    if (configResult) {
-                        // This is the key to persistence: we MUST request permission again on the stored handle.
-                        if (await verifyPermission(configResult.value, true)) { // Pass true to request, not just query
-                            console.log("Successfully re-acquired permission for directory handle.");
-                            directoryHandle = configResult.value;
-                        } else {
-                            console.log("User denied re-acquiring permission. Handle is invalid for this session.");
-                            directoryHandle = null; // Invalidate the handle if permission is denied
-                        }
-                    }
+        if ('showDirectoryPicker' in window) {
+            const tx = db.transaction('config', 'readonly');
+            const handleReq = tx.objectStore('config').get('directoryHandle');
+            const configResult = await new Promise(r => { handleReq.onsuccess = () => r(handleReq.result) });
+            
+            if (configResult) {
+                if (await verifyPermission(configResult.value, true)) {
+                    directoryHandle = configResult.value;
+                } else {
+                    directoryHandle = null;
                 }
-
-                await loadSongsAndPlaylists();
-
-                // --- FIXED RESUME LOGIC ---
-                const savedData = localStorage.getItem("currentSong");
-                if (!savedData) {
-                    renderSidebar();
-                    return;
-                }
-                
-                const { id, progress } = JSON.parse(savedData);
-                if (!id) {
-                     renderSidebar();
-                     return;
-                }
-
-                const song = songs.find(s => s.id === id);
-                if (song && directoryHandle) { // Only resume if we have a valid handle
-                    // Update UI immediately and correctly
-                    updatePlayerUI(song, progress);
-                    currentSongId = song.id;
-                    updatePlayQueue();
-
-                    // Set up the audio player source to be ready
-                    const fileUrl = await getSongFileUrl(song);
-                    if (fileUrl) {
-                        audioPlayer.src = fileUrl;
-                        audioPlayer.load(); // Important to load the metadata
-                        audioPlayer.onloadedmetadata = () => {
-                             audioPlayer.currentTime = progress || 0;
-                             updateTimeDisplays(); // Update time displays once metadata is loaded
-                             audioPlayer.onloadedmetadata = null;
-                        };
-                    }
-                }
-                renderSidebar();
-            } catch (error) {
-                console.error('Error on application load:', error);
-                renderSidebar(); // Still try to render the UI on error
             }
-        });
+        }
+
+        // Load all metadata from the database
+        await loadSongsAndPlaylists();
+
+        // **NEW**: Run the migration to clean up old blobs
+        await migrateToFSA();
+
+        // Resume functionality
+        const savedData = localStorage.getItem("currentSong");
+        if (savedData) {
+            const { id, progress } = JSON.parse(savedData);
+            const song = songs.find(s => s.id === id);
+            if (song && directoryHandle) {
+                updatePlayerUI(song);
+                currentSongId = song.id;
+                updatePlayQueue();
+                const fileUrl = await getSongFileUrl(song);
+                if (fileUrl) {
+                    audioPlayer.src = fileUrl;
+                    audioPlayer.load();
+                    audioPlayer.onloadedmetadata = () => {
+                         audioPlayer.currentTime = progress || 0;
+                         updateTimeDisplays();
+                         audioPlayer.onloadedmetadata = null;
+                    };
+                }
+            }
+        }
+        renderSidebar();
+    } catch (error) {
+        console.error('Critical error on application load:', error);
+    }
+});
 
         function initModalVariables() {
             editModal = document.getElementById('editModal');
