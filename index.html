@@ -2124,7 +2124,7 @@ function initVisualizer() {
         analyser.getByteFrequencyData(dataArray);
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const gap = 6;
+        const gap = 3;
         const totalGaps = (numBars - 1) * gap;
         const barWidth = (canvas.width - totalGaps) / numBars;
         const pillRadius = barWidth / 2;
