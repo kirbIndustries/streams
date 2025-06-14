@@ -1096,7 +1096,7 @@
     <script>
         const musicList = document.querySelector('.music-list');
         const musicUpload = document.getElementById('musicUpload');
-        const audioPlayer = new Audio();
+        const audioPlayer = new Audio();f
         const playPauseBtn = document.getElementById('playPauseBtn');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
@@ -1113,9 +1113,9 @@
         const body = document.body;
         const menuBtn = document.createElement('button');
         const storedLightMode = localStorage.getItem('theme') || 'dark';
-        const shardContainer = document.getElementById('distortion-container');
         
-        let shards = []; // This will hold the state of our moving parts
+        let shardContainer; 
+        let shards = [];
         let songs = JSON.parse(localStorage.getItem('songs')) || [];
         let currentSongId = null;
         let db;
@@ -2225,7 +2225,6 @@ function initVisualizer() {
         if (beatCooldown > 0) beatCooldown--;
     }
     
-    initializeShards();
     draw();
     isVisualizerInitialized = true;
 }
@@ -3127,6 +3126,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => renderSidebar(), 300); // Re-render with search
+        });
+
+        shardContainer = document.getElementById('distortion-container');
+        initializeShards(); 
+        
+        await initDB();
+        searchInput = document.getElementById('searchInput');
+        
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => renderSidebar(), 300);
         });
 
         // Setup filter buttons
