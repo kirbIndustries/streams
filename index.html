@@ -665,8 +665,6 @@
         
         .search-container {
             position: relative;
-            margin-bottom: 10px;
-            margin-top: 10px;
         }
         
         .search-input {
@@ -996,13 +994,15 @@
     <div class="sidebar">
         <h1 class="sidebar-title">Library</h1>
         <div class="search-container">
-            <span class="material-symbols-rounded search-icon">search</span>
-            <input type="text" id="searchInput" placeholder="Search" class="search-input">
-        </div>
-        <div class="filter-container">
-            <button class="filter-btn active" data-filter="albums">Albums</button>
-            <button class="filter-btn" data-filter="artists">Artists</button>
-            <button class="filter-btn" data-filter="songs">Songs</button>
+            <div style="position: relative; margin-bottom: 10px;">      
+                <span class="material-symbols-rounded search-icon">search</span>
+                <input type="text" id="searchInput" placeholder="Search" class="search-input">
+            </div>
+            <div class="filter-container" style="display: block;">
+                <button class="filter-btn active" data-filter="albums">Albums</button>
+                <button class="filter-btn" data-filter="artists">Artists</button>
+                <button class="filter-btn" data-filter="songs">Songs</button>
+            </div>
         </div>
         <div class="music-list"></div>
         <label class="upload-btn">
