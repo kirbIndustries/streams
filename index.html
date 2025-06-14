@@ -663,6 +663,27 @@
                 transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
             }
         }
+
+        .background-distort-sharp {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 150%;
+            height: 150%;
+            background-position: center;
+            background-size: cover;
+            /* This filter ONLY distorts, it does not blur */
+            filter: url(#albumArtDistortion);
+            z-index: -9998; /* Sits above the blur but below content */
+            transform: translate(-50%, -50%) scale(1.42);
+            opacity: 1;
+            transition: background-image 0.5s ease;
+        }
+        
+        body.light-theme .background-distort-sharp {
+            /* Adjust opacity for light mode if desired */
+            opacity: 0.8;
+        }
         
         .search-container {
             position: relative;
@@ -1010,6 +1031,7 @@
     </svg>
     <div class="background-container">
         <div class="background-blur"></div>
+        <div class="background-distort-sharp"></div> 
     </div>
     <div class="sidebar">
         <h1 class="sidebar-title">Library</h1>
@@ -1104,6 +1126,8 @@
         const body = document.body;
         const menuBtn = document.createElement('button');
         const storedLightMode = localStorage.getItem('theme') || 'dark';
+        // Add this with your other variable declarations
+        const backgroundDistortSharp = document.querySelector('.background-distort-sharp');
 
         let songs = JSON.parse(localStorage.getItem('songs')) || [];
         let currentSongId = null;
@@ -1555,6 +1579,7 @@ function loadAndPlaySong(song) {
             const backgroundElement = document.querySelector('.background-blur');
             backgroundElement.classList.add('changing');
             backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+            backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
             albumArtImg.src = song.albumArt;
             
             // Update favicon
@@ -1806,6 +1831,7 @@ function setUpSongPlayback(song) {
     const backgroundElement = document.querySelector('.background-blur');
     backgroundElement.classList.add('changing');
     backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+    backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
     albumArtImg.src = song.albumArt;
     
     // Update favicon
@@ -1850,6 +1876,7 @@ async function loadSong(song) {
             const backgroundElement = document.querySelector('.background-blur');
             backgroundElement.classList.add('changing');
             backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+            backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
             albumArtImg.src = song.albumArt;
             
             // Update favicon
@@ -2123,16 +2150,16 @@ function initVisualizer() {
     }
 
     analyser.fftSize = 32;
-    analyser.smoothingTimeConstant = 0.85;
+    analyser.smoothingTimeConstant = 0.88; // More smoothing
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
     const turbulenceFilter = document.getElementById('turbulence');
 
-    const baselineDistortion = 25; // A higher baseline for a constant wavy look
-    const peakDistortion = 100;    // The spike on beat
-    const decayFactor = 0.95;     
+    const baselineDistortion = 30; // Higher baseline for constant distortion
+    const peakDistortion = 120;
+    const decayFactor = 0.96;
     let currentDistortion = baselineDistortion;
 
     let beatCooldown = 0;
@@ -2145,40 +2172,31 @@ function initVisualizer() {
 
     function draw() {
         requestAnimationFrame(draw);
-
         analyser.getByteFrequencyData(dataArray);
 
-        // --- Beat Detection & Wavy Logic ---
-        const bassEnergy = dataArray[1] + dataArray[2]; // Focus on low-end
+        const bassEnergy = dataArray[1] + dataArray[2];
         let wavyFrequencyX, wavyFrequencyY;
 
-        if (bassEnergy > lastBassEnergy * 1.18 && beatCooldown === 0) {
-            // BEAT DETECTED: Spike distortion and drastically change the waves
+        if (bassEnergy > lastBassEnergy * 1.20 && beatCooldown === 0) {
+            // BEAT DETECTED: Spike distortion and SHIFT the waves
             currentDistortion = peakDistortion;
-            turbulenceFilter.setAttribute('seed', Math.random() * 200);
-            
-            // On a beat, make the waves tighter and more chaotic
-            wavyFrequencyX = 0.05 + Math.random() * 0.04;
-            wavyFrequencyY = 0.04 + Math.random() * 0.03;
-            
-            beatCooldown = 15;
-        } else {
-            // BETWEEN BEATS: Create the constant, slow, random "wavy" motion
-            const time = Date.now() / 2000; // Slow down the animation
-            wavyFrequencyX = 0.01 + Math.sin(time * 0.8) * 0.005;
-            wavyFrequencyY = 0.02 + Math.cos(time * 0.6) * 0.008;
+            turbulenceFilter.setAttribute('seed', Math.random() * 500); // Drastically change pattern
+            beatCooldown = 18;
         }
 
-        // Apply the calculated properties
-        turbulenceFilter.setAttribute('baseFrequency', `${wavyFrequencyX} ${wavyFrequencyY}`);
+        // Always smoothly return to the baseline distortion
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
+
+        // ALWAYS ON: Create large, slow, curvy, random waves
+        const time = Date.now() / 4000; // Much slower animation
+        wavyFrequencyX = 0.005 + Math.sin(time * 0.7) * 0.003;
+        wavyFrequencyY = 0.008 + Math.cos(time * 0.5) * 0.004;
+        turbulenceFilter.setAttribute('baseFrequency', `${wavyFrequencyX} ${wavyFrequencyY}`);
         
-        // --- Bar Visualizer Logic (Unchanged) ---
-        if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-            canvas.width = canvas.clientWidth;
-            canvas.height = canvas.clientHeight;
-        }
+        // Bar Visualizer Logic...
+        if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
+        if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
         
         const gap = 2;
@@ -2191,7 +2209,6 @@ function initVisualizer() {
         for (let i = 0; i < numBars; i++) {
             const barHeight = Math.pow(dataArray[barIndices[i]] / 255, 2.5) * canvas.height * 0.9;
             if (barHeight < barWidth) continue;
-            
             const y = (canvas.height - barHeight) / 2;
             canvasCtx.fillStyle = textColor;
             canvasCtx.beginPath();
