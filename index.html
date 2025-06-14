@@ -1257,7 +1257,7 @@
         
         let shardContainer; 
         let shards = [];
-        let songs = JSON.parse(localStorage.getItem('songs')) || [];
+        let songs = [];
         let currentSongId = null;
         let db;
         let directoryHandle = null; // For File System Access API
@@ -3217,16 +3217,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                 addSongs(e.target.files, 'indexeddb');
             }
         });
-
+        
         async function processDirectory(handle) {
             const filesToAdd = [];
+            const existingSongNames = new Set(songs.map(s => s.handleName));
+
             for await (const entry of handle.values()) {
                 if (entry.kind === 'file' && isAudioFile({ name: entry.name })) {
-                    filesToAdd.push(entry);
+                    // Only add the song if it's not already in our library
+                    if (!existingSongNames.has(entry.name)) {
+                        filesToAdd.push(entry);
+                    }
                 }
             }
+
             if (filesToAdd.length > 0) {
+                console.log(`Found ${filesToAdd.length} new songs to add.`);
                 await addSongs(filesToAdd, 'filesystem');
+            } else {
+                console.log('No new songs found in the selected directory.');
             }
         }
 
@@ -3250,13 +3259,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             sleepTimerModal.style.display = 'none';
         }
-
-                async function loadSongsAndPlaylists() {
+        
+        async function loadSongsAndPlaylists() {
             const songTx = db.transaction('songs', 'readonly');
-            songs = await songTx.objectStore('songs').getAll();
-            
+            const loadedSongs = await songTx.objectStore('songs').getAll();
+            // Ensure 'songs' is always an array, even if the DB returns something unexpected.
+            songs = Array.isArray(loadedSongs) ? loadedSongs : [];
+        
             const playlistTx = db.transaction('playlists', 'readonly');
-            playlists = await playlistTx.objectStore('playlists').getAll();
+            const loadedPlaylists = await playlistTx.objectStore('playlists').getAll();
+            // Ensure 'playlists' is always an array.
+            playlists = Array.isArray(loadedPlaylists) ? loadedPlaylists : [];
             
             console.log('Loaded songs and playlists.');
         }
