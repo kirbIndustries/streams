@@ -990,12 +990,12 @@
 <body>
     <svg style="position: absolute; width: 0; height: 0;">
         <filter id="albumArtDistortion">
-            <!-- Use 'turbulence' for a wavy, liquid look. Higher octaves add detail. -->
+            <!-- numOctaves="1" is crucial for large, soft, non-detailed waves -->
             <feTurbulence 
                 id="turbulence"
                 type="turbulence" 
-                baseFrequency="0.01 0.04" 
-                numOctaves="3" 
+                baseFrequency="0.01 0.01" 
+                numOctaves="1" 
                 seed="0"
             />
             <feDisplacementMap 
@@ -2110,6 +2110,7 @@ async function saveSongs() {
   });
 }
 
+// Replace your entire initVisualizer function with this one
 function initVisualizer() {
     if (isVisualizerInitialized) return;
 
@@ -2123,16 +2124,16 @@ function initVisualizer() {
     }
 
     analyser.fftSize = 32;
-    analyser.smoothingTimeConstant = 0.88;
+    analyser.smoothingTimeConstant = 0.85;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
     const turbulenceFilter = document.getElementById('turbulence');
 
-    // --- RETUNED DISTORTION ---
-    const baselineDistortion = 40; // Higher baseline for a constant wavy look
-    const peakDistortion = 110;    // A strong but not overpowering peak
+    // --- NEW, BOLDER PARAMETERS ---
+    const baselineDistortion = 80;   // High baseline for a very noticeable constant warp
+    const peakDistortion = 150;      // A powerful peak
     const decayFactor = 0.96;     
     let currentDistortion = baselineDistortion;
 
@@ -2148,31 +2149,27 @@ function initVisualizer() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        // --- Beat Detection & Wave Logic ---
-        const bassEnergy = dataArray[1] + dataArray[2];
-        if (bassEnergy > lastBassEnergy * 1.18 && beatCooldown === 0 && bassEnergy > 100) {
-            // BEAT DETECTED: Spike distortion and SHIFT the waves
+        const bassEnergy = (dataArray[0] * 1.1 + dataArray[1]) / 2;
+        if (bassEnergy > lastBassEnergy * 1.18 && beatCooldown === 0 && bassEnergy > 90) {
+            // BEAT DETECTED: Spike distortion
             currentDistortion = peakDistortion;
-            turbulenceFilter.setAttribute('seed', Math.random() * 500); // Drastically change pattern
-            beatCooldown = 18;
+            beatCooldown = 20; 
         }
 
+        // --- THE KEY FIX for Large, Curvy, Random Waves ---
+        // Animate the 'seed' to make the waves shift and change shape constantly
+        turbulenceFilter.setAttribute('seed', Date.now() / 15);
+
+        // Always smoothly return to the baseline distortion
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
-
-        // --- THE KEY FIX for Large, Curvy, Random Waves ---
-        // Use very low frequencies for the turbulence to make the waves large and slow.
-        const time = Date.now() / 8000; // Much, much slower animation time
-        const wavyFrequencyX = 0.002 + Math.sin(time * 0.7) * 0.001;
-        const wavyFrequencyY = 0.005 + Math.cos(time * 0.4) * 0.002;
-        turbulenceFilter.setAttribute('baseFrequency', `${wavyFrequencyX} ${wavyFrequencyY}`);
         
         // --- Bar Visualizer Logic (Unchanged) ---
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
         
-        const gap = 2;
+        const gap = 3;
         const barWidth = (canvas.width - (numBars - 1) * gap) / numBars;
         const pillRadius = barWidth / 2;
         const style = getComputedStyle(document.body);
