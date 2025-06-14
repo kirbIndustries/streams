@@ -1237,6 +1237,17 @@
             </div>
         </div>
     </div>
+    
+    <!-- Equalizer Modal -->
+    <div id="equalizerModal" style="display: none; position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+            <h2 style="margin-bottom: 20px;">Equalizer</h2>
+            <p style="text-align: center; color: var(--secondary-text-color);">Equalizer controls will be available here in a future update.</p>
+            <div style="display: flex; justify-content: flex-end; margin-top: 25px;">
+                <button id="closeEqModal" class="filter-btn active">Close</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const musicList = document.querySelector('.music-list');
@@ -1284,7 +1295,7 @@
         let isVisualizerInitialized = false;
         let source;
         let currentFilter = 'albums'; // 'albums', 'artists', 'songs'
-        let editModal, editSongId, editTitle, editArtist, editAlbum, saveEdit, cancelEdit;
+        let editModal, editSongId, editTitle, editArtist, editAlbum, saveEdit, cancelEdit, equalizerModal;
         let crossfadeEnabled = false;
         let sleepTimerId = null;
         let playlists = [];
@@ -1853,43 +1864,37 @@ async function extractMetadata(file) {
 }
         
         async function addSongs(files, storageType) {
+            const newSongs = [];
             for (let fileHandleOrFile of files) {
-                const file = storageType === 'filesystem' ? await fileHandleOrFile.getFile() : fileHandleOrFile;
-                
-                if (!isAudioFile(file)) {
-                    console.log(`Skipping non-audio file: ${file.name}`);
-                    continue;
+                try {
+                    const file = storageType === 'filesystem' ? await fileHandleOrFile.getFile() : fileHandleOrFile;
+                    if (!isAudioFile(file)) continue;
+        
+                    const metadata = await extractMetadata(file);
+                    newSongs.push({
+                        id: Date.now() + Math.random(),
+                        name: metadata.title,
+                        artist: metadata.artist,
+                        album: metadata.album || 'Unknown Album',
+                        year: metadata.year,
+                        albumArt: metadata.albumArt,
+                        trackNumber: metadata.trackNumber,
+                        lyrics: metadata.lyrics,
+                        lrcData: metadata.lrcData,
+                        storage: storageType,
+                        handleName: storageType === 'filesystem' ? fileHandleOrFile.name : file.name,
+                        dateAdded: Date.now()
+                    });
+                } catch (error) {
+                    console.error("Could not process file:", fileHandleOrFile.name, error);
                 }
-
-                const metadata = await extractMetadata(file);
-                const timestamp = Date.now();
-
-                const song = {
-                    id: timestamp + Math.random(),
-                    name: metadata.title,
-                    artist: metadata.artist,
-                    album: metadata.album || 'Unknown Album',
-                    year: metadata.year,
-                    albumArt: metadata.albumArt,
-                    trackNumber: metadata.trackNumber,
-                    lyrics: metadata.lyrics,
-                    lrcData: metadata.lrcData,
-                    storage: storageType, // 'filesystem' or 'indexeddb'
-                    handleName: storageType === 'filesystem' ? fileHandleOrFile.name : file.name,
-                    dateAdded: timestamp
-                };
-                
-                // If using fallback, store the file blob in IndexedDB
-                if (storageType === 'indexeddb') {
-                    const tx = db.transaction(['musicFiles'], 'readwrite');
-                    tx.objectStore('musicFiles').put({ id: song.id, file: file });
-                    await tx.done;
-                }
-                
-                songs.push(song);
+            }
+        
+            if (newSongs.length > 0) {
+                songs.push(...newSongs); // Add all new songs at once
+                await saveSongs();      // Save the complete, updated list
             }
             
-            await saveSongs(); // This now just saves the metadata array
             renderSidebar();
         }
 
@@ -1975,36 +1980,34 @@ async function loadSongsFromStorage() {
 }
   
 async function saveSongs() {
-  const transaction = db.transaction(['songs'], 'readwrite');
-  const store = transaction.objectStore('songs');
-  
-  return new Promise((resolve, reject) => {
-    transaction.onerror = () => reject(transaction.error);
+    const transaction = db.transaction(['songs'], 'readwrite');
+    const store = transaction.objectStore('songs');
     
-    const clearRequest = store.clear();
-    clearRequest.onsuccess = () => {
-      songs.forEach(song => {
-        store.add({
-          id: song.id,
-          name: song.name,
-          artist: song.artist,
-          album: song.album,
-          year: song.year,
-          albumArt: song.albumArt,
-          trackNumber: song.trackNumber,
-          lyrics: song.lyrics,
-          albumOrder: song.albumOrder,
-          type: song.type,
-          dateAdded: song.dateAdded
-        });
-      });
-    };
-    
-    transaction.oncomplete = () => {
-      console.log('Songs saved with new order');
-      resolve();
-    };
-  });
+    return new Promise((resolve, reject) => {
+        transaction.onerror = (event) => {
+            console.error("Transaction error while saving songs:", event.target.error);
+            reject(event.target.error);
+        }
+        
+        const clearRequest = store.clear();
+        clearRequest.onsuccess = () => {
+            songs.forEach(song => {
+                // Create a clean object to avoid IndexedDB cloning errors with complex properties
+                const songToStore = {
+                    id: song.id, name: song.name, artist: song.artist, album: song.album,
+                    year: song.year, albumArt: song.albumArt, trackNumber: song.trackNumber,
+                    lyrics: song.lyrics, lrcData: song.lrcData, storage: song.storage,
+                    handleName: song.handleName, dateAdded: song.dateAdded
+                };
+                store.add(songToStore);
+            });
+        };
+        
+        transaction.oncomplete = () => {
+            console.log(`Songs saved. Total count: ${songs.length}`);
+            resolve();
+        };
+    });
 }
 
 function initializeShards() {
@@ -2583,7 +2586,7 @@ async function playSong(song, isTransition = false) {
                  moreOptionsMenu.classList.remove('visible');
             });
             document.getElementById('menuEqualizer').addEventListener('click', () => {
-                alert('Equalizer feature coming soon!');
+                equalizerModal.style.display = 'flex';
                 moreOptionsMenu.classList.remove('visible');
             });
 
@@ -3021,18 +3024,20 @@ window.addEventListener("beforeunload", () => {
                 // Initialize all modal variables
                 initModalVariables();
 
-                // --- ROBUST FILE SYSTEM API & PERMISSION LOGIC ---
+                // --- Persistent Permissions & Handle Verification ---
                 if ('showDirectoryPicker' in window) {
                     const tx = db.transaction('config', 'readonly');
                     const handleReq = tx.objectStore('config').get('directoryHandle');
                     const configResult = await new Promise(r => { handleReq.onsuccess = () => r(handleReq.result) });
                     
                     if (configResult) {
-                        if (await verifyPermission(configResult.value)) {
-                            console.log("Permission already granted. Restoring directory handle.");
+                        // This is the key to persistence: we MUST request permission again on the stored handle.
+                        if (await verifyPermission(configResult.value, true)) { // Pass true to request, not just query
+                            console.log("Successfully re-acquired permission for directory handle.");
                             directoryHandle = configResult.value;
                         } else {
-                            console.log("Permission for directory handle was lost or never granted.");
+                            console.log("User denied re-acquiring permission. Handle is invalid for this session.");
+                            directoryHandle = null; // Invalidate the handle if permission is denied
                         }
                     }
                 }
@@ -3095,17 +3100,19 @@ window.addEventListener("beforeunload", () => {
             playlistModal = document.getElementById('playlistModal');
             document.getElementById('closePlaylistModal').addEventListener('click', () => playlistModal.style.display = 'none');
             document.getElementById('createPlaylistBtn').addEventListener('click', createPlaylistAndAddSong);
+
+            equalizerModal = document.getElementById('equalizerModal');
+            document.getElementById('closeEqModal').addEventListener('click', () => equalizerModal.style.display = 'none');
         }
 
-        async function verifyPermission(handle) {
+        async function verifyPermission(handle, shouldRequest = false) {
             const options = { mode: 'read' };
-            if ((await handle.queryPermission(options)) === 'granted') {
-                return true;
+            if (shouldRequest) {
+                // Requesting permission is the key to triggering the new persistent prompt.
+                return await handle.requestPermission(options) === 'granted';
             }
-            if ((await handle.requestPermission(options)) === 'granted') {
-                return true;
-            }
-            return false;
+            // Otherwise, just check the current status without a prompt.
+            return await handle.queryPermission(options) === 'granted';
         }
 
         function updatePlayerUI(song, progress = 0) {
@@ -3406,22 +3413,43 @@ document.addEventListener('DOMContentLoaded', async () => {
         async function createPlaylistAndAddSong() {
             const newName = document.getElementById('newPlaylistName').value.trim();
             if (!newName) return;
-
+        
+            if (!currentSongId) {
+                alert("Please play a song before creating a playlist.");
+                return;
+            }
+        
             const newPlaylist = { name: newName, songIds: [currentSongId] };
             
-            const tx = db.transaction('playlists', 'readwrite');
-            const newId = await tx.objectStore('playlists').add(newPlaylist);
-            await tx.done;
-
-            playlists.push({ ...newPlaylist, id: newId });
-            document.getElementById('newPlaylistName').value = '';
-            playlistModal.style.display = 'none';
-            alert(`Added to new playlist "${newName}"`);
+            try {
+                const tx = db.transaction('playlists', 'readwrite');
+                const store = tx.objectStore('playlists');
+                const request = store.add(newPlaylist);
+        
+                await new Promise((resolve, reject) => {
+                    request.onerror = () => reject(request.error);
+                    tx.oncomplete = () => {
+                        newPlaylist.id = request.result; // Get the auto-incremented ID
+                        resolve();
+                    };
+                    tx.onerror = () => reject(tx.error);
+                });
+        
+                playlists.push(newPlaylist);
+                document.getElementById('newPlaylistName').value = '';
+                playlistModal.style.display = 'none';
+                alert(`Added "${songs.find(s=>s.id === currentSongId).name}" to new playlist "${newName}"`);
+                renderSidebar(); // Re-render to show the new playlist
+        
+            } catch (error) {
+                console.error("Failed to create playlist:", error);
+                alert("Error creating playlist. See console for details.");
+            }
         }
 
         async function addSongToPlaylist(playlistId) {
             const playlist = playlists.find(p => p.id === playlistId);
-            if (!playlist) return;
+            if (!playlist || !currentSongId) return;
             
             if (!playlist.songIds.includes(currentSongId)) {
                 playlist.songIds.push(currentSongId);
