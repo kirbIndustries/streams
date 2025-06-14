@@ -2121,7 +2121,7 @@ function initVisualizer() {
 
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.88;
-    const bufferLength = analyser.frequencyBinCount;
+    const bufferLength = analyser.frequencyBinCount; // Will be 1024
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
@@ -2139,13 +2139,15 @@ function initVisualizer() {
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
     const numBars = 6;
-    const barIndices = [1, 3, 5, 7, 9, 11];
+    // --- UPDATED: Indices adjusted for 2048 fftSize to cover a wider frequency range ---
+    // These indices now sample from bass, low-mids, mids, upper-mids, presence, and brilliance ranges.
+    const barIndices = [2, 10, 30, 100, 200, 400];
 
     function draw() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        // --- Beat Detection ---
+        // --- Beat Detection (targets the lowest bass frequencies, remains effective) ---
         const bassEnergy = (dataArray[0] + dataArray[1]) / 2;
         if (bassEnergy > lastBassEnergy * 1.16 && beatCooldown === 0 && bassEnergy > 110) {
             currentDistortion = peakDistortion;
@@ -2165,7 +2167,6 @@ function initVisualizer() {
         });
 
         // --- Constant Liquid Wave Animation ---
-        // Animate the 'seed' to make the distortion texture itself evolve and warp over time.
         turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
         // --- Bar Visualizer Logic (Unchanged) ---
@@ -2181,6 +2182,7 @@ function initVisualizer() {
         let x = 0;
 
         for (let i = 0; i < numBars; i++) {
+            // Use the updated barIndices to get data from across the spectrum
             const barHeight = Math.pow(dataArray[barIndices[i]] / 255, 2.5) * canvas.height * 0.9;
             if (barHeight < barWidth) continue;
             const y = (canvas.height - barHeight) / 2;
