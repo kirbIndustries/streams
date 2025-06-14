@@ -2140,9 +2140,13 @@ function initVisualizer() {
     const numBars = 6;
     const barIndices = [2, 10, 30, 100, 200, 400];
     
-    // --- NEW: Sensitivity multipliers to balance the visualizer ---
-    // Higher frequencies naturally have lower energy, so we boost them.
-    const sensitivityMultipliers = [1.0, 1.3, 1.6, 2.2, 2.8, 3.8];
+    // --- UPDATED: Sensitivity multipliers have been significantly reduced for better balance ---
+    const sensitivityMultipliers = [1.0, 1.15, 1.3, 1.5, 1.7, 2.0];
+
+    // --- NEW: A tunable power curve for the bar height ---
+    // Higher values (e.g., 2.5) = more "punchy", sensitive to peaks.
+    // Lower values (e.g., 1.5) = more "smooth" and linear.
+    const powerCurve = 2.2;
 
 
     function draw() {
@@ -2168,7 +2172,6 @@ function initVisualizer() {
 
         turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
-        // --- Bar Visualizer Logic (UPDATED) ---
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2183,33 +2186,29 @@ function initVisualizer() {
         for (let i = 0; i < numBars; i++) {
             const x = i * (barWidth + gap);
 
-            // Apply sensitivity multiplier and clamp the value to the 0-255 range
             const value = Math.min(dataArray[barIndices[i]] * sensitivityMultipliers[i], 255);
-            const barHeight = Math.pow(value / 255, 2.5) * canvas.height * 0.9;
             
-            // --- NEW: Draw a dot for small bars, a full bar for large ones ---
+            // Use the new powerCurve variable here
+            const barHeight = Math.pow(value / 255, powerCurve) * canvas.height * 0.9;
+            
             if (barHeight < barWidth) {
-                // If the bar is shorter than its own width, draw it as a circle (dot).
-                // The dot's radius and opacity are based on its height for a smooth transition.
                 const dotRadius = barHeight / 2;
-                if (dotRadius < 1) continue; // Don't draw if it's invisibly small
+                if (dotRadius < 1) continue;
 
-                canvasCtx.globalAlpha = barHeight / barWidth; // Fade in opacity
+                canvasCtx.globalAlpha = barHeight / barWidth;
                 canvasCtx.beginPath();
                 canvasCtx.arc(x + barWidth / 2, canvas.height / 2, dotRadius, 0, 2 * Math.PI);
                 canvasCtx.fill();
 
             } else {
-                // Otherwise, draw the standard pill-shaped bar.
                 const y = (canvas.height - barHeight) / 2;
                 const pillRadius = barWidth / 2;
-                canvasCtx.globalAlpha = 1.0; // Ensure it's fully opaque
+                canvasCtx.globalAlpha = 1.0;
                 canvasCtx.beginPath();
                 canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
                 canvasCtx.fill();
             }
         }
-        // Reset global alpha to avoid affecting other canvas drawings if any
         canvasCtx.globalAlpha = 1.0; 
 
         lastBassEnergy = bassEnergy;
