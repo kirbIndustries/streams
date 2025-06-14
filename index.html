@@ -2057,7 +2057,7 @@ async function migrateToFSA() {
     for (const song of songsToMigrate) {
         try {
             // Check if the file exists in the user-provided directory
-            await directoryHandle.getFileHandle(song.handleName);
+            await directoryHandles.getFileHandle(song.handleName);
             // If it exists, we can safely upgrade its status and mark the blob for deletion
             song.storage = 'filesystem';
             blobIdsToDelete.push(song.id);
@@ -3220,7 +3220,7 @@ window.addEventListener("load", async () => {
         if (savedData) {
             const { id, progress } = JSON.parse(savedData);
             const song = songs.find(s => s.id === id);
-            if (song && directoryHandle) {
+            if (song && directoryHandles) {
                 updatePlayerUI(song);
                 currentSongId = song.id;
                 updatePlayQueue();
