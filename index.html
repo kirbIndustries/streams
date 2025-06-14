@@ -1598,14 +1598,21 @@
         async function handleUpload() {
             if ('showDirectoryPicker' in window) {
                 try {
-                    directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-                    const tx = db.transaction('config', 'readwrite');
-                    await tx.objectStore('config').put({ key: 'directoryHandle', value: directoryHandle });
-                    await processDirectory(directoryHandle);
+                    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                    // After the user clicks and selects, NOW we can verify and use the handle.
+                    if (await verifyPermission(handle)) {
+                        directoryHandle = handle;
+                        const tx = db.transaction('config', 'readwrite');
+                        await tx.objectStore('config').put({ key: 'directoryHandle', value: directoryHandle });
+                        await processDirectory(directoryHandle);
+                    }
                 } catch (err) {
-                    if (err.name !== 'AbortError') console.error('Error selecting directory:', err);
+                    if (err.name !== 'AbortError') {
+                        console.error('Error selecting directory:', err);
+                    }
                 }
             } else {
+                // Fallback for older browsers
                 musicUpload.click();
             }
         }
@@ -1682,8 +1689,13 @@
         
         async function verifyPermission(handle) {
             if (!handle) return false;
-            if ((await handle.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
-            if ((await handle.requestPermission({ mode: 'readwrite' })) === 'granted') return true;
+            // CORRECT: Only CHECK the permission state. DO NOT request it.
+            // The browser will only allow a request after a user click.
+            if ((await handle.queryPermission({ mode: 'readwrite' })) === 'granted') {
+                return true;
+            }
+            // If permission is not 'granted', just return false and wait for the user
+            // to click the "Add" button later.
             return false;
         }
 
