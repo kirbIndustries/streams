@@ -990,18 +990,35 @@
 <body>
     <svg style="position: absolute; width: 0; height: 0;">
         <filter id="albumArtDistortion">
-            <!-- numOctaves="1" is crucial for large, soft, non-detailed waves -->
+            <!-- Layer 1: Large, slow, base waves -->
             <feTurbulence 
-                id="turbulence"
+                id="turbulence1"
                 type="turbulence" 
-                baseFrequency="0.01 0.01" 
+                baseFrequency="0.005 0.009" 
                 numOctaves="1" 
-                seed="0"
+                seed="2"
             />
+    
+            <!-- Layer 2: Smaller, faster, overlaying waves -->
+            <feTurbulence 
+                id="turbulence2"
+                type="turbulence" 
+                baseFrequency="0.03 0.02" 
+                numOctaves="1" 
+                seed="10"
+            />
+            
+            <!-- Combine the two layers -->
+            <feComposite operator="in" in="turbulence1" in2="turbulence2" result="compositedTurbulence" />
+    
+            <!-- THE KEY: Blur the combined distortion map itself to make the warp soft and liquid -->
+            <feGaussianBlur in="compositedTurbulence" stdDeviation="40" result="blurredTurbulence" />
+            
+            <!-- Use the final, smooth, complex map to displace the album art -->
             <feDisplacementMap 
                 id="displacement"
                 in="SourceGraphic" 
-                in2="turbulence" 
+                in2="blurredTurbulence" 
                 scale="0" 
                 xChannelSelector="R" 
                 yChannelSelector="G"
@@ -2110,7 +2127,6 @@ async function saveSongs() {
   });
 }
 
-// Replace your entire initVisualizer function with this one
 function initVisualizer() {
     if (isVisualizerInitialized) return;
 
@@ -2128,13 +2144,15 @@ function initVisualizer() {
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
+    // Get the two new turbulence layers and the displacement map
     const displacementFilter = document.getElementById('displacement');
-    const turbulenceFilter = document.getElementById('turbulence');
+    const turbulence1 = document.getElementById('turbulence1');
+    const turbulence2 = document.getElementById('turbulence2');
 
-    // --- NEW, BOLDER PARAMETERS ---
-    const baselineDistortion = 80;   // High baseline for a very noticeable constant warp
-    const peakDistortion = 150;      // A powerful peak
-    const decayFactor = 0.96;     
+    // Retuned parameters for a more dramatic effect
+    const baselineDistortion = 70;
+    const peakDistortion = 160;
+    const decayFactor = 0.95;     
     let currentDistortion = baselineDistortion;
 
     let beatCooldown = 0;
@@ -2149,18 +2167,24 @@ function initVisualizer() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        const bassEnergy = (dataArray[0] * 1.1 + dataArray[1]) / 2;
-        if (bassEnergy > lastBassEnergy * 1.18 && beatCooldown === 0 && bassEnergy > 90) {
-            // BEAT DETECTED: Spike distortion
+        // --- Beat Detection Logic ---
+        const bassEnergy = (dataArray[0] + dataArray[1]) / 2;
+        if (bassEnergy > lastBassEnergy * 1.15 && beatCooldown === 0 && bassEnergy > 120) {
+            // BEAT: Spike the distortion
             currentDistortion = peakDistortion;
-            beatCooldown = 20; 
+            beatCooldown = 15;
         }
 
-        // --- THE KEY FIX for Large, Curvy, Random Waves ---
-        // Animate the 'seed' to make the waves shift and change shape constantly
-        turbulenceFilter.setAttribute('seed', Date.now() / 15);
-
-        // Always smoothly return to the baseline distortion
+        // --- THE KEY: Animate the two layers independently for rotation and movement ---
+        const time = Date.now();
+        // Layer 1: Animate the 'seed' for a slow, large morphing effect
+        turbulence1.setAttribute('seed', time / 25);
+        // Layer 2: Animate the 'baseFrequency' for a constant, faster "rotating" feel
+        const freqX = 0.03 + Math.sin(time / 800) * 0.01;
+        const freqY = 0.02 + Math.cos(time / 650) * 0.008;
+        turbulence2.setAttribute('baseFrequency', `${freqX} ${freqY}`);
+        
+        // Apply the distortion scale
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
         
@@ -2169,7 +2193,7 @@ function initVisualizer() {
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
         
-        const gap = 3;
+        const gap = 2;
         const barWidth = (canvas.width - (numBars - 1) * gap) / numBars;
         const pillRadius = barWidth / 2;
         const style = getComputedStyle(document.body);
