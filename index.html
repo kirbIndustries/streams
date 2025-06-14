@@ -1524,7 +1524,6 @@ function updateSongsArrayFromDOM() {
   saveSongs();
 }
 
-// Replace this entire function
 function loadAndPlaySong(song) {
     if (!song) return;
     
@@ -1804,14 +1803,12 @@ async function loadSong(song) {
     
     request.onsuccess = (event) => {
         if (request.result && request.result.file) {
-            // Check if it's a valid audio file
             if (!isAudioFile(request.result.file)) {
                 console.error('Invalid audio file type');
-                playNextSong(); // Skip to next song
+                playNextSong();
                 return;
             }
 
-            // Continue with loading the song
             song.url = URL.createObjectURL(request.result.file);
             audioPlayer.src = song.url;
             audioPlayer.currentTime = 0;
@@ -1820,13 +1817,7 @@ async function loadSong(song) {
 
             updateAllBackgrounds(song.albumArt);
             albumArtImg.src = song.albumArt;
-            
-            // Update favicon
             updateFavicon(song.albumArt);
-
-            setTimeout(() => {
-                backgroundElement.classList.remove('changing');
-            }, 500);
 
             currentSongId = song.id;
             playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
@@ -2473,7 +2464,7 @@ function playSong(song) {
       musicTitle.textContent = song.name;
       musicArtist.textContent = song.artist;
       
-      updateAllBackgrounds(song.albumArt); // Use the helper
+      updateAllBackgrounds(song.albumArt);
       albumArtImg.src = song.albumArt;
       updateFavicon(song.albumArt);
       
