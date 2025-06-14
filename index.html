@@ -2042,7 +2042,7 @@ async function saveSongs() {
 }
 
 async function migrateToFSA() {
-    if (!directoryHandle) return; // Cannot migrate without a handle
+    if (!directoryHandles) return; // Cannot migrate without a handle
 
     const songsToMigrate = songs.filter(s => s.storage === 'indexeddb');
     if (songsToMigrate.length === 0) {
