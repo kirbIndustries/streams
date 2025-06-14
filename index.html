@@ -3143,7 +3143,7 @@ window.addEventListener("load", async () => {
             document.getElementById('createPlaylistBtn').addEventListener('click', createPlaylistAndAddSong);
 
             equalizerModal = document.getElementById('equalizerModal');
-            document.getElementById('closeEqModal').addEventListener('click', () => equalizerModal.style.display = 'none');
+            document.getElementById('closeEqModal').addEventListener('click', () => { equalizerModal.style.display = 'none'; });
         }
 
 async function verifyPermission(handle, shouldRequest = false) {
