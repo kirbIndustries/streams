@@ -1176,6 +1176,10 @@
                 <span>Crossfade</span>
                 <span id="crossfadeStatus" style="margin-left: auto; font-size: 0.8em; color: var(--secondary-text-color);">Off</span>
             </div>
+            <div class="menu-item" id="menuEqualizer">
+                <span class="material-symbols-rounded">equalizer</span>
+                <span>Equalizer</span>
+            </div>
             <div class="menu-item" id="menuSleepTimer">
                 <span class="material-symbols-rounded">timer</span>
                 <span>Sleep Timer</span>
@@ -1254,7 +1258,8 @@
         const body = document.body;
         const menuBtn = document.createElement('button');
         const storedLightMode = localStorage.getItem('theme') || 'dark';
-        
+
+        let activePlaylistId = null;
         let shardContainer; 
         let shards = [];
         let songs = [];
@@ -2212,9 +2217,73 @@ function renderSidebar() {
                 default:
                     renderSongs(searchFilteredSongs);
                     break;
+                case 'playlists': // NEW CASE
+                    renderPlaylists();
+                    break;
             }
             break;
     }
+}
+
+function renderPlaylists() {
+    const musicListContainer = document.querySelector('.music-list');
+    musicListContainer.innerHTML = ''; // Clear the list
+
+    if (playlists.length === 0) {
+        musicListContainer.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">playlist_add</span><p>No playlists yet.</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Create one from the "More Options" menu while a song is playing.</p></div>';
+        return;
+    }
+
+    playlists.forEach(playlist => {
+        const playlistSongs = playlist.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+        const albumArt = playlistSongs.length > 0 ? playlistSongs[0].albumArt : generateRandomGradient();
+        
+        const item = document.createElement('div');
+        item.className = 'music-item';
+        item.innerHTML = `
+            <div class="song-info">
+                <img src="${albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
+                <div>
+                    <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${playlist.name}</div>
+                    <div class="album-artist" style="font-size: 0.8em;">${playlistSongs.length} songs</div>
+                </div>
+            </div>`;
+        item.onclick = () => renderPlaylistSongs(playlist.id);
+        musicListContainer.appendChild(item);
+    });
+}
+
+function renderPlaylistSongs(playlistId) {
+    activePlaylistId = playlistId;
+    const playlist = playlists.find(p => p.id === playlistId);
+    if (!playlist) return;
+
+    const musicListContainer = document.querySelector('.music-list');
+    musicListContainer.innerHTML = ''; // Clear list
+
+    addBackButtonToSidebar();
+
+    const playlistSongs = playlist.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+
+    if (playlistSongs.length === 0) {
+        musicListContainer.insertAdjacentHTML('beforeend', '<div class="no-results"><p>This playlist is empty.</p></div>');
+        return;
+    }
+
+    const songsHtml = playlistSongs.map(song => `
+        <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
+            <div class="song-info">
+                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
+                <div>
+                    <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
+                    <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    musicListContainer.insertAdjacentHTML('beforeend', songsHtml);
+    attachSongAndAlbumEventListeners();
 }
 
 function addBackButtonToSidebar() {
@@ -2409,37 +2478,77 @@ function attachSongAndAlbumEventListeners() {
   });
 }
 
-        async function playSong(song, isTransition = false) {
-            if (!isTransition) {
-                audioPlayer.pause();
-            }
-            currentSongId = song.id;
-            updatePlayQueue();
+async function playSong(song, isTransition = false) {
+    if (!song) {
+        console.error("playSong called with an undefined song.");
+        return;
+    }
 
-            const fileUrl = await getSongFileUrl(song);
-            if (!fileUrl) {
-                alert(`Could not find the file for "${song.name}". It may have been moved or deleted.`);
-                return;
-            }
+    if (!isTransition) {
+        audioPlayer.pause();
+    }
 
-            albumArtImg.classList.add('fade-out');
+    try {
+        const fileUrl = await getSongFileUrl(song);
+        if (!fileUrl) {
+            alert(`Could not find the file for "${song.name}". It may have been moved, renamed, or you may need to re-select your music folder.`);
+            return;
+        }
+        
+        currentSongId = song.id;
+        updatePlayQueue();
+
+        // Fade out the old artwork
+        albumArtImg.classList.add('fade-out');
+
+        setTimeout(async () => {
+            updatePlayerUI(song);
             
-            setTimeout(() => {
-                updatePlayerUI(song);
-                
-                if (audioPlayer.src) {
-                    URL.revokeObjectURL(audioPlayer.src);
-                }
-                audioPlayer.src = fileUrl;
+            if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
+                URL.revokeObjectURL(audioPlayer.src);
+            }
+            
+            audioPlayer.src = fileUrl;
+            
+            try {
+                await audioPlayer.play();
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                playPauseBtn.classList.add('playing');
+                if ('mediaSession' in navigator) updateMediaSessionPlaybackState('playing');
+            } catch (e) {
+                console.error('Playback was prevented.', e);
+                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                playPauseBtn.classList.remove('playing');
+            }
+            
+            renderSidebar();
+        }, 200); // Shortened timeout for snappier transitions
 
-                const playPromise = audioPlayer.play();
-                if (playPromise) {
-                    playPromise.then(() => {
-                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                    }).catch(e => console.log('Playback prevented.', e));
+    } catch (error) {
+        console.error("Failed to play song:", song.name, error);
+    }
+}
+
+        async function getSongFileUrl(song) {
+            if (!song) return null;
+            try {
+                if (song.storage === 'filesystem' && directoryHandle) {
+                    const fileHandle = await directoryHandle.getFileHandle(song.handleName);
+                    const file = await fileHandle.getFile();
+                    return URL.createObjectURL(file);
+                } else { // Fallback for legacy IndexedDB files
+                    const tx = db.transaction(['musicFiles'], 'readonly');
+                    const request = tx.objectStore('musicFiles').get(song.id);
+                    const result = await new Promise((resolve, reject) => {
+                        request.onsuccess = () => resolve(request.result);
+                        request.onerror = () => reject(request.error);
+                    });
+                    return result ? URL.createObjectURL(result.file) : null;
                 }
-                renderSidebar();
-            }, 400);
+            } catch (e) {
+                console.error(`Could not get URL for ${song.name}:`, e);
+                return null;
+            }
         }
       
         function attachEventListeners() {
@@ -2472,6 +2581,10 @@ function attachSongAndAlbumEventListeners() {
             document.getElementById('menuAddToPlaylist').addEventListener('click', () => {
                 if (currentSongId) openPlaylistModal();
                  moreOptionsMenu.classList.remove('visible');
+            });
+            document.getElementById('menuEqualizer').addEventListener('click', () => {
+                alert('Equalizer feature coming soon!');
+                moreOptionsMenu.classList.remove('visible');
             });
 
             // Scroll to current song button
@@ -3024,10 +3137,9 @@ audioPlayer.addEventListener('timeupdate', async () => {
 
         // Crossfade logic
         if (crossfadeEnabled && audioPlayer.duration > 0 && audioPlayer.duration - audioPlayer.currentTime < 3) {
-            // Prevent re-triggering
             if (!audioPlayer.isFading) { 
                  audioPlayer.isFading = true;
-                 playNextSong(true); // pass true to indicate a transition
+                 playNextSong(true);
             }
         }
 
@@ -3140,7 +3252,7 @@ audioPlayer.addEventListener('ended', () => {
         playSong(songs.find(s => s.id === currentSongId));
     } else if (!crossfadeEnabled) {
         playNextSong();
-    }f
+    }
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
