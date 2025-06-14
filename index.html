@@ -2101,49 +2101,50 @@ function initVisualizer() {
         analyser.connect(audioContext.destination);
     }
 
-    // Use the minimum fftSize, which gives us 16 data points to choose from.
     analyser.fftSize = 32;
-    const bufferLength = analyser.frequencyBinCount; // This will be 16
+    const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
 
-    // --- FIX: Define the exact number of bars to draw ---
     const numBars = 6;
 
     function draw() {
         requestAnimationFrame(draw);
 
-        analyser.getByteFrequencyData(dataArray); // Get all 16 frequency values
+        analyser.getByteFrequencyData(dataArray);
 
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // --- FIX: Calculate width and gaps based on numBars ---
-        const gap = 4; // The space between bars
+        // --- FIX: Increased padding (gap) for better separation ---
+        const gap = 5; 
         const totalGaps = (numBars - 1) * gap;
         const barWidth = (canvas.width - totalGaps) / numBars;
+        
+        // --- FIX: Calculate radius for a perfect pill shape ---
+        // The radius is exactly half the bar's width.
+        const pillRadius = barWidth / 2;
+        
         let x = 0;
 
         const style = getComputedStyle(document.body);
         const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
 
-        // --- FIX: Cherry-pick 6 specific frequencies to draw ---
-        // These indices are chosen from the 16 available to represent bass and mids.
         const barIndices = [1, 3, 5, 7, 9, 11]; 
 
         for (let i = 0; i < numBars; i++) {
-            const dataIndex = barIndices[i]; // Get the specific frequency data
-            const barHeight = dataArray[dataIndex] / 2.5;
+            const dataIndex = barIndices[i];
+            const barHeight = dataArray[dataIndex] / 2.2; // Slightly increased height
             
-            if (barHeight < 2) continue; // Don't draw tiny bars
+            if (barHeight < 2) continue;
 
             canvasCtx.fillStyle = textColor;
-            const radius = 3;
             const y = (canvas.height - barHeight) / 2;
 
             canvasCtx.beginPath();
-            canvasCtx.roundRect(x, y, barWidth, barHeight, radius);
+            // --- Use the new pillRadius variable ---
+            canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
             canvasCtx.fill();
 
             x += barWidth + gap;
