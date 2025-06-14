@@ -625,39 +625,39 @@
             overflow: hidden;
             z-index: -9999;
         }
-                
-        /* This is the main stage for the effect */
+                        
         #distortion-container {
             position: fixed;
-            inset: 0; /* A modern way to say top/bottom/left/right = 0 */
+            inset: 0;
             overflow: hidden;
             z-index: -9998;
         }
         
-        /* The VERY back layer is just a simple blur */
-        #distortion-container .background-blur {
+        /* The VERY back layer: heavy blur, no distortion */
+        .background-blur {
             width: 100%;
             height: 100%;
             background-size: cover;
             background-position: center;
-            filter: blur(50px) brightness(0.6);
+            filter: blur(60px) brightness(0.6); /* Increased blur */
             transform: scale(1.2);
+            transition: background-image 0.5s ease;
         }
         
         /* Common style for ALL moving shards */
         .distortion-shard {
             position: absolute;
-            /* Make shards much larger than the screen so they can move freely without showing edges */
-            width: 200%;
-            height: 200%;
-            top: -50%;
-            left: -50%;
+            /* FIX: Make shards smaller and more centered to be visible */
+            width: 150%;
+            height: 150%;
+            top: -25%;
+            left: -25%;
             background-size: cover;
             background-position: center;
-            /* Apply the shared distortion filter */
-            filter: url(#albumArtDistortion);
-            /* Performance hint for the browser */
+            /* FIX: The shards themselves MUST be blurred and distorted */
+            filter: blur(25px) brightness(0.9) url(#albumArtDistortion);
             will-change: transform;
+            transition: background-image 0.5s ease;
         }
         
         /* Define the unique organic shapes for each shard */
@@ -997,11 +997,22 @@
 <body>
     <svg style="position: absolute; width: 0; height: 0;">
         <filter id="albumArtDistortion">
-            <feTurbulence id="turbulence1" type="turbulence" baseFrequency="0.005 0.009" numOctaves="1" seed="2"/>
-            <feTurbulence id="turbulence2" type="turbulence" baseFrequency="0.03 0.02" numOctaves="1" seed="10"/>
-            <feComposite operator="in" in="turbulence1" in2="turbulence2" result="compositedTurbulence" />
-            <feGaussianBlur in="compositedTurbulence" stdDeviation="40" result="blurredTurbulence" />
-            <feDisplacementMap id="displacement" in="SourceGraphic" in2="blurredTurbulence" scale="0" xChannelSelector="R" yChannelSelector="G"/>
+            <feTurbulence 
+                id="turbulence"
+                type="turbulence" 
+                baseFrequency="0.01 0.02" 
+                numOctaves="1" 
+                seed="0"
+            />
+            <feGaussianBlur stdDeviation="30" result="blurredTurbulence"/>
+            <feDisplacementMap 
+                id="displacement"
+                in="SourceGraphic" 
+                in2="blurredTurbulence" 
+                scale="0" 
+                xChannelSelector="R" 
+                yChannelSelector="G"
+            />
         </filter>
     </svg>
     
@@ -2097,6 +2108,7 @@ function updateAllBackgrounds(imageUrl) {
     });
 }
 
+// REPLACE your entire initVisualizer function with this one
 function initVisualizer() {
     if (isVisualizerInitialized) return;
 
@@ -2110,19 +2122,21 @@ function initVisualizer() {
     }
 
     analyser.fftSize = 32;
-    analyser.smoothingTimeConstant = 0.85;
+    analyser.smoothingTimeConstant = 0.88;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
+    const turbulenceFilter = document.getElementById('turbulence');
+
+    // --- Retuned for the soft, wavy effect ---
+    const baselineDistortion = 80;
+    const peakDistortion = 150;
+    let currentDistortion = baselineDistortion;
+    const decayFactor = 0.96;     
+
     let beatCooldown = 0;
     let lastBassEnergy = 0;
-
-    // --- Tune the distortion effect ---
-    const baselineDistortion = 60;
-    const peakDistortion = 130;
-    let currentDistortion = baselineDistortion;
-    const decayFactor = 0.95;
 
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
@@ -2134,8 +2148,8 @@ function initVisualizer() {
         analyser.getByteFrequencyData(dataArray);
 
         // --- Beat Detection ---
-        const bassEnergy = dataArray[1] + dataArray[2];
-        if (bassEnergy > lastBassEnergy * 1.18 && beatCooldown === 0 && bassEnergy > 100) {
+        const bassEnergy = (dataArray[0] + dataArray[1]) / 2;
+        if (bassEnergy > lastBassEnergy * 1.16 && beatCooldown === 0 && bassEnergy > 110) {
             currentDistortion = peakDistortion;
             beatCooldown = 20;
         }
@@ -2143,18 +2157,20 @@ function initVisualizer() {
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
         
-        // --- Independent Shard Animation ---
-        const time = Date.now() * 0.0001; // A slow master clock
+        // --- Independent Shard Movement ---
+        const shardTime = Date.now() * 0.00005; // Use a slow clock for shard drifting
         shards.forEach((shard) => {
-            // Update rotation and position based on its unique speeds
             shard.rotation += shard.rotationSpeed;
-            shard.x = Math.sin(time + shard.xDrift) * 20;
-            shard.y = Math.cos(time + shard.yDrift) * 20;
-            
-            // Apply the new transform
+            shard.x = Math.sin(shardTime * shard.xDrift * 10) * 80;
+            shard.y = Math.cos(shardTime * shard.yDrift * 10) * 80;
             shard.element.style.transform = `translate(${shard.x}px, ${shard.y}px) rotate(${shard.rotation}deg)`;
         });
+
+        // --- Constant Liquid Wave Animation ---
+        // Animate the 'seed' to make the distortion texture itself evolve and warp over time.
+        turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
+        // --- Bar Visualizer Logic (Unchanged) ---
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2180,7 +2196,7 @@ function initVisualizer() {
         lastBassEnergy = bassEnergy;
         if (beatCooldown > 0) beatCooldown--;
     }
-    
+
     draw();
     isVisualizerInitialized = true;
 }
