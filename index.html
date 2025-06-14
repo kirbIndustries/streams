@@ -2141,12 +2141,12 @@ function initVisualizer() {
     const barIndices = [2, 10, 30, 100, 200, 400];
     
     // --- UPDATED: Sensitivity multipliers have been significantly reduced for better balance ---
-    const sensitivityMultipliers = [1.0, 1.05, 1.1, 1.15, 1.25, 1.4];
+    const sensitivityMultipliers = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
 
     // --- NEW: A tunable power curve for the bar height ---
     // Higher values (e.g., 2.5) = more "punchy", sensitive to peaks.
     // Lower values (e.g., 1.5) = more "smooth" and linear.
-    const powerCurve = 2.0;
+    const powerCurve = 2.3
 
 
     function draw() {
