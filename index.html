@@ -400,7 +400,13 @@
             font-size: 18px;
         }
 
-        .lyrics-button, .queue-button {
+        #visualizerCanvas {
+            width: 42px;
+            height: 42px;
+            vertical-align: middle;
+        }
+
+        .lyrics-button, .queue-button, .more-button {
             background: var(--search-background);
             border: 1px solid var(--glass-border);
             cursor: pointer;
@@ -693,9 +699,29 @@
             color: var(--secondary-text-color);
             pointer-events: none;
         }
+
+        .filter-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
         
-        .control-btn.active {
-            color: #bdd6ff;
+        .filter-btn {
+            flex-grow: 1;
+            padding: 8px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            background: var(--search-background);
+            color: var(--secondary-text-color);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .filter-btn.active {
+            background: var(--modal-background);
+            color: var(--text-color);
+            font-weight: 600;
         }
         
         #shuffleBtn, #repeatBtn {
@@ -973,6 +999,11 @@
             <span class="material-symbols-rounded search-icon">search</span>
             <input type="text" id="searchInput" placeholder="Search" class="search-input">
         </div>
+        <div class="filter-container">
+            <button class="filter-btn active" data-filter="albums">Albums</button>
+            <button class="filter-btn" data-filter="artists">Artists</button>
+            <button class="filter-btn" data-filter="songs">Songs</button>
+        </div>
         <div class="music-list"></div>
         <label class="upload-btn">
             <span class="material-symbols-rounded">add</span> Add
@@ -988,9 +1019,7 @@
                 <div class="music-title">No song playing</div>
                 <div class="music-artist"></div>
             </div>
-            <button class="more-button">
-                <span class="material-symbols-rounded">remove</span>
-            </button>
+            <canvas id="visualizerCanvas"></canvas>
         </div>
         <div class="progress-container">
             <div class="progress-bar">
@@ -1019,11 +1048,14 @@
             </button>
         </div>
         <div class="controls-container">
+            <button class="more-button">
+                <span class="material-symbols-rounded style="font-size: 18px;">remove</span>
+            </button>
             <button class="lyrics-button">
-                <span class="material-symbols-rounded" style="font-size: 18px;">notes</span>
+                <span class="material-symbols-rounded" style="font-size: 18px;">tooltip_2</span>
             </button>
             <button class="queue-button">
-                <span class="material-symbols-rounded" style="font-size: 18px;">queue_music</span>
+                <span class="material-symbols-rounded" style="font-size: 18px;">format_list_bulleted</span>
             </button>
             <div class="volume-control">
                 <span class="material-symbols-rounded" id="volumeIcon">volume_up</span>
@@ -1069,6 +1101,10 @@
         let initialY = 0;
         let touchTarget = null;
         let sidebarView = 'library'; // 'library', 'queue', 'lyrics'
+        let audioContext;
+        let analyser;
+        let isVisualizerInitialized = false;
+        let currentFilter = 'albums'; // 'albums', 'artists', 'songs'
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">arrow_back</span>';
@@ -2053,21 +2089,68 @@ async function saveSongs() {
   });
 }
 
+function initVisualizer() {
+    if (isVisualizerInitialized) return;
 
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    
+    // Connect the audio element to the analyser
+    const source = audioContext.createMediaElementSource(audioPlayer);
+    source.connect(analyser);
+    analyser.connect(audioContext.destination);
+
+    analyser.fftSize = 128; // Determines the number of bars
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    const canvas = document.getElementById('visualizerCanvas');
+    const canvasCtx = canvas.getContext('2d');
+
+    function draw() {
+        requestAnimationFrame(draw);
+
+        analyser.getByteFrequencyData(dataArray);
+
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const barWidth = (canvas.width / bufferLength) * 1.5;
+        let x = 0;
+
+        const gradient = canvasCtx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, '#bdd6ff');   // Light blue
+        gradient.addColorStop(1, '#90ee90');   // Light green
+        
+        for (let i = 0; i < bufferLength; i++) {
+            const barHeight = dataArray[i] / 2.5;
+            
+            canvasCtx.fillStyle = gradient;
+            canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+
+            x += barWidth + 1; // Add 1 for spacing between bars
+        }
+    }
+
+    draw();
+    isVisualizerInitialized = true;
+}
+        
 function renderSidebar() {
     const musicListContainer = document.querySelector('.music-list');
     const searchContainer = document.querySelector('.search-container');
     const uploadBtn = document.querySelector('.upload-btn');
     const sidebarTitleEl = document.querySelector('.sidebar-title');
+    const filterContainer = document.querySelector('.filter-container');
 
-    musicListContainer.innerHTML = ''; // Clear previous content
+    musicListContainer.innerHTML = '';
 
-    // Toggle active class on control buttons
     document.querySelector('.lyrics-button').classList.toggle('active', sidebarView === 'lyrics');
     document.querySelector('.queue-button').classList.toggle('active', sidebarView === 'queue');
+    filterContainer.style.display = 'block';
 
     switch (sidebarView) {
         case 'lyrics':
+            filterContainer.style.display = 'none';
             searchContainer.style.display = 'none';
             uploadBtn.style.display = 'none';
             sidebarTitleEl.textContent = 'Lyrics';
@@ -2075,6 +2158,7 @@ function renderSidebar() {
             renderLyrics();
             break;
         case 'queue':
+            filterContainer.style.display = 'none';
             searchContainer.style.display = 'none';
             uploadBtn.style.display = 'none';
             sidebarTitleEl.textContent = 'Up Next';
@@ -2086,13 +2170,43 @@ function renderSidebar() {
             searchContainer.style.display = 'block';
             uploadBtn.style.display = 'flex';
             sidebarTitleEl.textContent = 'Library';
+            
             const query = searchInput ? searchInput.value.toLowerCase() : '';
-            const filtered = query ? songs.filter(s => 
+            const searchFilteredSongs = query ? songs.filter(s => 
                 s.name.toLowerCase().includes(query) ||
                 s.artist.toLowerCase().includes(query) ||
                 s.album.toLowerCase().includes(query)
             ) : songs;
-            renderSongs(filtered);
+
+            switch (currentFilter) {
+                case 'artists':
+                    const artists = [...new Map(searchFilteredSongs.map(s => [s.artist, s])).values()];
+                    musicListContainer.innerHTML = artists.map(artist => `
+                        <div class="music-item" data-artist="${artist.artist}">
+                            <div class="song-info">${artist.artist}</div>
+                        </div>
+                    `).join('');
+                    // Add event listeners for artist clicks if desired
+                    break;
+                case 'songs':
+                    musicListContainer.innerHTML = searchFilteredSongs.map(song => `
+                        <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
+                            <div class="song-info">
+                                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
+                                <div>
+                                    <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
+                                    <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                    attachSongAndAlbumEventListeners();
+                    break;
+                case 'albums':
+                default:
+                    renderSongs(searchFilteredSongs);
+                    break;
+            }
             break;
     }
 }
@@ -2830,8 +2944,19 @@ audioPlayer.addEventListener('timeupdate', async () => {
     }
 });
 
+// Replace your existing playPauseBtn 'click' listener with this
 playPauseBtn.addEventListener('click', () => {
+    // Resume audio context on user interaction
+    if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+
     if (audioPlayer.paused) {
+        // Initialize the visualizer on the first play
+        if (!isVisualizerInitialized) {
+            initVisualizer();
+        }
+
         const playPromise = audioPlayer.play();
         if (playPromise !== undefined) {
             playPromise.then(() => {
@@ -2903,13 +3028,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         await initDB();
         searchInput = document.getElementById('searchInput');
+        
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => renderSidebar(), 300); // Re-render with search
+        });
 
-        if (searchInput) {
-            searchInput.addEventListener('input', () => {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => searchSongs(searchInput.value.trim()), 300);
+        // Setup filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelector('.filter-btn.active').classList.remove('active');
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                renderSidebar();
             });
-        }
+        });
 
         document.getElementById('shuffleBtn').addEventListener('click', () => toggleShuffle());
         document.getElementById('repeatBtn').addEventListener('click', () => toggleRepeat());
