@@ -15,7 +15,7 @@
             --text-color-dark: #f9f9f9;
             --secondary-text-color-dark: rgba(255, 255, 255, 0.7);
             --modal-background-dark: rgba(51, 51, 51, 0.8);
-            --modal-transparent-dark: rgba(51, 51, 51, 0.7);
+            --modal-transparent-dark: rgba(51, 51, 51, 0.7);f
             --search-background-dark: rgba(51, 51, 51, 0.5);
             --dark-overlay: rgba(51, 51, 51, 0.2);
             --dark-transparent: rgba(255, 255, 255, 0.1); 
@@ -1094,10 +1094,15 @@
             </div>
         </div>
         <div class="music-list"></div>
-        <button class="upload-btn" id="uploadBtn">
-            <span class="material-symbols-rounded">add</span> Add
-        </button>
-        <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
+            <div style="display: flex; gap: 10px;">
+                <button class="upload-btn" id="uploadBtn" style="flex-grow: 1;">
+                    <span class="material-symbols-rounded">add</span> Add Folder
+                </button>
+                <button class="upload-btn" id="manageFoldersBtn" style="flex-grow: 0;">
+                    <span class="material-symbols-rounded">folder_managed</span>
+                </button>
+            </div>
+            <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
     </div>
     <div class="main-content">
         <div class="album-art">
@@ -1181,6 +1186,19 @@
             <div class="menu-item" id="menuDeleteSong" style="color: #ff6b6b;">
                 <span class="material-symbols-rounded">delete</span>
                 <span>Delete Song</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Folders Modal -->
+    <div id="manageFoldersModal" style="display: none; position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 450px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+            <h2 style="margin-bottom: 20px;">Connected Folders</h2>
+            <div id="folderList" style="max-height: 250px; overflow-y: auto; margin-bottom: 15px;">
+                <!-- Folder list will be populated here -->
+            </div>
+            <div style="display: flex; justify-content: flex-end; margin-top: 25px;">
+                <button id="closeFoldersModal" class="filter-btn active">Close</button>
             </div>
         </div>
     </div>
@@ -1269,7 +1287,7 @@
         let songs = [];
         let currentSongId = null;
         let db;
-        let directoryHandle = null; // For File System Access API
+        let directoryHandles = []; // For File System Access API
         let isShuffleEnabled = false;
         let repeatMode = 'none'; // 'none', 'all', or 'one'
         let playQueue = [];
@@ -2587,31 +2605,128 @@ async function playSong(song, isTransition = false) {
     }
 }
 
-        async function getSongFileUrl(song) {
-            if (!song) return null;
-            try {
-                if (song.storage === 'filesystem' && directoryHandle) {
-                    const fileHandle = await directoryHandle.getFileHandle(song.handleName);
-                    const file = await fileHandle.getFile();
-                    return URL.createObjectURL(file);
-                } else { // Fallback for legacy IndexedDB files
-                    const tx = db.transaction(['musicFiles'], 'readonly');
-                    const request = tx.objectStore('musicFiles').get(song.id);
-                    const result = await new Promise((resolve, reject) => {
-                        request.onsuccess = () => resolve(request.result);
-                        request.onerror = () => reject(request.error);
-                    });
-                    return result ? URL.createObjectURL(result.file) : null;
-                }
-            } catch (e) {
-                console.error(`Could not get URL for ${song.name}:`, e);
-                return null;
-            }
+async function getSongFileUrl(song) {
+    if (!song) return null;
+
+    // For legacy songs stored as blobs
+    if (song.storage === 'indexeddb') {
+        try {
+            const tx = db.transaction(['musicFiles'], 'readonly');
+            const request = tx.objectStore('musicFiles').get(song.id);
+            const result = await new Promise((resolve, reject) => {
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+            return result ? URL.createObjectURL(result.file) : null;
+        } catch (e) {
+             console.error(`Could not get blob for ${song.name}:`, e);
+             return null;
         }
+    }
+
+    // For songs from the File System API
+    for (const handle of directoryHandles) {
+        try {
+            // Check if the file exists in this specific directory
+            const fileHandle = await handle.getFileHandle(song.handleName);
+            // If the above line doesn't throw an error, we found the file.
+            const file = await fileHandle.getFile();
+            return URL.createObjectURL(file);
+        } catch (e) {
+            // This is expected if the file isn't in this directory, so we continue to the next handle.
+            if (e.name === 'NotFoundError') {
+                continue;
+            }
+            console.error(`Error accessing handle for ${song.name} in directory ${handle.name}:`, e);
+        }
+    }
+
+    // If the loop completes without finding the file in any handle
+    console.warn(`Could not find "${song.handleName}" in any of the connected directories.`);
+    return null;
+}
+
+function initModalVariables() {
+    // ... all other modal initializations remain the same ...
+
+    manageFoldersModal = document.getElementById('manageFoldersModal');
+    document.getElementById('closeFoldersModal').addEventListener('click', () => { manageFoldersModal.style.display = 'none'; });
+}
+
+function openManageFoldersModal() {
+    const folderList = document.getElementById('folderList');
+    folderList.innerHTML = ''; // Clear existing list
+
+    if (directoryHandles.length === 0) {
+        folderList.innerHTML = '<p style="color: var(--secondary-text-color); text-align: center;">No folders have been added yet.</p>';
+    } else {
+        directoryHandles.forEach(handle => {
+            const item = document.createElement('div');
+            item.style.display = 'flex';
+            item.style.alignItems = 'center';
+            item.style.justifyContent = 'space-between';
+            item.style.padding = '8px';
+            item.style.borderRadius = '8px';
+            item.style.marginBottom = '5px';
+            item.style.backgroundColor = 'var(--search-background)';
+            
+            item.innerHTML = `<span><span class="material-symbols-rounded" style="vertical-align: middle; margin-right: 8px;">folder</span>${handle.name}</span>
+                              <button class="remove-folder-btn" data-name="${handle.name}" style="background: none; border: none; color: #ff6b6b; cursor: pointer;"><span class="material-symbols-rounded">delete</span></button>`;
+            
+            folderList.appendChild(item);
+        });
+        
+        document.querySelectorAll('.remove-folder-btn').forEach(btn => {
+            btn.onclick = (e) => removeFolder(e.currentTarget.dataset.name);
+        });
+    }
+    manageFoldersModal.style.display = 'flex';
+}
+
+async function removeFolder(folderName) {
+    if (!confirm(`Are you sure you want to remove the folder "${folderName}"? All songs from this folder will be removed from your library.`)) {
+        return;
+    }
+
+    // Remove the handle from the array
+    directoryHandles = directoryHandles.filter(h => h.name !== folderName);
+    
+    // Remove songs associated with that folder
+    // We determine this by checking which files are no longer findable
+    const findableSongIds = new Set();
+    for (const song of songs) {
+        if (song.storage === 'indexeddb') { // Keep legacy songs
+             findableSongIds.add(song.id);
+             continue;
+        }
+        for (const handle of directoryHandles) {
+             try {
+                 await handle.getFileHandle(song.handleName);
+                 findableSongIds.add(song.id);
+                 break; // Found it in one of the remaining handles
+             } catch (e) { /* Not in this handle */ }
+        }
+    }
+    
+    songs = songs.filter(s => findableSongIds.has(s.id));
+
+    // Update the stored handles and song list in the database
+    const tx = db.transaction('config', 'readwrite');
+    tx.objectStore('config').put({ key: 'directoryHandles', value: directoryHandles });
+    await tx.done;
+    
+    await saveSongs();
+
+    // Re-render everything
+    openManageFoldersModal(); // Re-open the modal to show the updated list
+    renderSidebar();
+}
       
         function attachEventListeners() {
             const moreButton = document.querySelector('.more-button');
             const moreOptionsMenu = document.getElementById('moreOptionsMenu');
+
+            document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
             
             // Toggle menu visibility
             moreButton.addEventListener('click', (e) => {
@@ -3079,26 +3194,26 @@ window.addEventListener("load", async () => {
         await initDB();
         initModalVariables();
 
-        // --- CRITICAL FIX: Persistent Permissions & Handle Verification ---
         if ('showDirectoryPicker' in window) {
             const tx = db.transaction('config', 'readonly');
-            const handleReq = tx.objectStore('config').get('directoryHandle');
+            // Retrieve the array of handles
+            const handleReq = tx.objectStore('config').get('directoryHandles');
             const configResult = await new Promise(r => { handleReq.onsuccess = () => r(handleReq.result) });
             
-            if (configResult) {
-                // This is the key to persistence: we MUST request permission again on the stored handle.
-                if (await verifyPermission(configResult.value, true)) {
-                    console.log("Successfully re-acquired permission for directory handle.");
-                    directoryHandle = configResult.value;
-                } else {
-                    console.log("User denied re-acquiring permission. Handle is invalid for this session.");
-                    directoryHandle = null;
+            if (configResult && Array.isArray(configResult.value)) {
+                const verifiedHandles = [];
+                for (const handle of configResult.value) {
+                    if (await verifyPermission(handle, true)) {
+                        verifiedHandles.push(handle);
+                    }
                 }
+                directoryHandles = verifiedHandles;
+                console.log(`Restored and verified ${directoryHandles.length} folder handles.`);
             }
         }
 
-        // Load all song and playlist metadata from the database. This MUST complete before rendering.
         await loadSongsAndPlaylists();
+        await migrateToFSA(); // Optional migration logic
 
         // Resume logic can now safely use the loaded 'songs' array.
         const savedData = localStorage.getItem("currentSong");
@@ -3362,24 +3477,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-        document.getElementById('uploadBtn').addEventListener('click', async () => {
-            if ('showDirectoryPicker' in window) {
-                try {
-                    const handle = await window.showDirectoryPicker();
-                    if (await verifyPermission(handle)) {
-                        directoryHandle = handle;
-                        const tx = db.transaction('config', 'readwrite');
-                        tx.objectStore('config').put({ key: 'directoryHandle', value: directoryHandle });
-                        await processDirectory(directoryHandle);
-                    }
-                } catch (err) {
-                    console.log('User cancelled directory picker or permission denied.', err);
-                }
-            } else {
-                // Fallback for browsers without the API
-                document.getElementById('musicUpload').click();
+document.getElementById('uploadBtn').addEventListener('click', async () => {
+    if ('showDirectoryPicker' in window) {
+        try {
+            const handle = await window.showDirectoryPicker();
+            if (directoryHandles.some(h => h.name === handle.name)) {
+                alert("This folder has already been added.");
+                return;
             }
-        });
+            
+            if (await verifyPermission(handle, true)) {
+                directoryHandles.push(handle);
+                // Save the entire array of handles
+                const tx = db.transaction('config', 'readwrite');
+                tx.objectStore('config').put({ key: 'directoryHandles', value: directoryHandles });
+                await tx.done;
+
+                await processDirectory(handle); // Process only the newly added directory
+            }
+        } catch (err) {
+            console.log('User cancelled directory picker or permission denied.', err);
+        }
+    } else {
+        document.getElementById('musicUpload').click();
+    }
+});
 
         // This listener is now only for the fallback mechanism
         musicUpload.addEventListener('change', (e) => {
