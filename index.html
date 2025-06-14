@@ -2124,33 +2124,32 @@ function initVisualizer() {
             const barHeight = dataArray[i] / 2.5;
 
             canvasCtx.fillStyle = textColor;
-            
-            // Draw rounded rectangle
-            const radius = 10; // adjust this for more/less rounding
-            const y = canvas.height - barHeight;
-            const height = barHeight;
+
+            const radius = 10; // Roundness
+            const centerY = canvas.height / 2; // Middle of canvas
+            const y = centerY - barHeight / 2; // Start drawing half above, half below
 
             canvasCtx.beginPath();
             canvasCtx.moveTo(x + radius, y);
             canvasCtx.lineTo(x + barWidth - radius, y);
             canvasCtx.quadraticCurveTo(x + barWidth, y, x + barWidth, y + radius);
-            canvasCtx.lineTo(x + barWidth, y + height - radius);
-            canvasCtx.quadraticCurveTo(x + barWidth, y + height, x + barWidth - radius, y + height);
-            canvasCtx.lineTo(x + radius, y + height);
-            canvasCtx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            canvasCtx.lineTo(x + barWidth, y + barHeight - radius);
+            canvasCtx.quadraticCurveTo(x + barWidth, y + barHeight, x + barWidth - radius, y + barHeight);
+            canvasCtx.lineTo(x + radius, y + barHeight);
+            canvasCtx.quadraticCurveTo(x, y + barHeight, x, y + barHeight - radius);
             canvasCtx.lineTo(x, y + radius);
             canvasCtx.quadraticCurveTo(x, y, x + radius, y);
             canvasCtx.closePath();
             canvasCtx.fill();
 
-            x += barWidth + 1; // Add 1 for spacing between bars
+            x += barWidth + 1; // spacing
         }
     }
 
     draw();
     isVisualizerInitialized = true;
 }
-        
+
 function renderSidebar() {
     const musicListContainer = document.querySelector('.music-list');
     const searchContainer = document.querySelector('.search-container');
