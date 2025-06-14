@@ -2181,7 +2181,7 @@ function addBackButtonToSidebar() {
     };
     musicListContainer.appendChild(backButton);
 }
-
+        
         // This is the new main renderer for the library (Albums, Artists, Songs)
         function renderLibraryView(element) {
              const query = searchInput ? searchInput.value.toLowerCase() : '';
@@ -2214,11 +2214,38 @@ function addBackButtonToSidebar() {
                  element.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">search_off</span><p>No albums found</p></div>';
                  return;
               }
-              element.innerHTML = albums.map(album => `...`).join(""); // The same long HTML string as before
+              element.innerHTML = albums.map(album => `
+                <div class="album-section">
+                  <div class="album-header">
+                    <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
+                    <div class="album-info">
+                      <div class="album-name">${album.name}</div>
+                      <div class="album-artist">${album.artist}</div>
+                      <div class="album-year">${album.year}</div>
+                    </div>
+                    <div class="album-actions" style="display: none;">
+                      <button class="delete-album" data-album="${album.name}">
+                        <span class="material-symbols-rounded">delete</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="album-songs">
+                    ${album.songs.map(song => `
+                      <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
+                        <div class="song-info">
+                          <span class="track-number">${song.trackNumber ? song.trackNumber + "." : ""}</span>
+                          <span class="song-title">${song.name}</span>
+                          <span class="play-control" style="display:none;"></span>
+                        </div>
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+              `).join("");
               attachSongAndAlbumEventListeners();
         }
 
-        // ADD a new function to render the Artists view
+        // Renders the Artists view
         function renderArtists(element, songsToRender) {
             const artists = [...new Map(songsToRender.map(s => [s.artist, s])).values()]
                 .sort((a,b) => a.artist.localeCompare(b.artist));
@@ -2235,7 +2262,7 @@ function addBackButtonToSidebar() {
             // Add event listeners for artist clicks here if desired
         }
 
-        // ADD a new function to render the plain Songs list view
+        // Renders the plain Songs list view
         function renderSongsList(element, songsToRender) {
              if (songsToRender.length === 0) {
                  element.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">music_off</span><p>No songs found</p></div>';
@@ -2243,13 +2270,19 @@ function addBackButtonToSidebar() {
              }
              element.innerHTML = songsToRender.map(song => `
                  <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
-                    ...
+                    <div class="song-info">
+                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
+                        <div>
+                            <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
+                            <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                        </div>
+                    </div>
                  </div>
-             `).join(''); // Same long HTML as before
+             `).join('');
              attachSongAndAlbumEventListeners();
         }
 
-        // ADD the placeholder function for rendering Playlists
+        // Renders the Playlists view (placeholder)
         function renderPlaylists(element) {
             element.innerHTML = `
                 <button class="sidebar-back-btn" style="display:none;"></button> 
@@ -2259,21 +2292,71 @@ function addBackButtonToSidebar() {
                 </div>`;
         }
         
-        // MODIFY renderLyrics and renderQueue to accept an element to draw into
+        // Renders the Lyrics view
         async function renderLyrics(element) {
-            element.innerHTML = `<button class="sidebar-back-btn">...</button><div class="lyrics-container"></div>`;
+            element.innerHTML = `<button class="sidebar-back-btn"><span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Library</button><div class="lyrics-container"></div>`;
             element.querySelector('.sidebar-back-btn').onclick = () => switchSidebarView(currentFilter);
 
             const lyricsContainer = element.querySelector('.lyrics-container');
-            // ... (The rest of the original renderLyrics logic goes here, targeting 'lyricsContainer')
+            if (!currentSongId) {
+                lyricsContainer.innerHTML = `<p>No song is currently playing.</p>`;
+                return;
+            }
+
+            const song = songs.find(s => s.id === currentSongId);
+            if (!song || !song.lyrics) {
+                lyricsContainer.innerHTML = `<p>No lyrics found for this song.</p>`;
+                return;
+            }
+
+            // If we have parsed LRC data, render it as a list
+            if (song.lrcData && song.lrcData.length > 0) {
+                lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
+                    `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '...'}</p>`
+                ).join('');
+                // Add click-to-seek functionality to lyrics
+                lyricsContainer.querySelectorAll('p').forEach(lineEl => {
+                    lineEl.addEventListener('click', () => {
+                        const seekTime = parseFloat(lineEl.dataset.time);
+                        if (!isNaN(seekTime)) {
+                            audioPlayer.currentTime = seekTime;
+                        }
+                    });
+                });
+
+            } else { // Fallback for plain text lyrics
+                lyricsContainer.innerHTML = `<p>${song.lyrics.replace(/\n/g, '<br>')}</p>`;
+            }
         }
 
+        // Renders the Queue view
         function renderQueue(element) {
-            element.innerHTML = `<button class="sidebar-back-btn">...</button><div class="queue-list-container"></div>`;
+            element.innerHTML = `<button class="sidebar-back-btn"><span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Library</button><div class="queue-list-container"></div>`;
             element.querySelector('.sidebar-back-btn').onclick = () => switchSidebarView(currentFilter);
             
             const queueContainer = element.querySelector('.queue-list-container');
-            // ... (The rest of the original renderQueue logic goes here, targeting 'queueContainer')
+            if (playQueue.length === 0) {
+                queueContainer.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">queue_music</span><p>The queue is empty.</p></div>';
+                return;
+            }
+
+            const queueHtml = playQueue.map((song, index) => `
+                <div class="music-item queue-item ${song.id === currentSongId ? "active" : ""}" data-queue-index="${index}" data-id="${song.id}">
+                    <div class="song-info">
+                        <span class="track-number">${index + 1}.</span>
+                        <span class="song-title">${song.name}</span>
+                        <span class="song-artist-queue">${song.artist}</span>
+                        <button class="remove-from-queue-btn" data-queue-index="${index}">
+                            <span class="material-symbols-rounded" style="font-size: 18px;">close</span>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            queueContainer.innerHTML = queueHtml;
+            
+            makeQueueItemsDraggable();
+            addQueueItemEventListeners();
         }
 
 function attachSongAndAlbumEventListeners() {
