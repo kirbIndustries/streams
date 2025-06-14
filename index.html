@@ -2095,57 +2095,57 @@ function initVisualizer() {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     analyser = audioContext.createAnalyser();
     
-    // Connect the source only once
     if (!source) {
         source = audioContext.createMediaElementSource(audioPlayer);
         source.connect(analyser);
         analyser.connect(audioContext.destination);
     }
 
-    analyser.fftSize = 32; // Results in 16 bars
-    const bufferLength = analyser.frequencyBinCount;
+    // Use the minimum fftSize, which gives us 16 data points to choose from.
+    analyser.fftSize = 32;
+    const bufferLength = analyser.frequencyBinCount; // This will be 16
     const dataArray = new Uint8Array(bufferLength);
     
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
 
+    // --- FIX: Define the exact number of bars to draw ---
+    const numBars = 6;
+
     function draw() {
         requestAnimationFrame(draw);
 
-        analyser.getByteFrequencyData(dataArray);
+        analyser.getByteFrequencyData(dataArray); // Get all 16 frequency values
 
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // --- FIX for Padding and Width ---
-        const gap = 3; // The space between bars
-        const totalGaps = (bufferLength - 1) * gap;
-        const barWidth = (canvas.width - totalGaps) / bufferLength;
+        // --- FIX: Calculate width and gaps based on numBars ---
+        const gap = 4; // The space between bars
+        const totalGaps = (numBars - 1) * gap;
+        const barWidth = (canvas.width - totalGaps) / numBars;
         let x = 0;
 
-        // --- FIX for Color ---
-        // Get the computed style once per frame, outside the loop
         const style = getComputedStyle(document.body);
         const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
 
-        for (let i = 0; i < bufferLength; i++) {
-            const barHeight = dataArray[i] / 2.5;
+        // --- FIX: Cherry-pick 6 specific frequencies to draw ---
+        // These indices are chosen from the 16 available to represent bass and mids.
+        const barIndices = [1, 3, 5, 7, 9, 11]; 
+
+        for (let i = 0; i < numBars; i++) {
+            const dataIndex = barIndices[i]; // Get the specific frequency data
+            const barHeight = dataArray[dataIndex] / 2.5;
             
-            // Do not draw if bar height is negligible
-            if (barHeight < 1) continue;
+            if (barHeight < 2) continue; // Don't draw tiny bars
 
-            // --- FIX for Rounded Rectangle and Color ---
-            // Set the fill style for each bar
             canvasCtx.fillStyle = textColor;
-
             const radius = 3;
-            const y = (canvas.height - barHeight) / 2; // Center the bar vertically
+            const y = (canvas.height - barHeight) / 2;
 
-            // Use the modern, built-in roundRect() method. It's much simpler and more reliable.
             canvasCtx.beginPath();
             canvasCtx.roundRect(x, y, barWidth, barHeight, radius);
             canvasCtx.fill();
 
-            // Move to the next bar's position
             x += barWidth + gap;
         }
     }
