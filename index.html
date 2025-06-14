@@ -1095,17 +1095,19 @@
                 <span class="material-symbols-rounded search-icon">search</span>
                 <input type="text" id="searchInput" placeholder="Search" class="search-input">
             </div>
-            <div class="filter-container" style="display: block;">
-                <button class="filter-btn active" data-filter="albums">Albums</button>
-                <button class="filter-btn" data-filter="artists">Artists</button>
-                <button class="filter-btn" data-filter="songs">Songs</button>
+            <div class="filter-container" style="display: flex;">
+                <button class="filter-btn active" data-filter="albums" style="flex-grow: 0; padding: 8px;"><span class="material-symbols-rounded" style="font-size: 18px;">album</span></button>
+                <button class="filter-btn" data-filter="artists" style="flex-grow: 0; padding: 8px;"><span class="material-symbols-rounded" style="font-size: 18px;">artist</span></button>
+                <button class="filter-btn" data-filter="songs" style="flex-grow: 0; padding: 8px;"><span class="material-symbols-rounded" style="font-size: 18px;">music_note</span></button>
+                <button class="filter-btn" data-filter="playlists" style="flex-grow: 0; padding: 8px;"><span class="material-symbols-rounded" style="font-size: 18px;">queue_music</span></button>
+                <button id="scrollToCurrentBtn" class="filter-btn" style="flex-grow: 0; padding: 8px;"><span class="material-symbols-rounded" style="font-size: 18px;">gps_fixed</span></button>
             </div>
         </div>
         <div class="music-list"></div>
-        <label class="upload-btn">
+        <button class="upload-btn" id="uploadBtn">
             <span class="material-symbols-rounded">add</span> Add
-            <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
-        </label>
+        </button>
+        <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
     </div>
     <div class="main-content">
         <div class="album-art">
@@ -1160,16 +1162,26 @@
             </div>
         </div>
         <div id="moreOptionsMenu" class="more-options-menu">
-            <div class="menu-item" id="menuAddToPlaylist">
-                <span class="material-symbols-rounded">playlist_add</span>
-                <span>Add to Playlist...</span>
-            </div>
             <div class="menu-item" id="menuEditMetadata">
                 <span class="material-symbols-rounded">edit</span>
                 <span>Edit Info</span>
             </div>
+            <div class="menu-item" id="menuAddToPlaylist">
+                <span class="material-symbols-rounded">playlist_add</span>
+                <span>Add to Playlist...</span>
+            </div>
             <div class="menu-separator"></div>
-            <div class="menu-item" id="menuDeleteSong">
+            <div class="menu-item" id="menuCrossfade">
+                <span class="material-symbols-rounded">swap_horiz</span>
+                <span>Crossfade</span>
+                <span id="crossfadeStatus" style="margin-left: auto; font-size: 0.8em; color: var(--secondary-text-color);">Off</span>
+            </div>
+            <div class="menu-item" id="menuSleepTimer">
+                <span class="material-symbols-rounded">timer</span>
+                <span>Sleep Timer</span>
+            </div>
+            <div class="menu-separator"></div>
+            <div class="menu-item" id="menuDeleteSong" style="color: #ff6b6b;">
                 <span class="material-symbols-rounded">delete</span>
                 <span>Delete Song</span>
             </div>
@@ -1189,6 +1201,35 @@
             <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px;">
                 <button id="cancelEdit" class="filter-btn">Cancel</button>
                 <button id="saveEdit" class="filter-btn active">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sleep Timer Modal -->
+    <div id="sleepTimerModal" style="display: none; position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 300px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+            <h2 style="margin-bottom: 20px;">Sleep Timer</h2>
+            <p style="margin-bottom: 15px; color: var(--secondary-text-color);">Playback will stop after:</p>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button class="filter-btn" onclick="setSleepTimer(15)">15 Minutes</button>
+                <button class="filter-btn" onclick="setSleepTimer(30)">30 Minutes</button>
+                <button class="filter-btn" onclick="setSleepTimer(60)">1 Hour</button>
+            </div>
+            <div class="menu-separator"></div>
+            <button id="cancelSleepTimer" class="filter-btn active" style="width: 100%;">Cancel Timer</button>
+        </div>
+    </div>
+
+    <!-- Playlist Modal -->
+    <div id="playlistModal" style="display: none; position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+         <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+            <h2 style="margin-bottom: 20px;">Add to playlist</h2>
+            <div id="playlistList" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
+            <div class="menu-separator"></div>
+            <input type="text" id="newPlaylistName" placeholder="Or create new playlist..." class="search-input" style="padding-left: 15px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="closePlaylistModal" class="filter-btn">Cancel</button>
+                <button id="createPlaylistBtn" class="filter-btn active">Create & Add</button>
             </div>
         </div>
     </div>
@@ -1239,6 +1280,10 @@
         let source;
         let currentFilter = 'albums'; // 'albums', 'artists', 'songs'
         let editModal, editSongId, editTitle, editArtist, editAlbum, saveEdit, cancelEdit;
+        let crossfadeEnabled = false;
+        let sleepTimerId = null;
+        let playlists = [];
+        let playlistModal, sleepTimerModal;
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">arrow_back</span>';
@@ -2364,112 +2409,80 @@ function attachSongAndAlbumEventListeners() {
   });
 }
 
-        async function playSong(song) {
-            audioPlayer.pause();
+        async function playSong(song, isTransition = false) {
+            if (!isTransition) {
+                audioPlayer.pause();
+            }
             currentSongId = song.id;
-            updatePlayQueue(); // Sets the current queue based on the new song
+            updatePlayQueue();
 
-            try {
-                let fileUrl;
-                if (song.storage === 'filesystem' && directoryHandle) {
-                    const fileHandle = await directoryHandle.getFileHandle(song.handleName);
-                    const file = await fileHandle.getFile();
-                    fileUrl = URL.createObjectURL(file);
-                } else {
-                    // Fallback to IndexedDB
-                    const tx = db.transaction(['musicFiles'], 'readonly');
-                    const request = tx.objectStore('musicFiles').get(song.id);
-                    const result = await new Promise((resolve, reject) => {
-                        request.onsuccess = () => resolve(request.result);
-                        request.onerror = () => reject(request.error);
-                    });
-                    if (result) {
-                        fileUrl = URL.createObjectURL(result.file);
-                    } else {
-                        throw new Error("File not found in IndexedDB.");
-                    }
-                }
+            const fileUrl = await getSongFileUrl(song);
+            if (!fileUrl) {
+                alert(`Could not find the file for "${song.name}". It may have been moved or deleted.`);
+                return;
+            }
+
+            albumArtImg.classList.add('fade-out');
+            
+            setTimeout(() => {
+                updatePlayerUI(song);
                 
                 if (audioPlayer.src) {
-                    URL.revokeObjectURL(audioPlayer.src); // Clean up previous blob URL
+                    URL.revokeObjectURL(audioPlayer.src);
                 }
-                
                 audioPlayer.src = fileUrl;
-                audioPlayer.currentTime = 0;
-                musicTitle.textContent = song.name;
-                musicArtist.textContent = song.artist;
-
-                updateAllBackgrounds(song.albumArt);
-                albumArtImg.src = song.albumArt;
-                updateFavicon(song.albumArt);
 
                 const playPromise = audioPlayer.play();
-                if (playPromise !== undefined) {
+                if (playPromise) {
                     playPromise.then(() => {
                         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                        playPauseBtn.classList.add('playing');
-                        if ('mediaSession' in navigator) {
-                            updateMediaSessionMetadata(song);
-                            updateMediaSessionPlaybackState('playing');
-                        }
-                    }).catch(error => {
-                        console.log('Playback was prevented:', error.message);
-                    });
+                    }).catch(e => console.log('Playback prevented.', e));
                 }
-                
                 renderSidebar();
-
-            } catch (error) {
-                console.error(`Failed to load song: ${song.name}`, error);
-                // Optionally play next song or show an error
-            }
+            }, 400);
         }
       
         function attachEventListeners() {
             const moreButton = document.querySelector('.more-button');
             const moreOptionsMenu = document.getElementById('moreOptionsMenu');
             
-            // --- Menu Items ---
-            const deleteSongButton = document.getElementById('menuDeleteSong');
-            const editSongButton = document.getElementById('menuEditMetadata');
-
             // Toggle menu visibility
             moreButton.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (currentSongId) {
-                    moreOptionsMenu.classList.toggle('visible');
+                if (currentSongId) moreOptionsMenu.classList.toggle('visible');
+                else alert('No song is currently playing.');
+            });
+
+            document.addEventListener('click', () => moreOptionsMenu.classList.remove('visible'));
+
+            // Menu actions
+            document.getElementById('menuDeleteSong').addEventListener('click', async () => {
+                if (currentSongId && confirm('Delete this song? This is permanent.')) await deleteSong(currentSongId);
+                moreOptionsMenu.classList.remove('visible');
+            });
+            document.getElementById('menuEditMetadata').addEventListener('click', () => {
+                if (currentSongId) openEditModal(currentSongId);
+                moreOptionsMenu.classList.remove('visible');
+            });
+            document.getElementById('menuCrossfade').addEventListener('click', toggleCrossfade);
+            document.getElementById('menuSleepTimer').addEventListener('click', () => {
+                sleepTimerModal.style.display = 'flex';
+                moreOptionsMenu.classList.remove('visible');
+            });
+            document.getElementById('menuAddToPlaylist').addEventListener('click', () => {
+                if (currentSongId) openPlaylistModal();
+                 moreOptionsMenu.classList.remove('visible');
+            });
+
+            // Scroll to current song button
+            document.getElementById('scrollToCurrentBtn').addEventListener('click', () => {
+                if (!currentSongId) return;
+                const currentSongElement = document.querySelector(`.music-item[data-id="${currentSongId}"]`);
+                if (currentSongElement) {
+                    currentSongElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 } else {
-                    alert('No song is currently playing.');
+                    alert('Song not found in current view. Try changing filters.');
                 }
-            });
-
-            // Close menu when clicking outside
-            document.addEventListener('click', () => {
-                if (moreOptionsMenu.classList.contains('visible')) {
-                    moreOptionsMenu.classList.remove('visible');
-                }
-            });
-
-            // --- Menu Actions ---
-            deleteSongButton.addEventListener('click', async () => {
-                if (currentSongId) {
-                    if (confirm('Are you sure you want to delete this song? This action cannot be undone.')) {
-                        await deleteSong(currentSongId);
-                    }
-                }
-                moreOptionsMenu.classList.remove('visible');
-            });
-            
-            editSongButton.addEventListener('click', () => {
-                if (currentSongId) {
-                    openEditModal(currentSongId);
-                }
-                moreOptionsMenu.classList.remove('visible');
-            });
-
-            // Attach listeners for album delete buttons
-            document.querySelectorAll('.delete-album').forEach(button => {
-                button.closest('.album-actions').style.display = 'block';
             });
         }
 
@@ -2645,7 +2658,7 @@ function getDragAfterElement(container, y) {
             renderQueue();
         }
         
-function playNextSong() {
+function playNextSong(isTransition = false) {
     if (!playQueue.length) {
         playQueue = createPlayQueue();
     }
@@ -2685,7 +2698,9 @@ function playNextSong() {
     
     const nextSong = playQueue[currentQueueIndex];
     if (nextSong) {
-        loadAndPlaySong(nextSong);
+        playSong(nextSong, isTransition);
+    } else if (!isTransition) {
+        resetPlayer();
     }
 }
 
@@ -2889,71 +2904,111 @@ window.addEventListener("beforeunload", () => {
         window.addEventListener("load", async () => {
             try {
                 await initDB();
-                
-                // Attempt to retrieve the directory handle
+
+                // Initialize all modal variables
+                initModalVariables();
+
+                // --- ROBUST FILE SYSTEM API & PERMISSION LOGIC ---
                 if ('showDirectoryPicker' in window) {
                     const tx = db.transaction('config', 'readonly');
-                    const handleConfigRequest = tx.objectStore('config').get('directoryHandle');
-                    const configResult = await new Promise(resolve => {
-                        handleConfigRequest.onsuccess = () => resolve(handleConfigRequest.result);
-                        handleConfigRequest.onerror = () => resolve(null); // Resolve null on error
-                    });
-
+                    const handleReq = tx.objectStore('config').get('directoryHandle');
+                    const configResult = await new Promise(r => { handleReq.onsuccess = () => r(handleReq.result) });
+                    
                     if (configResult) {
-                         // Check if we still have permission
-                        if (await configResult.value.queryPermission({ mode: 'read' }) === 'granted') {
+                        if (await verifyPermission(configResult.value)) {
+                            console.log("Permission already granted. Restoring directory handle.");
                             directoryHandle = configResult.value;
-                            console.log("Restored directory handle from DB.");
                         } else {
-                             console.log("Permission for directory handle was lost.");
+                            console.log("Permission for directory handle was lost or never granted.");
                         }
                     }
                 }
-                
-                await loadSongsFromStorage(); // Loads metadata
 
+                await loadSongsAndPlaylists();
+
+                // --- FIXED RESUME LOGIC ---
                 const savedData = localStorage.getItem("currentSong");
-                if (!savedData) return;
-
+                if (!savedData) {
+                    renderSidebar();
+                    return;
+                }
+                
                 const { id, progress } = JSON.parse(savedData);
-                if (!id) return;
+                if (!id) {
+                     renderSidebar();
+                     return;
+                }
 
                 const song = songs.find(s => s.id === id);
-                if (song) {
-                    // We don't play here, just set up the UI. User must click play.
-                    musicTitle.textContent = song.name;
-                    musicArtist.textContent = song.artist;
-                    albumArtImg.src = song.albumArt;
-                    updateAllBackgrounds(song.albumArt);
-                    updateFavicon(song.albumArt);
+                if (song && directoryHandle) { // Only resume if we have a valid handle
+                    // Update UI immediately and correctly
+                    updatePlayerUI(song, progress);
                     currentSongId = song.id;
-                    
-                    // Set up the audio player to be ready
-                    audioPlayer.oncanplaythrough = () => {
-                         audioPlayer.currentTime = progress || 0;
-                         durationDisplay.textContent = formatTime(audioPlayer.duration);
-                         currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
-                         audioPlayer.oncanplaythrough = null; // Remove listener to prevent re-firing
-                    };
+                    updatePlayQueue();
 
-                    // Load the audio source so 'oncanplaythrough' can fire
-                    let fileUrl;
-                    if (song.storage === 'filesystem' && directoryHandle) {
-                        const fileHandle = await directoryHandle.getFileHandle(song.handleName);
-                        const file = await fileHandle.getFile();
-                        fileUrl = URL.createObjectURL(file);
-                    } else {
-                        const tx = db.transaction(['musicFiles'], 'readonly');
-                        const request = tx.objectStore('musicFiles').get(song.id);
-                        const result = await new Promise(resolve => { request.onsuccess = () => resolve(request.result) });
-                        if (result) fileUrl = URL.createObjectURL(result.file);
+                    // Set up the audio player source to be ready
+                    const fileUrl = await getSongFileUrl(song);
+                    if (fileUrl) {
+                        audioPlayer.src = fileUrl;
+                        audioPlayer.load(); // Important to load the metadata
+                        audioPlayer.onloadedmetadata = () => {
+                             audioPlayer.currentTime = progress || 0;
+                             updateTimeDisplays(); // Update time displays once metadata is loaded
+                             audioPlayer.onloadedmetadata = null;
+                        };
                     }
-                    if(fileUrl) audioPlayer.src = fileUrl;
                 }
+                renderSidebar();
             } catch (error) {
                 console.error('Error on application load:', error);
+                renderSidebar(); // Still try to render the UI on error
             }
         });
+
+        function initModalVariables() {
+            editModal = document.getElementById('editModal');
+            editSongId = document.getElementById('editSongId');
+            editTitle = document.getElementById('editTitle');
+            editArtist = document.getElementById('editArtist');
+            editAlbum = document.getElementById('editAlbum');
+            saveEdit = document.getElementById('saveEdit');
+            cancelEdit = document.getElementById('cancelEdit');
+            saveEdit.addEventListener('click', saveMetadataChanges);
+            cancelEdit.addEventListener('click', closeEditModal);
+            
+            sleepTimerModal = document.getElementById('sleepTimerModal');
+            document.getElementById('cancelSleepTimer').addEventListener('click', () => setSleepTimer(0));
+            
+            playlistModal = document.getElementById('playlistModal');
+            document.getElementById('closePlaylistModal').addEventListener('click', () => playlistModal.style.display = 'none');
+            document.getElementById('createPlaylistBtn').addEventListener('click', createPlaylistAndAddSong);
+        }
+
+        async function verifyPermission(handle) {
+            const options = { mode: 'read' };
+            if ((await handle.queryPermission(options)) === 'granted') {
+                return true;
+            }
+            if ((await handle.requestPermission(options)) === 'granted') {
+                return true;
+            }
+            return false;
+        }
+
+        function updatePlayerUI(song, progress = 0) {
+            musicTitle.textContent = song.name;
+            musicArtist.textContent = song.artist;
+            albumArtImg.src = song.albumArt;
+            albumArtImg.classList.remove('fade-out');
+            updateAllBackgrounds(song.albumArt);
+            updateFavicon(song.albumArt);
+            updateTimeDisplays(progress, audioPlayer.duration);
+        }
+
+        function updateTimeDisplays(current = 0, duration = 0) {
+            currentTimeDisplay.textContent = formatTime(current);
+            durationDisplay.textContent = duration ? formatTime(duration) : '-:--';
+        }
 
 let currentLrcLineIndex = -1; // Keep track of the current line
 
@@ -2966,6 +3021,15 @@ audioPlayer.addEventListener('timeupdate', async () => {
         currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
         if(audioPlayer.duration) durationDisplay.textContent = formatTime(audioPlayer.duration);
         updatePageTitle();
+
+        // Crossfade logic
+        if (crossfadeEnabled && audioPlayer.duration > 0 && audioPlayer.duration - audioPlayer.currentTime < 3) {
+            // Prevent re-triggering
+            if (!audioPlayer.isFading) { 
+                 audioPlayer.isFading = true;
+                 playNextSong(true); // pass true to indicate a transition
+            }
+        }
 
         // Handle LRC lyrics highlighting
         if (song && song.lrcData && sidebarView === 'lyrics') {
@@ -3071,17 +3135,12 @@ volumeSlider.addEventListener('input', (e) => {
 audioPlayer.addEventListener('play', () => document.querySelector('.background-blur').classList.add('rotating'));
 
 audioPlayer.addEventListener('ended', () => {
+    audioPlayer.isFading = false; // Reset fade flag
     if (repeatMode === 'one') {
-        audioPlayer.currentTime = 0;
-        const playPromise = audioPlayer.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(error => console.log("Auto-replay prevented:", error.message));
-        }
-    } else if (repeatMode === 'none' && currentQueueIndex >= playQueue.length - 1) {
-        resetPlayer();
-    } else {
+        playSong(songs.find(s => s.id === currentSongId));
+    } else if (!crossfadeEnabled) {
         playNextSong();
-    }
+    }f
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -3133,23 +3192,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-        // Replaces the original musicUpload listener to add File System API support
-        document.querySelector('.upload-btn').addEventListener('click', async (e) => {
+        document.getElementById('uploadBtn').addEventListener('click', async () => {
             if ('showDirectoryPicker' in window) {
-                console.log('Using File System Access API.');
                 try {
-                    directoryHandle = await window.showDirectoryPicker();
-                    // Save the handle for future sessions
-                    const tx = db.transaction('config', 'readwrite');
-                    tx.objectStore('config').put({ key: 'directoryHandle', value: directoryHandle });
-                    await tx.done;
-
-                    await processDirectory(directoryHandle);
+                    const handle = await window.showDirectoryPicker();
+                    if (await verifyPermission(handle)) {
+                        directoryHandle = handle;
+                        const tx = db.transaction('config', 'readwrite');
+                        tx.objectStore('config').put({ key: 'directoryHandle', value: directoryHandle });
+                        await processDirectory(directoryHandle);
+                    }
                 } catch (err) {
-                    console.error('Error selecting directory:', err);
+                    console.log('User cancelled directory picker or permission denied.', err);
                 }
             } else {
-                console.log('Using legacy file input.');
                 // Fallback for browsers without the API
                 document.getElementById('musicUpload').click();
             }
@@ -3172,6 +3228,88 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (filesToAdd.length > 0) {
                 await addSongs(filesToAdd, 'filesystem');
             }
+        }
+
+        function toggleCrossfade() {
+            crossfadeEnabled = !crossfadeEnabled;
+            document.getElementById('crossfadeStatus').textContent = crossfadeEnabled ? 'On' : 'Off';
+            console.log('Crossfade enabled:', crossfadeEnabled);
+        }
+
+        function setSleepTimer(minutes) {
+            clearTimeout(sleepTimerId); // Clear any existing timer
+            if (minutes > 0) {
+                sleepTimerId = setTimeout(() => {
+                    audioPlayer.pause();
+                    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                    console.log('Sleep timer finished.');
+                }, minutes * 60 * 1000);
+                alert(`Sleep timer set for ${minutes} minutes.`);
+            } else {
+                alert('Sleep timer cancelled.');
+            }
+            sleepTimerModal.style.display = 'none';
+        }
+
+                async function loadSongsAndPlaylists() {
+            const songTx = db.transaction('songs', 'readonly');
+            songs = await songTx.objectStore('songs').getAll();
+            
+            const playlistTx = db.transaction('playlists', 'readonly');
+            playlists = await playlistTx.objectStore('playlists').getAll();
+            
+            console.log('Loaded songs and playlists.');
+        }
+
+        function openPlaylistModal() {
+            const playlistList = document.getElementById('playlistList');
+            playlistList.innerHTML = ''; // Clear previous list
+            if (playlists.length > 0) {
+                 playlists.forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = 'menu-item';
+                    item.textContent = p.name;
+                    item.onclick = () => addSongToPlaylist(p.id);
+                    playlistList.appendChild(item);
+                });
+            } else {
+                playlistList.innerHTML = '<p style="color: var(--secondary-text-color); text-align: center;">No playlists yet.</p>';
+            }
+            playlistModal.style.display = 'flex';
+        }
+
+        async function createPlaylistAndAddSong() {
+            const newName = document.getElementById('newPlaylistName').value.trim();
+            if (!newName) return;
+
+            const newPlaylist = { name: newName, songIds: [currentSongId] };
+            
+            const tx = db.transaction('playlists', 'readwrite');
+            const newId = await tx.objectStore('playlists').add(newPlaylist);
+            await tx.done;
+
+            playlists.push({ ...newPlaylist, id: newId });
+            document.getElementById('newPlaylistName').value = '';
+            playlistModal.style.display = 'none';
+            alert(`Added to new playlist "${newName}"`);
+        }
+
+        async function addSongToPlaylist(playlistId) {
+            const playlist = playlists.find(p => p.id === playlistId);
+            if (!playlist) return;
+            
+            if (!playlist.songIds.includes(currentSongId)) {
+                playlist.songIds.push(currentSongId);
+                
+                const tx = db.transaction('playlists', 'readwrite');
+                tx.objectStore('playlists').put(playlist);
+                await tx.done;
+                
+                alert(`Added to "${playlist.name}"`);
+            } else {
+                alert(`Song is already in "${playlist.name}"`);
+            }
+            playlistModal.style.display = 'none';
         }
 
       // Theme synchronization for Gurapp side
