@@ -997,29 +997,21 @@
 <body>
     <svg style="position: absolute; width: 0; height: 0;">
         <filter id="albumArtDistortion">
-            <!-- numOctaves="1" is the key to the large, soft wave texture -->
-            <feTurbulence 
-                id="turbulence"
-                type="turbulence" 
-                baseFrequency="0.008" 
-                numOctaves="1" 
-                seed="0"
-            />
-            <!-- We blur the map itself to prevent sharp artifacts -->
-            <feGaussianBlur stdDeviation="10" result="blurredTurbulence" />
-            <feDisplacementMap 
-                id="displacement"
-                in="SourceGraphic" 
-                in2="blurredTurbulence" 
-                scale="0" 
-                xChannelSelector="R" 
-                yChannelSelector="G"
-            />
+            <feTurbulence id="turbulence1" type="turbulence" baseFrequency="0.005 0.009" numOctaves="1" seed="2"/>
+            <feTurbulence id="turbulence2" type="turbulence" baseFrequency="0.03 0.02" numOctaves="1" seed="10"/>
+            <feComposite operator="in" in="turbulence1" in2="turbulence2" result="compositedTurbulence" />
+            <feGaussianBlur in="compositedTurbulence" stdDeviation="40" result="blurredTurbulence" />
+            <feDisplacementMap id="displacement" in="SourceGraphic" in2="blurredTurbulence" scale="0" xChannelSelector="R" yChannelSelector="G"/>
         </filter>
     </svg>
-    <div class="background-container">
+    
+    <div id="distortion-container">
         <div class="background-blur"></div>
+        <div class="distortion-shard shape-1"></div>
+        <div class="distortion-shard shape-2"></div>
+        <div class="distortion-shard shape-3"></div>
     </div>
+    
     <div class="sidebar">
         <h1 class="sidebar-title">Library</h1>
         <div class="search-container">
