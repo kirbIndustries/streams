@@ -3086,27 +3086,28 @@ window.addEventListener("load", async () => {
         await initDB();
         initModalVariables();
 
+        // --- CRITICAL FIX: Persistent Permissions & Handle Verification ---
         if ('showDirectoryPicker' in window) {
             const tx = db.transaction('config', 'readonly');
             const handleReq = tx.objectStore('config').get('directoryHandle');
             const configResult = await new Promise(r => { handleReq.onsuccess = () => r(handleReq.result) });
             
             if (configResult) {
+                // This is the key to persistence: we MUST request permission again on the stored handle.
                 if (await verifyPermission(configResult.value, true)) {
+                    console.log("Successfully re-acquired permission for directory handle.");
                     directoryHandle = configResult.value;
                 } else {
+                    console.log("User denied re-acquiring permission. Handle is invalid for this session.");
                     directoryHandle = null;
                 }
             }
         }
 
-        // Load all metadata from the database
+        // Load all song and playlist metadata from the database. This MUST complete before rendering.
         await loadSongsAndPlaylists();
 
-        // **NEW**: Run the migration to clean up old blobs
-        await migrateToFSA();
-
-        // Resume functionality
+        // Resume logic can now safely use the loaded 'songs' array.
         const savedData = localStorage.getItem("currentSong");
         if (savedData) {
             const { id, progress } = JSON.parse(savedData);
@@ -3155,15 +3156,22 @@ window.addEventListener("load", async () => {
             document.getElementById('closeEqModal').addEventListener('click', () => equalizerModal.style.display = 'none');
         }
 
-        async function verifyPermission(handle, shouldRequest = false) {
-            const options = { mode: 'read' };
-            if (shouldRequest) {
-                // Requesting permission is the key to triggering the new persistent prompt.
-                return await handle.requestPermission(options) === 'granted';
-            }
-            // Otherwise, just check the current status without a prompt.
-            return await handle.queryPermission(options) === 'granted';
+async function verifyPermission(handle, shouldRequest = false) {
+    const options = { mode: 'read' };
+    if (shouldRequest) {
+        console.log("Requesting permission for stored handle...");
+        if (await handle.requestPermission(options) === 'granted') {
+            return true;
         }
+    } else {
+        console.log("Querying permission for stored handle...");
+         if (await handle.queryPermission(options) === 'granted') {
+            return true;
+        }
+    }
+    console.log("Permission was not granted.");
+    return false;
+}
 
         function updatePlayerUI(song, progress = 0) {
             musicTitle.textContent = song.name;
@@ -3429,19 +3437,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             sleepTimerModal.style.display = 'none';
         }
         
-        async function loadSongsAndPlaylists() {
-            const songTx = db.transaction('songs', 'readonly');
-            const loadedSongs = await songTx.objectStore('songs').getAll();
-            // Ensure 'songs' is always an array, even if the DB returns something unexpected.
-            songs = Array.isArray(loadedSongs) ? loadedSongs : [];
+async function loadSongsAndPlaylists() {
+    try {
+        const songTx = db.transaction('songs', 'readonly');
+        const songStore = songTx.objectStore('songs');
+        const songRequest = songStore.getAll();
+        const loadedSongs = await new Promise((resolve, reject) => {
+            songRequest.onsuccess = () => resolve(songRequest.result);
+            songRequest.onerror = () => reject(songRequest.error);
+        });
+        songs = Array.isArray(loadedSongs) ? loadedSongs : [];
+
+        const playlistTx = db.transaction('playlists', 'readonly');
+        const playlistStore = playlistTx.objectStore('playlists');
+        const playlistRequest = playlistStore.getAll();
+        const loadedPlaylists = await new Promise((resolve, reject) => {
+            playlistRequest.onsuccess = () => resolve(playlistRequest.result);
+            playlistRequest.onerror = () => reject(playlistRequest.error);
+        });
+        playlists = Array.isArray(loadedPlaylists) ? loadedPlaylists : [];
         
-            const playlistTx = db.transaction('playlists', 'readonly');
-            const loadedPlaylists = await playlistTx.objectStore('playlists').getAll();
-            // Ensure 'playlists' is always an array.
-            playlists = Array.isArray(loadedPlaylists) ? loadedPlaylists : [];
-            
-            console.log('Loaded songs and playlists.');
-        }
+        console.log(`Loaded ${songs.length} songs and ${playlists.length} playlists.`);
+
+    } catch (error) {
+        console.error("Failed to load data from IndexedDB:", error);
+        songs = []; // Ensure arrays are empty on failure
+        playlists = [];
+    }
+}
 
         function openPlaylistModal() {
             const playlistList = document.getElementById('playlistList');
