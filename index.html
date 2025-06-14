@@ -423,7 +423,7 @@
             vertical-align: middle;
         }
 
-        .lyrics-button, .queue-button, .more-button {
+        .lyrics-button, .queue-button, .more-button, .goto-btn {
             background: var(--search-background);
             border: 1px solid var(--glass-border);
             cursor: pointer;
@@ -1091,7 +1091,6 @@
                 <button class="filter-btn" data-filter="artists"><span class="material-symbols-rounded" style="font-size: 18px;">artist</span></button>
                 <button class="filter-btn" data-filter="songs"><span class="material-symbols-rounded" style="font-size: 18px;">music_note</span></button>
                 <button class="filter-btn" data-filter="playlists"><span class="material-symbols-rounded" style="font-size: 18px;">queue_music</span></button>
-                <button id="scrollToCurrentBtn" class="filter-btn"><span class="material-symbols-rounded" style="font-size: 18px;">gps_fixed</span></button>
             </div>
         </div>
         <div class="music-list"></div>
@@ -1138,14 +1137,17 @@
             </button>
         </div>
         <div class="controls-container">
-            <button class="more-button">
-                <span class="material-symbols-rounded style="font-size: 18px;">more_horiz</span>
+            <button id="scrollToCurrentBtn" class="goto-btn">
+                <span class="material-symbols-rounded" style="font-size: 18px;">gps_fixed</span>
             </button>
             <button class="lyrics-button">
                 <span class="material-symbols-rounded" style="font-size: 18px;">tooltip_2</span>
             </button>
             <button class="queue-button">
                 <span class="material-symbols-rounded" style="font-size: 18px;">format_list_bulleted</span>
+            </button>
+            <button class="more-button">
+                <span class="material-symbols-rounded style="font-size: 18px;">more_horiz</span>
             </button>
             <div class="volume-control">
                 <span class="material-symbols-rounded" id="volumeIcon">volume_up</span>
