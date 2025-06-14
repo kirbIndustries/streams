@@ -2099,7 +2099,7 @@ function initVisualizer() {
     source.connect(analyser);
     analyser.connect(audioContext.destination);
 
-    analyser.fftSize = 128; // Determines the number of bars
+    analyser.fftSize = 6; // Determines the number of bars
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
@@ -2116,15 +2116,32 @@ function initVisualizer() {
         const barWidth = (canvas.width / bufferLength) * 1.5;
         let x = 0;
 
-        const gradient = canvasCtx.createLinearGradient(0, 0, 0, canvas.height);
-        gradient.addColorStop(0, '#bdd6ff');   // Light blue
-        gradient.addColorStop(1, '#90ee90');   // Light green
-        
+        // Use CSS variable for color
+        const style = getComputedStyle(document.documentElement);
+        const textColor = style.getPropertyValue('--text-color').trim();
+
         for (let i = 0; i < bufferLength; i++) {
             const barHeight = dataArray[i] / 2.5;
+
+            canvasCtx.fillStyle = textColor;
             
-            canvasCtx.fillStyle = gradient;
-            canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+            // Draw rounded rectangle
+            const radius = 10; // adjust this for more/less rounding
+            const y = canvas.height - barHeight;
+            const height = barHeight;
+
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(x + radius, y);
+            canvasCtx.lineTo(x + barWidth - radius, y);
+            canvasCtx.quadraticCurveTo(x + barWidth, y, x + barWidth, y + radius);
+            canvasCtx.lineTo(x + barWidth, y + height - radius);
+            canvasCtx.quadraticCurveTo(x + barWidth, y + height, x + barWidth - radius, y + height);
+            canvasCtx.lineTo(x + radius, y + height);
+            canvasCtx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            canvasCtx.lineTo(x, y + radius);
+            canvasCtx.quadraticCurveTo(x, y, x + radius, y);
+            canvasCtx.closePath();
+            canvasCtx.fill();
 
             x += barWidth + 1; // Add 1 for spacing between bars
         }
