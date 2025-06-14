@@ -220,14 +220,21 @@
             opacity: 0 !important;
         }
 
-        #editModal {
-            display: flex; /* Use flex for centering */
+        /* Generic Modal Styling */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s ease;
         }
 
-        #editModal.visible {
+        .modal-overlay.visible {
             opacity: 1;
             pointer-events: auto;
         }
@@ -1191,7 +1198,7 @@
     </div>
 
     <!-- Manage Folders Modal -->
-    <div id="manageFoldersModal" style="display: none; position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+    <div id="manageFoldersModal" class="modal-overlay">
         <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 450px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Connected Folders</h2>
             <div id="folderList" style="max-height: 250px; overflow-y: auto; margin-bottom: 15px;">
@@ -1204,7 +1211,7 @@
     </div>
 
     <!-- Edit Song Modal -->
-    <div id="editModal" style="display: none; position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div id="editModal" class="modal-overlay">
         <div id="editModalContent" style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Edit Song Info</h2>
             <input type="hidden" id="editSongId">
@@ -1221,7 +1228,7 @@
     </div>
 
     <!-- Sleep Timer Modal -->
-    <div id="sleepTimerModal" style="display: none; position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+    <div id="sleepTimerModal" class="modal-overlay">
         <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 300px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Sleep Timer</h2>
             <p style="margin-bottom: 15px; color: var(--secondary-text-color);">Playback will stop after:</p>
@@ -1236,7 +1243,7 @@
     </div>
 
     <!-- Playlist Modal -->
-    <div id="playlistModal" style="display: none; position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+    <div id="playlistModal" class="modal-overlay">
          <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Add to playlist</h2>
             <div id="playlistList" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
@@ -1250,7 +1257,7 @@
     </div>
     
     <!-- Equalizer Modal -->
-    <div id="equalizerModal" style="display: none; position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+    <div id="equalizerModal" class="modal-overlay">
         <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Equalizer</h2>
             <p style="text-align: center; color: var(--secondary-text-color);">Equalizer controls will be available here in a future update.</p>
@@ -1311,6 +1318,14 @@
         let sleepTimerId = null;
         let playlists = [];
         let playlistModal, sleepTimerModal;
+
+        function openModal(modal) {
+            if (modal) modal.classList.add('visible');
+        }
+        
+        function closeModal(modal) {
+            if (modal) modal.classList.remove('visible');
+        }
 
 menuBtn.className = 'menu-btn';
 menuBtn.innerHTML = '<span class="material-symbols-rounded">arrow_back</span>';
@@ -2647,10 +2662,33 @@ async function getSongFileUrl(song) {
 }
 
 function initModalVariables() {
-    // ... all other modal initializations remain the same ...
+    // Edit Modal
+    editModal = document.getElementById('editModal');
+    editSongId = document.getElementById('editSongId');
+    editTitle = document.getElementById('editTitle');
+    editArtist = document.getElementById('editArtist');
+    editAlbum = document.getElementById('editAlbum');
+    saveEdit = document.getElementById('saveEdit');
+    cancelEdit = document.getElementById('cancelEdit');
+    saveEdit.addEventListener('click', saveMetadataChanges);
+    cancelEdit.addEventListener('click', () => closeModal(editModal)); // Use helper
 
+    // Sleep Timer Modal
+    sleepTimerModal = document.getElementById('sleepTimerModal');
+    document.getElementById('cancelSleepTimer').addEventListener('click', () => setSleepTimer(0));
+
+    // Playlist Modal
+    playlistModal = document.getElementById('playlistModal');
+    document.getElementById('closePlaylistModal').addEventListener('click', () => closeModal(playlistModal)); // Use helper
+    document.getElementById('createPlaylistBtn').addEventListener('click', createPlaylistAndAddSong);
+
+    // Equalizer Modal
+    equalizerModal = document.getElementById('equalizerModal');
+    document.getElementById('closeEqModal').addEventListener('click', () => closeModal(equalizerModal)); // Use helper
+
+    // Manage Folders Modal
     manageFoldersModal = document.getElementById('manageFoldersModal');
-    document.getElementById('closeFoldersModal').addEventListener('click', () => { manageFoldersModal.style.display = 'none'; });
+    document.getElementById('closeFoldersModal').addEventListener('click', () => closeModal(manageFoldersModal)); // Use helper
 }
 
 function openManageFoldersModal() {
@@ -2726,7 +2764,7 @@ async function removeFolder(folderName) {
             const moreButton = document.querySelector('.more-button');
             const moreOptionsMenu = document.getElementById('moreOptionsMenu');
 
-            document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
+            document.getElementById('manageFoldersBtn').addEventListener('click', () => openModal(manageFoldersModal)); // Use helper
             
             // Toggle menu visibility
             moreButton.addEventListener('click', (e) => {
@@ -2742,23 +2780,12 @@ async function removeFolder(folderName) {
                 if (currentSongId && confirm('Delete this song? This is permanent.')) await deleteSong(currentSongId);
                 moreOptionsMenu.classList.remove('visible');
             });
-            document.getElementById('menuEditMetadata').addEventListener('click', () => {
-                if (currentSongId) openEditModal(currentSongId);
-                moreOptionsMenu.classList.remove('visible');
-            });
+            
+            document.getElementById('menuEditMetadata').addEventListener('click', () => { if (currentSongId) openEditModal(currentSongId); moreOptionsMenu.classList.remove('visible'); });
             document.getElementById('menuCrossfade').addEventListener('click', toggleCrossfade);
-            document.getElementById('menuSleepTimer').addEventListener('click', () => {
-                sleepTimerModal.style.display = 'flex';
-                moreOptionsMenu.classList.remove('visible');
-            });
-            document.getElementById('menuAddToPlaylist').addEventListener('click', () => {
-                if (currentSongId) openPlaylistModal();
-                 moreOptionsMenu.classList.remove('visible');
-            });
-            document.getElementById('menuEqualizer').addEventListener('click', () => {
-                equalizerModal.style.display = 'flex';
-                moreOptionsMenu.classList.remove('visible');
-            });
+            document.getElementById('menuSleepTimer').addEventListener('click', () => { openModal(sleepTimerModal); moreOptionsMenu.classList.remove('visible'); });
+            document.getElementById('menuAddToPlaylist').addEventListener('click', () => { if (currentSongId) openPlaylistModal(); moreOptionsMenu.classList.remove('visible'); });
+            document.getElementById('menuEqualizer').addEventListener('click', () => { openModal(equalizerModal); moreOptionsMenu.classList.remove('visible'); });
 
             // Scroll to current song button
             document.getElementById('scrollToCurrentBtn').addEventListener('click', () => {
@@ -2803,21 +2830,21 @@ async function removeFolder(folderName) {
             
             renderSidebar();
         }
-
+        
         function openEditModal(songId) {
             const song = songs.find(s => s.id === songId);
             if (!song) return;
-
+        
             editSongId.value = song.id;
             editTitle.value = song.name;
             editArtist.value = song.artist;
             editAlbum.value = song.album;
-
-            editModal.classList.add('visible');
+        
+            openModal(editModal); // Use helper
         }
 
         function closeEditModal() {
-            editModal.classList.remove('visible');
+            closeModal(editModal); // Use helper  
         }
 
         async function saveMetadataChanges() {
@@ -2839,6 +2866,23 @@ async function removeFolder(folderName) {
             await saveSongs();
             renderSidebar();
             closeEditModal();
+        }
+
+        function openPlaylistModal() {
+            const playlistList = document.getElementById('playlistList');
+            playlistList.innerHTML = ''; // Clear previous list
+            if (playlists.length > 0) {
+                 playlists.forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = 'menu-item';
+                    item.textContent = p.name;
+                    item.onclick = () => addSongToPlaylist(p.id);
+                    playlistList.appendChild(item);
+                });
+            } else {
+                playlistList.innerHTML = '<p style="color: var(--secondary-text-color); text-align: center;">No playlists yet.</p>';
+            }
+            openModal(playlistModal);
         }
     
 async function fetchLyrics(songId) {
@@ -3549,7 +3593,7 @@ document.getElementById('uploadBtn').addEventListener('click', async () => {
             } else {
                 alert('Sleep timer cancelled.');
             }
-            sleepTimerModal.style.display = 'none';
+            closeModal(sleepTimerModal);
         }
         
 async function loadSongsAndPlaylists() {
@@ -3581,23 +3625,6 @@ async function loadSongsAndPlaylists() {
     }
 }
 
-        function openPlaylistModal() {
-            const playlistList = document.getElementById('playlistList');
-            playlistList.innerHTML = ''; // Clear previous list
-            if (playlists.length > 0) {
-                 playlists.forEach(p => {
-                    const item = document.createElement('div');
-                    item.className = 'menu-item';
-                    item.textContent = p.name;
-                    item.onclick = () => addSongToPlaylist(p.id);
-                    playlistList.appendChild(item);
-                });
-            } else {
-                playlistList.innerHTML = '<p style="color: var(--secondary-text-color); text-align: center;">No playlists yet.</p>';
-            }
-            playlistModal.style.display = 'flex';
-        }
-
         async function createPlaylistAndAddSong() {
             const newName = document.getElementById('newPlaylistName').value.trim();
             if (!newName) return;
@@ -3625,7 +3652,7 @@ async function loadSongsAndPlaylists() {
         
                 playlists.push(newPlaylist);
                 document.getElementById('newPlaylistName').value = '';
-                playlistModal.style.display = 'none';
+                closeModal(playlistModal);
                 alert(`Added "${songs.find(s=>s.id === currentSongId).name}" to new playlist "${newName}"`);
                 renderSidebar(); // Re-render to show the new playlist
         
@@ -3650,7 +3677,7 @@ async function loadSongsAndPlaylists() {
             } else {
                 alert(`Song is already in "${playlist.name}"`);
             }
-            playlistModal.style.display = 'none';
+            closeModal(playlistModal);
         }
 
       // Theme synchronization for Gurapp side
