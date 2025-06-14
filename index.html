@@ -628,11 +628,12 @@
             height: 150%;
             background-position: center;
             background-size: cover;
-            filter: blur(50px) brightness(0.6);
+            /* Stack the new distortion filter with the existing blur */
+            filter: blur(40px) brightness(0.7) url(#albumArtDistortion);
             transition: background-image 0.5s ease, opacity 0.3s ease;
             z-index: -9999;
             transform: translate(-50%, -50%) scale(1.42);
-            opacity: 1; /* Full opacity for dark theme */
+            opacity: 1;
         }
         
         /* Light theme background blur with reduced opacity */
@@ -987,9 +988,30 @@
     </style>
 </head>
 <body>
-<div class="background-container">
-    <div class="background-blur"></div>
-</div>
+    <svg style="position: absolute; width: 0; height: 0;">
+        <filter id="albumArtDistortion">
+            <!-- This creates the noise/turbulence pattern -->
+            <feTurbulence 
+                id="turbulence"
+                type="fractalNoise" 
+                baseFrequency="0.01 0.04" 
+                numOctaves="2" 
+                seed="0"
+            />
+            <!-- This uses the turbulence to displace the image pixels -->
+            <feDisplacementMap 
+                id="displacement"
+                in="SourceGraphic" 
+                in2="turbulence" 
+                scale="0" 
+                xChannelSelector="R" 
+                yChannelSelector="G"
+            />
+        </filter>
+    </svg>
+    <div class="background-container">
+        <div class="background-blur"></div>
+    </div>
     <div class="sidebar">
         <h1 class="sidebar-title">Library</h1>
         <div class="search-container">
@@ -2102,62 +2124,76 @@ function initVisualizer() {
     }
 
     analyser.fftSize = 32;
-    // --- FIX for Peaking: Add smoothing for less frantic motion ---
-    analyser.smoothingTimeConstant = 0.85; 
-    
-    const bufferLength = analyser.frequencyBinCount;
+    analyser.smoothingTimeConstant = 0.8; 
+    const bufferLength = analyser.frequencyBinCount; // 16
     const dataArray = new Uint8Array(bufferLength);
     
+    // --- Get Filter Elements ---
+    const displacementFilter = document.getElementById('displacement');
+    const turbulenceFilter = document.getElementById('turbulence');
+
+    // --- Beat Detection Variables ---
+    let beatCooldown = 0;
+    let lastBassEnergy = 0;
+    let beatThreshold = 1.15;
+    let currentDistortion = 0;
+
+    // --- Bar Visualizer Variables ---
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
-
     const numBars = 6;
+    const barIndices = [1, 3, 5, 7, 9, 11];
 
     function draw() {
         requestAnimationFrame(draw);
 
-        if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-            canvas.width = canvas.clientWidth;
-            canvas.height = canvas.clientHeight;
+        analyser.getByteFrequencyData(dataArray);
+
+        // --- Beat Detection Logic ---
+        const bassEnergy = (dataArray[1] + dataArray[2] + dataArray[3]) / 3;
+        if (bassEnergy > lastBassEnergy * beatThreshold && beatCooldown === 0) {
+            // BEAT DETECTED
+            currentDistortion = 80; // Peak distortion amount
+            turbulenceFilter.setAttribute('seed', Math.random() * 100); // Change the noise pattern
+            beatCooldown = 15; // Wait 15 frames before next beat
         }
 
-        analyser.getByteFrequencyData(dataArray);
-        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-
-        const gap = 3;
-        const totalGaps = (numBars - 1) * gap;
-        const barWidth = (canvas.width - totalGaps) / numBars;
-        const pillRadius = barWidth / 2;
+        // --- Update Distortion ---
+        // Smoothly decrease distortion back to a base level
+        currentDistortion *= 0.92; 
+        displacementFilter.setAttribute('scale', currentDistortion);
         
-        let x = 0;
+        // Slowly "boil" the turbulence for a constant subtle motion
+        const newBaseFrequency = 0.01 + Math.sin(Date.now() / 800) * 0.005;
+        turbulenceFilter.setAttribute('baseFrequency', `${newBaseFrequency} 0.04`);
 
+        // --- Draw the 6-Bar Visualizer ---
+        if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
+        if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const gap = 3;
+        const barWidth = (canvas.width - (numBars - 1) * gap) / numBars;
+        const pillRadius = barWidth / 2;
         const style = getComputedStyle(document.body);
         const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
-
-        const barIndices = [1, 3, 5, 7, 9, 11]; 
+        let x = 0;
 
         for (let i = 0; i < numBars; i++) {
-            const dataIndex = barIndices[i];
-            
-            // --- FIX for Peaking: Non-linear scaling for better dynamics ---
-            // We use a power curve to make quiet parts quieter and loud parts grow more naturally.
-            const normalizedHeight = dataArray[dataIndex] / 255;
-            const barHeight = Math.pow(normalizedHeight, 2.5) * canvas.height * 0.9; // Scale to 90% of canvas height
-            
-            // --- FIX for Rounded Corners ---
-            // The bar must be at least as tall as it is wide to form a proper pill shape.
-            // This prevents the browser from failing to draw the radius on very short bars.
+            const barHeight = Math.pow(dataArray[barIndices[i]] / 255, 2.5) * canvas.height;
             if (barHeight < barWidth) continue;
 
             canvasCtx.fillStyle = textColor;
             const y = (canvas.height - barHeight) / 2;
-
             canvasCtx.beginPath();
             canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
             canvasCtx.fill();
-
             x += barWidth + gap;
         }
+
+        // Update beat detection variables for next frame
+        lastBassEnergy = bassEnergy;
+        if (beatCooldown > 0) beatCooldown--;
     }
 
     draw();
