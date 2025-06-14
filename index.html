@@ -76,6 +76,13 @@
             color: var(--text-color);
         }
 
+            :root {
+                --background-filter-effect: blur(50px) brightness(0.7) url(#albumArtDistortion);
+            }
+            body.light-theme {
+                --background-filter-effect: blur(60px) brightness(0.85) url(#albumArtDistortion);
+            }
+        
         .popup-message {
             position: fixed;
             bottom: 20px;
@@ -619,7 +626,6 @@
             z-index: -9999;
         }
         
-        /* Default (dark theme) background blur */
         .background-blur {
             position: fixed;
             top: 50%;
@@ -628,20 +634,14 @@
             height: 150%;
             background-position: center;
             background-size: cover;
-            /* Stack the new distortion filter with the existing blur */
-            filter: blur(40px) brightness(0.7) url(#albumArtDistortion);
+            /* Use a CSS variable for the filter property */
+            filter: var(--background-filter-effect);
             transition: background-image 0.5s ease, opacity 0.3s ease;
             z-index: -9999;
             transform: translate(-50%, -50%) scale(1.42);
             opacity: 1;
         }
-        
-        /* Light theme background blur with reduced opacity */
-        body.light-theme .background-blur {
-            opacity: 0.6; /* 60% opacity for light theme */
-            filter: blur(40px) brightness(0.8) url(#albumArtDistortion);
-        }
-        
+
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
@@ -662,27 +662,6 @@
             to {
                 transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
             }
-        }
-
-        .background-distort-sharp {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            width: 150%;
-            height: 150%;
-            background-position: center;
-            background-size: cover;
-            /* This filter ONLY distorts, it does not blur */
-            filter: url(#albumArtDistortion);
-            z-index: -9998; /* Sits above the blur but below content */
-            transform: translate(-50%, -50%) scale(1.42);
-            opacity: 1;
-            transition: background-image 0.5s ease;
-        }
-        
-        body.light-theme .background-distort-sharp {
-            /* Adjust opacity for light mode if desired */
-            opacity: 0.8;
         }
         
         .search-container {
@@ -1031,7 +1010,6 @@
     </svg>
     <div class="background-container">
         <div class="background-blur"></div>
-        <div class="background-distort-sharp"></div> 
     </div>
     <div class="sidebar">
         <h1 class="sidebar-title">Library</h1>
@@ -1126,8 +1104,6 @@
         const body = document.body;
         const menuBtn = document.createElement('button');
         const storedLightMode = localStorage.getItem('theme') || 'dark';
-        // Add this with your other variable declarations
-        const backgroundDistortSharp = document.querySelector('.background-distort-sharp');
 
         let songs = JSON.parse(localStorage.getItem('songs')) || [];
         let currentSongId = null;
@@ -1276,14 +1252,16 @@ function resetPlayer() {
   playQueue = [];
   currentQueueIndex = -1;
   
+  // Set default album art or transparent image
   const defaultImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAH0CAYAAADL1t+KAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAPgSURBVHhe7cEBAQAAAIIg/69uSEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACcqAFFFQAB8Dl/nAAAAABJRU5ErkJggg==";
   albumArtImg.src = defaultImage;
   
+  // Update background
   const backgroundElement = document.querySelector('.background-blur');
   backgroundElement.classList.remove('rotating');
   backgroundElement.style.backgroundImage = '';
-  backgroundDistortSharp.style.backgroundImage = ''; // ADD THIS LINE
-
+  
+  // Update player controls
   musicTitle.textContent = 'No song playing';
   musicArtist.textContent = '';
   document.getElementById('currentTime').textContent = '-:--';
@@ -1291,8 +1269,10 @@ function resetPlayer() {
   playPauseBtn.innerHTML = '<span class="material-symbols-rounded">playlist_remove</span>';
   playPauseBtn.classList.remove('playing');
   
+  // Update title
   document.title = 'Music';
   
+  // Update favicon if needed
   const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
   links.forEach(link => link.parentNode.removeChild(link));
   const defaultFavicon = document.createElement('link');
@@ -1575,7 +1555,6 @@ function loadAndPlaySong(song) {
             const backgroundElement = document.querySelector('.background-blur');
             backgroundElement.classList.add('changing');
             backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-            backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
             albumArtImg.src = song.albumArt;
             
             // Update favicon
@@ -1827,7 +1806,6 @@ function setUpSongPlayback(song) {
     const backgroundElement = document.querySelector('.background-blur');
     backgroundElement.classList.add('changing');
     backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-    backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
     albumArtImg.src = song.albumArt;
     
     // Update favicon
@@ -1872,7 +1850,6 @@ async function loadSong(song) {
             const backgroundElement = document.querySelector('.background-blur');
             backgroundElement.classList.add('changing');
             backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
-            backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
             albumArtImg.src = song.albumArt;
             
             // Update favicon
@@ -2133,7 +2110,6 @@ async function saveSongs() {
   });
 }
 
-// Replace this entire function
 function initVisualizer() {
     if (isVisualizerInitialized) return;
 
@@ -2147,16 +2123,17 @@ function initVisualizer() {
     }
 
     analyser.fftSize = 32;
-    analyser.smoothingTimeConstant = 0.8;
+    analyser.smoothingTimeConstant = 0.88;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
     const turbulenceFilter = document.getElementById('turbulence');
 
-    const baselineDistortion = 25;
-    const peakDistortion = 100;
-    const decayFactor = 0.95;
+    // --- RETUNED DISTORTION ---
+    const baselineDistortion = 40; // Higher baseline for a constant wavy look
+    const peakDistortion = 110;    // A strong but not overpowering peak
+    const decayFactor = 0.96;     
     let currentDistortion = baselineDistortion;
 
     let beatCooldown = 0;
@@ -2171,27 +2148,26 @@ function initVisualizer() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        // --- IMPROVED Beat Detection Logic ---
-        // Calculate a more stable energy value from the low-end frequencies.
-        const bassEnergy = (dataArray[0] * 1.1 + dataArray[1] + dataArray[2]) / 3;
-        const beatThreshold = lastBassEnergy * 1.16; // A more sensitive threshold
-
-        if (bassEnergy > beatThreshold && bassEnergy > 80 && beatCooldown === 0) {
-            // BEAT DETECTED
+        // --- Beat Detection & Wave Logic ---
+        const bassEnergy = dataArray[1] + dataArray[2];
+        if (bassEnergy > lastBassEnergy * 1.18 && beatCooldown === 0 && bassEnergy > 100) {
+            // BEAT DETECTED: Spike distortion and SHIFT the waves
             currentDistortion = peakDistortion;
-            turbulenceFilter.setAttribute('seed', Math.random() * 500);
-            beatCooldown = 15;
+            turbulenceFilter.setAttribute('seed', Math.random() * 500); // Drastically change pattern
+            beatCooldown = 18;
         }
 
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
 
-        const time = Date.now() / 4000;
-        const wavyFrequencyX = 0.005 + Math.sin(time * 0.7) * 0.003;
-        const wavyFrequencyY = 0.008 + Math.cos(time * 0.5) * 0.004;
+        // --- THE KEY FIX for Large, Curvy, Random Waves ---
+        // Use very low frequencies for the turbulence to make the waves large and slow.
+        const time = Date.now() / 8000; // Much, much slower animation time
+        const wavyFrequencyX = 0.002 + Math.sin(time * 0.7) * 0.001;
+        const wavyFrequencyY = 0.005 + Math.cos(time * 0.4) * 0.002;
         turbulenceFilter.setAttribute('baseFrequency', `${wavyFrequencyX} ${wavyFrequencyY}`);
         
-        // Bar Visualizer...
+        // --- Bar Visualizer Logic (Unchanged) ---
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2504,7 +2480,6 @@ function playSong(song) {
       const backgroundBlur = document.querySelector('.background-blur');
       backgroundBlur.classList.add('changing');
       backgroundBlur.style.backgroundImage = `url('${song.albumArt}')`;
-      backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
       albumArtImg.src = song.albumArt;
       updateFavicon(song.albumArt);
       
@@ -2960,7 +2935,6 @@ window.addEventListener("load", async () => {
                     musicArtist.textContent = song.artist;
                     albumArtImg.src = song.albumArt;
                     document.querySelector('.background-blur').style.backgroundImage = `url('${song.albumArt}')`;
-                    backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
                     currentSongId = song.id;
                     playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
                     playPauseBtn.classList.remove('playing');
