@@ -2113,17 +2113,20 @@ function initVisualizer() {
     function draw() {
         requestAnimationFrame(draw);
 
-        analyser.getByteFrequencyData(dataArray);
+        // --- THE DEFINITIVE FIX: Sync canvas dimensions ---
+        // This ensures the drawing buffer matches the element's actual size on screen, preventing distortion.
+        if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
 
+        analyser.getByteFrequencyData(dataArray);
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // --- FIX: Increased padding (gap) for better separation ---
-        const gap = 10; 
+        // --- INCREASED GAP for better visual separation ---
+        const gap = 6; 
         const totalGaps = (numBars - 1) * gap;
         const barWidth = (canvas.width - totalGaps) / numBars;
-        
-        // --- FIX: Calculate radius for a perfect pill shape ---
-        // The radius is exactly half the bar's width.
         const pillRadius = barWidth / 2;
         
         let x = 0;
@@ -2135,18 +2138,19 @@ function initVisualizer() {
 
         for (let i = 0; i < numBars; i++) {
             const dataIndex = barIndices[i];
-            const barHeight = dataArray[dataIndex] / 2.2; // Slightly increased height
+            const barHeight = dataArray[dataIndex] / 2.2;
             
+            // Only draw bars that have a visible height
             if (barHeight < 2) continue;
 
             canvasCtx.fillStyle = textColor;
             const y = (canvas.height - barHeight) / 2;
 
             canvasCtx.beginPath();
-            // --- Use the new pillRadius variable ---
             canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
             canvasCtx.fill();
 
+            // Move the starting point for the next bar
             x += barWidth + gap;
         }
     }
