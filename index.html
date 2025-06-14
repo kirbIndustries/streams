@@ -2121,13 +2121,12 @@ function initVisualizer() {
 
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.88;
-    const bufferLength = analyser.frequencyBinCount; // Will be 1024
+    const bufferLength = analyser.frequencyBinCount; // 1024
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
     const turbulenceFilter = document.getElementById('turbulence');
 
-    // --- Retuned for the soft, wavy effect ---
     const baselineDistortion = 80;
     const peakDistortion = 150;
     let currentDistortion = baselineDistortion;
@@ -2139,15 +2138,12 @@ function initVisualizer() {
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
     const numBars = 6;
-    // --- UPDATED: Indices adjusted for 2048 fftSize to cover a wider frequency range ---
-    // These indices now sample from bass, low-mids, mids, upper-mids, presence, and brilliance ranges.
     const barIndices = [2, 10, 30, 100, 200, 400];
 
     function draw() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        // --- Beat Detection (targets the lowest bass frequencies, remains effective) ---
         const bassEnergy = (dataArray[0] + dataArray[1]) / 2;
         if (bassEnergy > lastBassEnergy * 1.16 && beatCooldown === 0 && bassEnergy > 110) {
             currentDistortion = peakDistortion;
@@ -2157,8 +2153,7 @@ function initVisualizer() {
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
         
-        // --- Independent Shard Movement ---
-        const shardTime = Date.now() * 0.00005; // Use a slow clock for shard drifting
+        const shardTime = Date.now() * 0.00005;
         shards.forEach((shard) => {
             shard.rotation += shard.rotationSpeed;
             shard.x = Math.sin(shardTime * shard.xDrift * 10) * 80;
@@ -2166,10 +2161,9 @@ function initVisualizer() {
             shard.element.style.transform = `translate(${shard.x}px, ${shard.y}px) rotate(${shard.rotation}deg)`;
         });
 
-        // --- Constant Liquid Wave Animation ---
         turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
-        // --- Bar Visualizer Logic (Unchanged) ---
+        // --- Bar Visualizer Logic (FIXED) ---
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2179,18 +2173,25 @@ function initVisualizer() {
         const pillRadius = barWidth / 2;
         const style = getComputedStyle(document.body);
         const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
-        let x = 0;
+        // REMOVED: let x = 0;
 
         for (let i = 0; i < numBars; i++) {
-            // Use the updated barIndices to get data from across the spectrum
+            // FIXED: Calculate x position inside the loop based on the index `i`.
+            // This guarantees each bar has its own slot, drawn or not.
+            const x = i * (barWidth + gap);
+
             const barHeight = Math.pow(dataArray[barIndices[i]] / 255, 2.5) * canvas.height * 0.9;
-            if (barHeight < barWidth) continue;
+            
+            // This condition is now safe to use.
+            if (barHeight < barWidth) {
+                continue;
+            }
+
             const y = (canvas.height - barHeight) / 2;
             canvasCtx.fillStyle = textColor;
             canvasCtx.beginPath();
             canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
             canvasCtx.fill();
-            x += barWidth + gap;
         }
 
         lastBassEnergy = bassEnergy;
