@@ -1276,16 +1276,14 @@ function resetPlayer() {
   playQueue = [];
   currentQueueIndex = -1;
   
-  // Set default album art or transparent image
   const defaultImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAH0CAYAAADL1t+KAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAPgSURBVHhe7cEBAQAAAIIg/69uSEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACcqAFFFQAB8Dl/nAAAAABJRU5ErkJggg==";
   albumArtImg.src = defaultImage;
   
-  // Update background
   const backgroundElement = document.querySelector('.background-blur');
   backgroundElement.classList.remove('rotating');
   backgroundElement.style.backgroundImage = '';
-  
-  // Update player controls
+  backgroundDistortSharp.style.backgroundImage = ''; // ADD THIS LINE
+
   musicTitle.textContent = 'No song playing';
   musicArtist.textContent = '';
   document.getElementById('currentTime').textContent = '-:--';
@@ -1293,10 +1291,8 @@ function resetPlayer() {
   playPauseBtn.innerHTML = '<span class="material-symbols-rounded">playlist_remove</span>';
   playPauseBtn.classList.remove('playing');
   
-  // Update title
   document.title = 'Music';
   
-  // Update favicon if needed
   const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
   links.forEach(link => link.parentNode.removeChild(link));
   const defaultFavicon = document.createElement('link');
@@ -2137,6 +2133,7 @@ async function saveSongs() {
   });
 }
 
+// Replace this entire function
 function initVisualizer() {
     if (isVisualizerInitialized) return;
 
@@ -2150,16 +2147,16 @@ function initVisualizer() {
     }
 
     analyser.fftSize = 32;
-    analyser.smoothingTimeConstant = 0.88; // More smoothing
+    analyser.smoothingTimeConstant = 0.8;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
     const turbulenceFilter = document.getElementById('turbulence');
 
-    const baselineDistortion = 30; // Higher baseline for constant distortion
-    const peakDistortion = 120;
-    const decayFactor = 0.96;
+    const baselineDistortion = 25;
+    const peakDistortion = 100;
+    const decayFactor = 0.95;
     let currentDistortion = baselineDistortion;
 
     let beatCooldown = 0;
@@ -2174,27 +2171,27 @@ function initVisualizer() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        const bassEnergy = dataArray[1] + dataArray[2];
-        let wavyFrequencyX, wavyFrequencyY;
+        // --- IMPROVED Beat Detection Logic ---
+        // Calculate a more stable energy value from the low-end frequencies.
+        const bassEnergy = (dataArray[0] * 1.1 + dataArray[1] + dataArray[2]) / 3;
+        const beatThreshold = lastBassEnergy * 1.16; // A more sensitive threshold
 
-        if (bassEnergy > lastBassEnergy * 1.20 && beatCooldown === 0) {
-            // BEAT DETECTED: Spike distortion and SHIFT the waves
+        if (bassEnergy > beatThreshold && bassEnergy > 80 && beatCooldown === 0) {
+            // BEAT DETECTED
             currentDistortion = peakDistortion;
-            turbulenceFilter.setAttribute('seed', Math.random() * 500); // Drastically change pattern
-            beatCooldown = 18;
+            turbulenceFilter.setAttribute('seed', Math.random() * 500);
+            beatCooldown = 15;
         }
 
-        // Always smoothly return to the baseline distortion
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
 
-        // ALWAYS ON: Create large, slow, curvy, random waves
-        const time = Date.now() / 4000; // Much slower animation
-        wavyFrequencyX = 0.005 + Math.sin(time * 0.7) * 0.003;
-        wavyFrequencyY = 0.008 + Math.cos(time * 0.5) * 0.004;
+        const time = Date.now() / 4000;
+        const wavyFrequencyX = 0.005 + Math.sin(time * 0.7) * 0.003;
+        const wavyFrequencyY = 0.008 + Math.cos(time * 0.5) * 0.004;
         turbulenceFilter.setAttribute('baseFrequency', `${wavyFrequencyX} ${wavyFrequencyY}`);
         
-        // Bar Visualizer Logic...
+        // Bar Visualizer...
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2507,6 +2504,7 @@ function playSong(song) {
       const backgroundBlur = document.querySelector('.background-blur');
       backgroundBlur.classList.add('changing');
       backgroundBlur.style.backgroundImage = `url('${song.albumArt}')`;
+      backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
       albumArtImg.src = song.albumArt;
       updateFavicon(song.albumArt);
       
@@ -2962,6 +2960,7 @@ window.addEventListener("load", async () => {
                     musicArtist.textContent = song.artist;
                     albumArtImg.src = song.albumArt;
                     document.querySelector('.background-blur').style.backgroundImage = `url('${song.albumArt}')`;
+                    backgroundDistortSharp.style.backgroundImage = `url('${song.albumArt}')`;
                     currentSongId = song.id;
                     playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
                     playPauseBtn.classList.remove('playing');
