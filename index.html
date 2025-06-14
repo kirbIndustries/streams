@@ -1659,7 +1659,9 @@
 
         async function loadSongsFromStorage() {
             const tx = db.transaction(['songs'], 'readonly');
-            songs = await tx.objectStore('songs').getAll();
+            // FIX: Ensure 'songs' is ALWAYS an array, even if the database returns nothing.
+            // The '|| []' provides an empty array as a fallback.
+            songs = (await tx.objectStore('songs').getAll()) || [];
         }
 
         async function saveSongs() {
@@ -1887,7 +1889,7 @@
                 case 'queue': renderQueue(element); break;
             }
         }
-        
+
         function renderAlbums(element, songsToRender) {
             const albums = groupSongsByAlbum(songsToRender);
             albums.sort((a, b) => (a.songs[0]?.dateAdded || 0) - (b.songs[0]?.dateAdded || 0));
@@ -1918,18 +1920,105 @@
                   </div>
                 </div>
               `).join("");
+            // Attach a single listener to the parent element for efficiency
             element.addEventListener('click', (e) => {
                 const songItem = e.target.closest('.music-item');
-                if (songItem) {
+                if (songItem && songItem.dataset.id) {
                     const songId = parseFloat(songItem.dataset.id);
                     if (songId) playSong(songs.find(s => s.id === songId));
                 }
             });
         }
+
+        function renderArtists(element, songsToRender) {
+            const artists = [...new Map(songsToRender.map(s => [s.artist, s])).values()]
+                .sort((a,b) => a.artist.localeCompare(b.artist));
+
+            if (artists.length === 0) {
+                 element.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">mic_off</span><p>No artists found</p></div>';
+                 return;
+            }
+            element.innerHTML = artists.map(artist => `
+                <div class="music-item" data-artist="${artist.artist}">
+                    <div class="song-info">${artist.artist}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderSongsList(element, songsToRender) {
+             if (songsToRender.length === 0) {
+                 element.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">music_off</span><p>No songs found</p></div>';
+                 return;
+             }
+             element.innerHTML = songsToRender.map(song => `
+                 <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
+                    <div class="song-info">
+                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
+                        <div>
+                            <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
+                            <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                        </div>
+                    </div>
+                 </div>
+             `).join('');
+             element.addEventListener('click', (e) => {
+                const songItem = e.target.closest('.music-item');
+                if (songItem && songItem.dataset.id) {
+                    const songId = parseFloat(songItem.dataset.id);
+                    if (songId) playSong(songs.find(s => s.id === songId));
+                }
+            });
+        }
+
+        function renderPlaylists(element) {
+            element.innerHTML = `
+                <div class="no-results" style="padding-top: 50px;">
+                    <span class="material-symbols-rounded">playlist_play</span>
+                    <p>Playlist functionality is coming soon!</p>
+                </div>`;
+        }
         
-        // ... include the other render functions (renderArtists, renderSongsList, etc.) here...
-        // Their implementations from the previous response are correct.
-        
+        function renderLyrics(element) {
+            element.innerHTML = `<button class="sidebar-back-btn"><span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Library</button><div class="lyrics-container"></div>`;
+            element.querySelector('.sidebar-back-btn').onclick = () => switchSidebarView(currentFilter);
+            const lyricsContainer = element.querySelector('.lyrics-container');
+            if (!currentSongId) {
+                lyricsContainer.innerHTML = `<p>No song is currently playing.</p>`;
+                return;
+            }
+            const song = songs.find(s => s.id === currentSongId);
+            if (!song || !song.lyrics) {
+                lyricsContainer.innerHTML = `<p>No lyrics found for this song.</p>`;
+                return;
+            }
+            if (song.lrcData && song.lrcData.length > 0) {
+                lyricsContainer.innerHTML = song.lrcData.map((line, index) => `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '...'}</p>`).join('');
+            } else {
+                lyricsContainer.innerHTML = `<p>${song.lyrics.replace(/\n/g, '<br>')}</p>`;
+            }
+        }
+
+        function renderQueue(element) {
+            element.innerHTML = `<button class="sidebar-back-btn"><span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Library</button><div class="queue-list-container"></div>`;
+            element.querySelector('.sidebar-back-btn').onclick = () => switchSidebarView(currentFilter);
+            const queueContainer = element.querySelector('.queue-list-container');
+            if (playQueue.length === 0) {
+                queueContainer.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">queue_music</span><p>The queue is empty.</p></div>';
+                return;
+            }
+            queueContainer.innerHTML = playQueue.map((song, index) => `
+                <div class="music-item queue-item ${song.id === currentSongId ? "active" : ""}" data-queue-index="${index}" data-id="${song.id}">
+                    <div class="song-info">
+                        <span class="track-number">${index + 1}.</span>
+                        <span class="song-title">${song.name}</span>
+                        <span class="song-artist-queue">${song.artist}</span>
+                        <button class="remove-from-queue-btn" data-queue-index="${index}"><span class="material-symbols-rounded" style="font-size: 18px;">close</span></button>
+                    </div>
+                </div>
+            `).join('');
+            // Add listeners for this specific view
+        }
+
         // =================================================================
         // MISC HELPER FUNCTIONS
         // =================================================================
