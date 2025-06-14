@@ -2102,6 +2102,9 @@ function initVisualizer() {
     }
 
     analyser.fftSize = 32;
+    // --- FIX for Peaking: Add smoothing for less frantic motion ---
+    analyser.smoothingTimeConstant = 0.85; 
+    
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
@@ -2113,8 +2116,6 @@ function initVisualizer() {
     function draw() {
         requestAnimationFrame(draw);
 
-        // --- THE DEFINITIVE FIX: Sync canvas dimensions ---
-        // This ensures the drawing buffer matches the element's actual size on screen, preventing distortion.
         if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
             canvas.width = canvas.clientWidth;
             canvas.height = canvas.clientHeight;
@@ -2123,8 +2124,7 @@ function initVisualizer() {
         analyser.getByteFrequencyData(dataArray);
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // --- INCREASED GAP for better visual separation ---
-        const gap = 6; 
+        const gap = 6;
         const totalGaps = (numBars - 1) * gap;
         const barWidth = (canvas.width - totalGaps) / numBars;
         const pillRadius = barWidth / 2;
@@ -2138,10 +2138,16 @@ function initVisualizer() {
 
         for (let i = 0; i < numBars; i++) {
             const dataIndex = barIndices[i];
-            const barHeight = dataArray[dataIndex] / 2.2;
             
-            // Only draw bars that have a visible height
-            if (barHeight < 2) continue;
+            // --- FIX for Peaking: Non-linear scaling for better dynamics ---
+            // We use a power curve to make quiet parts quieter and loud parts grow more naturally.
+            const normalizedHeight = dataArray[dataIndex] / 255;
+            const barHeight = Math.pow(normalizedHeight, 2.5) * canvas.height * 0.9; // Scale to 90% of canvas height
+            
+            // --- FIX for Rounded Corners ---
+            // The bar must be at least as tall as it is wide to form a proper pill shape.
+            // This prevents the browser from failing to draw the radius on very short bars.
+            if (barHeight < barWidth) continue;
 
             canvasCtx.fillStyle = textColor;
             const y = (canvas.height - barHeight) / 2;
@@ -2150,7 +2156,6 @@ function initVisualizer() {
             canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
             canvasCtx.fill();
 
-            // Move the starting point for the next bar
             x += barWidth + gap;
         }
     }
