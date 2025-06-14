@@ -625,43 +625,50 @@
             overflow: hidden;
             z-index: -9999;
         }
-        
-        .background-blur {
+                
+        /* This is the main stage for the effect */
+        #distortion-container {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            width: 150%;
-            height: 150%;
-            background-position: center;
+            inset: 0; /* A modern way to say top/bottom/left/right = 0 */
+            overflow: hidden;
+            z-index: -9998;
+        }
+        
+        /* The VERY back layer is just a simple blur */
+        #distortion-container .background-blur {
+            width: 100%;
+            height: 100%;
             background-size: cover;
-            /* Use a CSS variable for the filter property */
-            filter: var(--background-filter-effect);
-            transition: background-image 0.5s ease, opacity 0.3s ease;
-            z-index: -9999;
-            transform: translate(-50%, -50%) scale(1.42);
-            opacity: 1;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            background-position: center;
+            filter: blur(50px) brightness(0.6);
+            transform: scale(1.2);
         }
         
-        .background-blur.changing {
-            animation: fadeIn 0.5s ease;
+        /* Common style for ALL moving shards */
+        .distortion-shard {
+            position: absolute;
+            /* Make shards much larger than the screen so they can move freely without showing edges */
+            width: 200%;
+            height: 200%;
+            top: -50%;
+            left: -50%;
+            background-size: cover;
+            background-position: center;
+            /* Apply the shared distortion filter */
+            filter: url(#albumArtDistortion);
+            /* Performance hint for the browser */
+            will-change: transform;
         }
         
-        .background-blur.rotating {
-            animation: rotate 90s linear infinite;
+        /* Define the unique organic shapes for each shard */
+        .shape-1 {
+            clip-path: polygon(0% 25%, 66% 0%, 100% 33%, 75% 100%, 25% 100%);
         }
-        
-        @keyframes rotate {
-            from {
-                transform: translate(-50%, -50%) scale(1.42) rotate(0deg);
-            }
-            to {
-                transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
-            }
+        .shape-2 {
+            clip-path: polygon(33% 0%, 100% 0%, 100% 75%, 50% 100%, 0% 50%);
+        }
+        .shape-3 {
+            clip-path: polygon(100% 33%, 80% 80%, 30% 100%, 0% 70%, 20% 20%);
         }
         
         .search-container {
@@ -990,31 +997,16 @@
 <body>
     <svg style="position: absolute; width: 0; height: 0;">
         <filter id="albumArtDistortion">
-            <!-- Layer 1: Large, slow, base waves -->
+            <!-- numOctaves="1" is the key to the large, soft wave texture -->
             <feTurbulence 
-                id="turbulence1"
+                id="turbulence"
                 type="turbulence" 
-                baseFrequency="0.005 0.009" 
+                baseFrequency="0.008" 
                 numOctaves="1" 
-                seed="2"
+                seed="0"
             />
-    
-            <!-- Layer 2: Smaller, faster, overlaying waves -->
-            <feTurbulence 
-                id="turbulence2"
-                type="turbulence" 
-                baseFrequency="0.03 0.02" 
-                numOctaves="1" 
-                seed="10"
-            />
-            
-            <!-- Combine the two layers -->
-            <feComposite operator="in" in="turbulence1" in2="turbulence2" result="compositedTurbulence" />
-    
-            <!-- THE KEY: Blur the combined distortion map itself to make the warp soft and liquid -->
-            <feGaussianBlur in="compositedTurbulence" stdDeviation="40" result="blurredTurbulence" />
-            
-            <!-- Use the final, smooth, complex map to displace the album art -->
+            <!-- We blur the map itself to prevent sharp artifacts -->
+            <feGaussianBlur stdDeviation="10" result="blurredTurbulence" />
             <feDisplacementMap 
                 id="displacement"
                 in="SourceGraphic" 
@@ -1121,7 +1113,9 @@
         const body = document.body;
         const menuBtn = document.createElement('button');
         const storedLightMode = localStorage.getItem('theme') || 'dark';
-
+        const shardContainer = document.getElementById('distortion-container');
+        
+        let shards = []; // This will hold the state of our moving parts
         let songs = JSON.parse(localStorage.getItem('songs')) || [];
         let currentSongId = null;
         let db;
@@ -1274,10 +1268,9 @@ function resetPlayer() {
   albumArtImg.src = defaultImage;
   
   // Update background
-  const backgroundElement = document.querySelector('.background-blur');
-  backgroundElement.classList.remove('rotating');
-  backgroundElement.style.backgroundImage = '';
-  
+  updateAllBackgrounds(song.albumArt);
+  albumArtImg.src = song.albumArt;
+    
   // Update player controls
   musicTitle.textContent = 'No song playing';
   musicArtist.textContent = '';
@@ -1569,9 +1562,7 @@ function loadAndPlaySong(song) {
             musicTitle.textContent = song.name;
             musicArtist.textContent = song.artist;
             
-            const backgroundElement = document.querySelector('.background-blur');
-            backgroundElement.classList.add('changing');
-            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+            updateAllBackgrounds(song.albumArt);
             albumArtImg.src = song.albumArt;
             
             // Update favicon
@@ -1820,9 +1811,7 @@ function setUpSongPlayback(song) {
     musicTitle.textContent = song.name;
     musicArtist.textContent = song.artist;
     
-    const backgroundElement = document.querySelector('.background-blur');
-    backgroundElement.classList.add('changing');
-    backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+    updateAllBackgrounds(song.albumArt);
     albumArtImg.src = song.albumArt;
     
     // Update favicon
@@ -1864,9 +1853,7 @@ async function loadSong(song) {
             musicTitle.textContent = song.name;
             musicArtist.textContent = song.artist;
 
-            const backgroundElement = document.querySelector('.background-blur');
-            backgroundElement.classList.add('changing');
-            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
+            updateAllBackgrounds(song.albumArt);
             albumArtImg.src = song.albumArt;
             
             // Update favicon
@@ -2127,6 +2114,33 @@ async function saveSongs() {
   });
 }
 
+function initializeShards() {
+    const shardElements = document.querySelectorAll('.distortion-shard');
+    shardElements.forEach((el, i) => {
+        shards.push({
+            element: el,
+            // Assign each shard a different part of the image to "split" it
+            bgPos: `${i * 50}% 50%`, 
+            // Give each shard its own random speed and direction
+            rotationSpeed: (Math.random() - 0.5) * 0.1,
+            xDrift: (Math.random() - 0.5) * 0.2,
+            yDrift: (Math.random() - 0.5) * 0.2,
+            // Current transform values
+            x: 0,
+            y: 0,
+            rotation: Math.random() * 360,
+        });
+        el.style.backgroundPosition = shards[i].bgPos;
+    });
+}
+
+function updateAllBackgrounds(imageUrl) {
+    shardContainer.querySelector('.background-blur').style.backgroundImage = `url('${imageUrl}')`;
+    shards.forEach(shard => {
+        shard.element.style.backgroundImage = `url('${imageUrl}')`;
+    });
+}
+
 function initVisualizer() {
     if (isVisualizerInitialized) return;
 
@@ -2144,19 +2158,15 @@ function initVisualizer() {
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
-    // Get the two new turbulence layers and the displacement map
     const displacementFilter = document.getElementById('displacement');
-    const turbulence1 = document.getElementById('turbulence1');
-    const turbulence2 = document.getElementById('turbulence2');
-
-    // Retuned parameters for a more dramatic effect
-    const baselineDistortion = 70;
-    const peakDistortion = 160;
-    const decayFactor = 0.95;     
-    let currentDistortion = baselineDistortion;
-
     let beatCooldown = 0;
     let lastBassEnergy = 0;
+
+    // --- Tune the distortion effect ---
+    const baselineDistortion = 60;
+    const peakDistortion = 130;
+    let currentDistortion = baselineDistortion;
+    const decayFactor = 0.95;
 
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
@@ -2167,28 +2177,28 @@ function initVisualizer() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        // --- Beat Detection Logic ---
-        const bassEnergy = (dataArray[0] + dataArray[1]) / 2;
-        if (bassEnergy > lastBassEnergy * 1.15 && beatCooldown === 0 && bassEnergy > 120) {
-            // BEAT: Spike the distortion
+        // --- Beat Detection ---
+        const bassEnergy = dataArray[1] + dataArray[2];
+        if (bassEnergy > lastBassEnergy * 1.18 && beatCooldown === 0 && bassEnergy > 100) {
             currentDistortion = peakDistortion;
-            beatCooldown = 15;
+            beatCooldown = 20;
         }
 
-        // --- THE KEY: Animate the two layers independently for rotation and movement ---
-        const time = Date.now();
-        // Layer 1: Animate the 'seed' for a slow, large morphing effect
-        turbulence1.setAttribute('seed', time / 25);
-        // Layer 2: Animate the 'baseFrequency' for a constant, faster "rotating" feel
-        const freqX = 0.03 + Math.sin(time / 800) * 0.01;
-        const freqY = 0.02 + Math.cos(time / 650) * 0.008;
-        turbulence2.setAttribute('baseFrequency', `${freqX} ${freqY}`);
-        
-        // Apply the distortion scale
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
         
-        // --- Bar Visualizer Logic (Unchanged) ---
+        // --- Independent Shard Animation ---
+        const time = Date.now() * 0.0001; // A slow master clock
+        shards.forEach((shard) => {
+            // Update rotation and position based on its unique speeds
+            shard.rotation += shard.rotationSpeed;
+            shard.x = Math.sin(time + shard.xDrift) * 20;
+            shard.y = Math.cos(time + shard.yDrift) * 20;
+            
+            // Apply the new transform
+            shard.element.style.transform = `translate(${shard.x}px, ${shard.y}px) rotate(${shard.rotation}deg)`;
+        });
+        
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2214,7 +2224,8 @@ function initVisualizer() {
         lastBassEnergy = bassEnergy;
         if (beatCooldown > 0) beatCooldown--;
     }
-
+    
+    initializeShards();
     draw();
     isVisualizerInitialized = true;
 }
