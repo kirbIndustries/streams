@@ -2212,7 +2212,7 @@ function renderSidebar() {
 
     document.querySelector('.lyrics-button').classList.toggle('active', sidebarView === 'lyrics');
     document.querySelector('.queue-button').classList.toggle('active', sidebarView === 'queue');
-    filterContainer.style.display = 'block';
+    filterContainer.style.display = 'flex';
 
     switch (sidebarView) {
         case 'lyrics':
