@@ -1103,6 +1103,7 @@
         let audioContext;
         let analyser;
         let isVisualizerInitialized = false;
+        let source;
         let currentFilter = 'albums'; // 'albums', 'artists', 'songs'
 
 menuBtn.className = 'menu-btn';
@@ -2094,12 +2095,14 @@ function initVisualizer() {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     analyser = audioContext.createAnalyser();
     
-    // Connect the audio element to the analyser
-    const source = audioContext.createMediaElementSource(audioPlayer);
-    source.connect(analyser);
-    analyser.connect(audioContext.destination);
+    // Only create if not created before
+    if (!source) {
+        source = audioContext.createMediaElementSource(audioPlayer);
+        source.connect(analyser);
+        analyser.connect(audioContext.destination);
+    }
 
-    analyser.fftSize = 6; // Determines the number of bars
+    analyser.fftSize = 6; // Number of bars
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
@@ -2116,7 +2119,7 @@ function initVisualizer() {
         const barWidth = (canvas.width / bufferLength) * 1.5;
         let x = 0;
 
-        // Use CSS variable for color
+        // CSS variable color
         const style = getComputedStyle(document.documentElement);
         const textColor = style.getPropertyValue('--text-color').trim();
 
@@ -2125,9 +2128,9 @@ function initVisualizer() {
 
             canvasCtx.fillStyle = textColor;
 
-            const radius = 10; // Roundness
-            const centerY = canvas.height / 2; // Middle of canvas
-            const y = centerY - barHeight / 2; // Start drawing half above, half below
+            const radius = 4;
+            const centerY = canvas.height / 2;
+            const y = centerY - barHeight / 2;
 
             canvasCtx.beginPath();
             canvasCtx.moveTo(x + radius, y);
@@ -2142,7 +2145,7 @@ function initVisualizer() {
             canvasCtx.closePath();
             canvasCtx.fill();
 
-            x += barWidth + 1; // spacing
+            x += barWidth + 1;
         }
     }
 
