@@ -845,27 +845,43 @@
             .sidebar-view-container {
                 position: relative;
                 flex-grow: 1;
+                margin-top: 10px; /* Give some space from the filters */
             }
-    
+            
             .sidebar-view {
+                position: absolute;
+                top: 0;
+                left: 0;
                 width: 100%;
                 height: 100%;
                 overflow-y: auto;
-                position: absolute;
-                opacity: 1;
-                transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
-                transform: translateX(0);
+                display: flex;
+                flex-direction: column;
+                gap: 10px; /* This restores padding between items */
+                
+                /* Animation properties */
+                opacity: 0;
+                transform: translateX(15px);
+                pointer-events: none;
+                transition: opacity 0.25s ease-out, transform 0.25s ease-out;
             }
     
-            .sidebar-view.fade-out {
-                opacity: 0;
-                transform: translateX(-10px);
-                pointer-events: none;
-            }
-            
-            .sidebar-view.fade-in {
+            .sidebar-view.active-view {
                 opacity: 1;
                 transform: translateX(0);
+                pointer-events: auto;
+            }
+    
+            /* Scrollbar styling for the new views */
+            .sidebar-view::-webkit-scrollbar {
+                width: 4px;
+            }
+            .sidebar-view::-webkit-scrollbar-track {
+                background: rgba(255, 255, 255, .0);
+            }
+            .sidebar-view::-webkit-scrollbar-thumb {
+                background: var(--modal-transparent);
+                border-radius: 4px;
             }
             
             .menu-btn {
@@ -1121,15 +1137,27 @@
                 <span class="material-symbols-rounded search-icon">search</span>
                 <input type="text" id="searchInput" placeholder="Search" class="search-input">
             </div>
-            <div class="filter-container" style="display: flex;">
-                <button class="filter-btn active" data-filter="albums">Albums</button>
-                <button class="filter-btn" data-filter="artists">Artists</button>
-                <button class="filter-btn" data-filter="songs">Songs</button>
-                <button class="filter-btn" data-filter="playlists">Playlists</button>
+            <div class="filter-container" style="display: flex; align-items: center; gap: 10px;">
+                <div class="filter-buttons" style="display: flex; flex-grow: 1; gap: 10px;">
+                    <button class="filter-btn active" data-filter="albums">Albums</button>
+                    <button class="filter-btn" data-filter="artists">Artists</button>
+                    <button class="filter-btn" data-filter="songs">Songs</button>
+                    <button class="filter-btn" data-filter="playlists">Playlists</button>
+                </div>
+                <button id="scrollToActiveBtn" class="control-btn" style="width: 36px; height: 36px; flex-shrink: 0; display: none;">
+                    <span class="material-symbols-rounded" style="font-size: 18px;">gps_fixed</span>
+                </button>
             </div>
         </div>
         <div class="sidebar-view-container">
-             <div class="music-list"></div>
+            <!-- Library Views -->
+            <div id="albums-view" class="sidebar-view"></div>
+            <div id="artists-view" class="sidebar-view"></div>
+            <div id="songs-view" class="sidebar-view"></div>
+            <div id="playlists-view" class="sidebar-view"></div>
+            <!-- Other Views -->
+            <div id="lyrics-view" class="sidebar-view"></div>
+            <div id="queue-view" class="sidebar-view"></div>
         </div>
         <label class="upload-btn">
             <span class="material-symbols-rounded">add</span> Add
@@ -1510,7 +1538,7 @@ function loadAndPlaySong(song) {
                 }
             }, 50);
             
-            switchSidebarView();
+            updateActiveSongInUI();
         }
     };
     
@@ -1870,7 +1898,7 @@ async function extractMetadata(file) {
             }
             
             await saveSongs(); // This now just saves the metadata array
-            switchSidebarView();
+            updateActiveSongInUI();
         }
 
 function parseLRC(lrcText) {
@@ -1948,7 +1976,7 @@ async function loadSongsFromStorage() {
             await loadSong(firstSong);
         }
         
-        switchSidebarView();
+        updateActiveSongInUI();
     } catch (error) {
         console.error('Error loading songs:', error);
     }
@@ -2126,49 +2154,37 @@ function initVisualizer() {
     isVisualizerInitialized = true;
 }
         
-        async function switchSidebarView(newView) {
+        async function updateActiveSongInUI(newView) {
+            currentFilter = newView; // Update the global filter
             const container = document.querySelector('.sidebar-view-container');
-            let nextViewEl = document.createElement('div');
-            nextViewEl.className = 'sidebar-view';
+            const searchContainer = document.querySelector('.search-container');
+            const scrollToActiveBtn = document.getElementById('scrollToActiveBtn');
+            
+            // Determine if the new view is a "library" view
+            const isLibraryView = ['albums', 'artists', 'songs', 'playlists'].includes(newView);
+            
+            // Show/hide search and filter controls
+            searchContainer.style.display = isLibraryView ? 'block' : 'none';
 
-            // Fade out the old view
-            if (activeSidebarView) {
-                activeSidebarView.classList.add('fade-out');
+            // Show/hide the 'scroll to active' button
+            scrollToActiveBtn.style.display = isLibraryView && currentSongId ? 'flex' : 'none';
+
+            // Hide the old view
+            const oldView = container.querySelector('.active-view');
+            if (oldView) {
+                oldView.classList.remove('active-view');
             }
 
-            // Prepare the new view's content
-            switch (newView) {
-                case 'lyrics':
-                    await renderLyrics(nextViewEl);
-                    break;
-                case 'queue':
-                    renderQueue(nextViewEl);
-                    break;
-                case 'playlists':
-                    renderPlaylists(nextViewEl);
-                    break;
-                case 'artists':
-                case 'songs':
-                case 'albums':
-                default:
-                    renderLibraryView(nextViewEl);
-                    break;
+            // Show the new view
+            const newViewEl = document.getElementById(`${newView}-view`);
+            if (newViewEl) {
+                // Render content if the view is empty (or needs a refresh)
+                if (newViewEl.innerHTML === '') {
+                    await renderContentForView(newViewEl, newView);
+                }
+                newViewEl.classList.add('active-view');
             }
-
-            // Wait for the fade-out transition to finish
-            setTimeout(() => {
-                container.innerHTML = ''; // Clear old view
-                container.appendChild(nextViewEl); // Add new view
-                
-                // A tiny delay to allow the browser to paint the new element
-                setTimeout(() => {
-                    nextViewEl.classList.add('fade-in');
-                }, 10);
-
-                activeSidebarView = nextViewEl;
-            }, 200);
         }
-
 
 function addBackButtonToSidebar() {
     const musicListContainer = document.querySelector('.music-list');
@@ -2177,7 +2193,7 @@ function addBackButtonToSidebar() {
     backButton.innerHTML = `<span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Library`;
     backButton.onclick = () => {
         sidebarView = 'library';
-        switchSidebarView();
+        updateActiveSongInUI();
     };
     musicListContainer.appendChild(backButton);
 }
@@ -2203,6 +2219,25 @@ function addBackButtonToSidebar() {
                      renderAlbums(element, searchFilteredSongs);
                      break;
              }
+        }
+
+        // New central function to populate a view with content
+        async function renderContentForView(element, viewName) {
+            const query = searchInput ? searchInput.value.toLowerCase() : '';
+            const filteredSongs = query ? songs.filter(s => 
+                s.name.toLowerCase().includes(query) ||
+                s.artist.toLowerCase().includes(query) ||
+                s.album.toLowerCase().includes(query)
+            ) : songs;
+
+            switch (viewName) {
+                case 'albums': renderAlbums(element, filteredSongs); break;
+                case 'artists': renderArtists(element, filteredSongs); break;
+                case 'songs': renderSongsList(element, filteredSongs); break;
+                case 'playlists': renderPlaylists(element); break;
+                case 'lyrics': await renderLyrics(element); break;
+                case 'queue': renderQueue(element); break;
+            }
         }
 
         // Renders the default Album view
@@ -2242,7 +2277,7 @@ function addBackButtonToSidebar() {
                   </div>
                 </div>
               `).join("");
-              attachSongAndAlbumEventListeners();
+              attachAlbumEventListeners(element);
         }
 
         // Renders the Artists view
@@ -2279,7 +2314,7 @@ function addBackButtonToSidebar() {
                     </div>
                  </div>
              `).join('');
-             attachSongAndAlbumEventListeners();
+             attachSongItemEventListeners(element);
         }
 
         // Renders the Playlists view (placeholder)
@@ -2295,7 +2330,7 @@ function addBackButtonToSidebar() {
         // Renders the Lyrics view
         async function renderLyrics(element) {
             element.innerHTML = `<button class="sidebar-back-btn"><span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Library</button><div class="lyrics-container"></div>`;
-            element.querySelector('.sidebar-back-btn').onclick = () => switchSidebarView(currentFilter);
+            element.querySelector('.sidebar-back-btn').onclick = () => updateActiveSongInUI(currentFilter);
 
             const lyricsContainer = element.querySelector('.lyrics-container');
             if (!currentSongId) {
@@ -2332,7 +2367,7 @@ function addBackButtonToSidebar() {
         // Renders the Queue view
         function renderQueue(element) {
             element.innerHTML = `<button class="sidebar-back-btn"><span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Library</button><div class="queue-list-container"></div>`;
-            element.querySelector('.sidebar-back-btn').onclick = () => switchSidebarView(currentFilter);
+            element.querySelector('.sidebar-back-btn').onclick = () => updateActiveSongInUI(currentFilter);
             
             const queueContainer = element.querySelector('.queue-list-container');
             if (playQueue.length === 0) {
@@ -2359,55 +2394,59 @@ function addBackButtonToSidebar() {
             addQueueItemEventListeners();
         }
 
-function attachSongAndAlbumEventListeners() {
-  document.querySelectorAll('.music-item:not(.queue-item)').forEach(item => {
-    let startTime, startX, startY;
-    
-    item.addEventListener('touchstart', e => {
-      startTime = Date.now();
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-    }, { passive: true });
-    
-    item.addEventListener('touchend', e => {
-      const endTime = Date.now();
-      const endX = e.changedTouches[0].clientX;
-      const endY = e.changedTouches[0].clientY;
-      const timeDiff = endTime - startTime;
-      const distance = Math.hypot(endX - startX, endY - startY);
-      
-      if (timeDiff < 200 && distance < 10) {
-        const songId = parseFloat(item.dataset.id);
-        const song = songs.find(s => s.id === songId);
-        if (song) playSong(song);
-      }
-    }, { passive: true });
-    
-    item.addEventListener('click', () => {
-      const songId = parseFloat(item.dataset.id);
-      const song = songs.find(s => s.id === songId);
-      if (song) playSong(song);
-    });
-  });
-  
-  document.querySelectorAll('.delete-album').forEach(button => {
-    button.addEventListener('click', async (e) => {
-      const albumName = button.dataset.album;
-      if (confirm(`Are you sure you want to delete the album "${albumName}"?`)) {
-        const albumSongs = songs.filter(song => song.album === albumName);
-        const tx = db.transaction(['musicFiles', 'songs'], 'readwrite');
-        const musicFilesStore = tx.objectStore('musicFiles');
-        albumSongs.forEach(song => {
-          musicFilesStore.delete(song.id);
-          if (song.url) URL.revokeObjectURL(song.url);
-        });
-        songs = songs.filter(song => song.album !== albumName);
-        await saveSongs();
-        switchSidebarView();
-      }
-    });
-  });
-}
+        function attachAlbumEventListeners(viewElement) {
+            viewElement.addEventListener('click', (e) => {
+                const songItem = e.target.closest('.music-item');
+                if (songItem) {
+                    const songId = parseFloat(songItem.dataset.id);
+                    const song = songs.find(s => s.id === songId);
+                    if (song) playSong(song);
+                }
+            });
+              document.querySelectorAll('.delete-album').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                  const albumName = button.dataset.album;
+                  if (confirm(`Are you sure you want to delete the album "${albumName}"?`)) {
+                    const albumSongs = songs.filter(song => song.album === albumName);
+                    const tx = db.transaction(['musicFiles', 'songs'], 'readwrite');
+                    const musicFilesStore = tx.objectStore('musicFiles');
+                    albumSongs.forEach(song => {
+                      musicFilesStore.delete(song.id);
+                      if (song.url) URL.revokeObjectURL(song.url);
+                    });
+                    songs = songs.filter(song => song.album !== albumName);
+                    await saveSongs();
+                    updateActiveSongInUI();
+                  }
+                });
+              });
+            }
+        
+        function attachSongItemEventListeners(viewElement) {
+             viewElement.addEventListener('click', (e) => {
+                const songItem = e.target.closest('.music-item');
+                if (songItem) {
+                    const songId = parseFloat(songItem.dataset.id);
+                    const song = songs.find(s => s.id === songId);
+                    if (song) playSong(song);
+                }
+            });
+        }
+
+        function updateActiveSongInUI() {
+            document.querySelectorAll('.music-item.active').forEach(item => {
+                item.classList.remove('active');
+            });
+
+            if (currentSongId) {
+                document.querySelectorAll(`.music-item[data-id="${currentSongId}"]`).forEach(item => {
+                    item.classList.add('active');
+                });
+                document.getElementById('scrollToActiveBtn').style.display = 'flex';
+            } else {
+                 document.getElementById('scrollToActiveBtn').style.display = 'none';
+            }
+        }
 
         async function playSong(song) {
             audioPlayer.pause();
@@ -2462,7 +2501,7 @@ function attachSongAndAlbumEventListeners() {
                     });
                 }
                 
-                switchSidebarView();
+                updateActiveSongInUI();
 
             } catch (error) {
                 console.error(`Failed to load song: ${song.name}`, error);
@@ -2545,7 +2584,7 @@ function attachSongAndAlbumEventListeners() {
                 updatePlayQueue();
             }
             
-            switchSidebarView();
+            updateActiveSongInUI();
         }
 
         function openEditModal(songId) {
@@ -2581,7 +2620,7 @@ function attachSongAndAlbumEventListeners() {
             }
 
             await saveSongs();
-            switchSidebarView();
+            updateActiveSongInUI();
             closeEditModal();
         }
     
@@ -2788,7 +2827,7 @@ function cleanupBlobs() {
 }
         
 function searchSongs(query) {
-    switchSidebarView();
+    updateActiveSongInUI();
 }
 
 function toggleShuffle() {
@@ -2998,12 +3037,12 @@ window.addEventListener("beforeunload", () => {
                 }
                 
                 // Finally, render the initial view
-                await switchSidebarView(currentFilter);
+                await updateActiveSongInUI(currentFilter);
 
             } catch (error) {
                 console.error('Critical error on application load:', error);
                 // Attempt to render a basic UI even if something fails
-                await switchSidebarView('albums');
+                await updateActiveSongInUI('albums');
             }
         });
 
@@ -3192,57 +3231,56 @@ audioPlayer.addEventListener('ended', () => {
     }
 });
 
-document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        await initDB();
-        searchInput = document.getElementById('searchInput');
-        
-        searchInput.addEventListener('input', () => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => switchSidebarView(), 300); // Re-render with search
-        });
+        document.addEventListener('DOMContentLoaded', async () => {
+            // This is now handled by the window.load event listener to ensure DB is ready
+            
+            // Setup filter buttons to use the new view switcher
+            document.querySelectorAll('.filter-buttons .filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelector('.filter-buttons .filter-btn.active').classList.remove('active');
+                    btn.classList.add('active');
+                    switchSidebarView(btn.dataset.filter);
+                });
+            });
 
-        shardContainer = document.getElementById('distortion-container');
-        initializeShards(); 
-        
-        await initDB();
-        searchInput = document.getElementById('searchInput');
-        
-        searchInput.addEventListener('input', () => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => switchSidebarView(), 300);
-        });
+            document.getElementById('shuffleBtn').addEventListener('click', toggleShuffle);
+            document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
 
-        // Setup filter buttons to use the new view switcher
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelector('.filter-btn.active').classList.remove('active');
-                btn.classList.add('active');
-                currentFilter = btn.dataset.filter;
-                sidebarView = 'library'; // Set view type
-                switchSidebarView(currentFilter); // Switch the view
+            // Setup view-switching for lyrics and queue buttons
+            document.querySelector('.lyrics-button').addEventListener('click', () => switchSidebarView('lyrics'));
+            document.querySelector('.queue-button').addEventListener('click', () => switchSidebarView('queue'));
+
+            // Setup "Scroll to Active" button
+            document.getElementById('scrollToActiveBtn').addEventListener('click', () => {
+                if (!currentSongId) return;
+                const song = songs.find(s => s.id === currentSongId);
+                if (!song) return;
+
+                // For now, we assume we want to find it in the "albums" view.
+                // This can be made more sophisticated later.
+                switchSidebarView('albums').then(() => {
+                    setTimeout(() => { // Allow time for the view to become visible
+                        const activeItem = document.querySelector(`#albums-view .music-item[data-id="${currentSongId}"]`);
+                        if (activeItem) {
+                            activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 50);
+                });
+            });
+
+             // Initial search setup
+             searchInput = document.getElementById('searchInput');
+             searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimeout);
+                // Re-render the content of the currently active view after a delay
+                searchTimeout = setTimeout(() => {
+                    const activeView = document.querySelector('.sidebar-view.active-view');
+                    if(activeView) {
+                       renderContentForView(activeView, activeView.id.replace('-view', ''));
+                    }
+                }, 300);
             });
         });
-
-        document.getElementById('shuffleBtn').addEventListener('click', toggleShuffle);
-        document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
-
-        document.querySelector('.lyrics-button').addEventListener('click', () => {
-            sidebarView = sidebarView === 'lyrics' ? 'library' : 'lyrics';
-            switchSidebarView(sidebarView === 'lyrics' ? 'lyrics' : currentFilter);
-        });
-        
-        document.querySelector('.queue-button').addEventListener('click', () => {
-            sidebarView = sidebarView === 'queue' ? 'library' : 'queue';
-            switchSidebarView(sidebarView === 'queue' ? 'queue' : currentFilter);
-        });
-
-        
-        switchSidebarView();
-    } catch (error) {
-        console.error('Failed to initialize application:', error);
-    }
-});
 
         document.querySelector('.upload-btn').addEventListener('click', async () => {
             // Priority: Use the File System Access API
