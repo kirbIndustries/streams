@@ -625,50 +625,43 @@
             overflow: hidden;
             z-index: -9999;
         }
-                        
-        #distortion-container {
-            position: fixed;
-            inset: 0;
-            overflow: hidden;
-            z-index: -9998;
-        }
         
-        /* The VERY back layer: heavy blur, no distortion */
         .background-blur {
-            width: 100%;
-            height: 100%;
-            background-size: cover;
-            background-position: center;
-            filter: blur(60px) brightness(0.6); /* Increased blur */
-            transform: scale(1.2);
-            transition: background-image 0.5s ease;
-        }
-        
-        /* Common style for ALL moving shards */
-        .distortion-shard {
-            position: absolute;
-            /* FIX: Make shards smaller and more centered to be visible */
+            position: fixed;
+            top: 50%;
+            left: 50%;
             width: 150%;
             height: 150%;
-            top: -25%;
-            left: -25%;
-            background-size: cover;
             background-position: center;
-            /* FIX: The shards themselves MUST be blurred and distorted */
-            filter: blur(25px) brightness(0.9) url(#albumArtDistortion);
-            will-change: transform;
-            transition: background-image 0.5s ease;
+            background-size: cover;
+            /* Use a CSS variable for the filter property */
+            filter: var(--background-filter-effect);
+            transition: background-image 0.5s ease, opacity 0.3s ease;
+            z-index: -9999;
+            transform: translate(-50%, -50%) scale(1.42);
+            opacity: 1;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         
-        /* Define the unique organic shapes for each shard */
-        .shape-1 {
-            clip-path: polygon(0% 25%, 66% 0%, 100% 33%, 75% 100%, 25% 100%);
+        .background-blur.changing {
+            animation: fadeIn 0.5s ease;
         }
-        .shape-2 {
-            clip-path: polygon(33% 0%, 100% 0%, 100% 75%, 50% 100%, 0% 50%);
+        
+        .background-blur.rotating {
+            animation: rotate 90s linear infinite;
         }
-        .shape-3 {
-            clip-path: polygon(100% 33%, 80% 80%, 30% 100%, 0% 70%, 20% 20%);
+        
+        @keyframes rotate {
+            from {
+                transform: translate(-50%, -50%) scale(1.42) rotate(0deg);
+            }
+            to {
+                transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
+            }
         }
         
         .search-container {
@@ -997,14 +990,31 @@
 <body>
     <svg style="position: absolute; width: 0; height: 0;">
         <filter id="albumArtDistortion">
+            <!-- Layer 1: Large, slow, base waves -->
             <feTurbulence 
-                id="turbulence"
+                id="turbulence1"
                 type="turbulence" 
-                baseFrequency="0.01 0.02" 
+                baseFrequency="0.005 0.009" 
                 numOctaves="1" 
-                seed="0"
+                seed="2"
             />
-            <feGaussianBlur stdDeviation="30" result="blurredTurbulence"/>
+    
+            <!-- Layer 2: Smaller, faster, overlaying waves -->
+            <feTurbulence 
+                id="turbulence2"
+                type="turbulence" 
+                baseFrequency="0.03 0.02" 
+                numOctaves="1" 
+                seed="10"
+            />
+            
+            <!-- Combine the two layers -->
+            <feComposite operator="in" in="turbulence1" in2="turbulence2" result="compositedTurbulence" />
+    
+            <!-- THE KEY: Blur the combined distortion map itself to make the warp soft and liquid -->
+            <feGaussianBlur in="compositedTurbulence" stdDeviation="40" result="blurredTurbulence" />
+            
+            <!-- Use the final, smooth, complex map to displace the album art -->
             <feDisplacementMap 
                 id="displacement"
                 in="SourceGraphic" 
@@ -1015,14 +1025,9 @@
             />
         </filter>
     </svg>
-    
-    <div id="distortion-container">
+    <div class="background-container">
         <div class="background-blur"></div>
-        <div class="distortion-shard shape-1"></div>
-        <div class="distortion-shard shape-2"></div>
-        <div class="distortion-shard shape-3"></div>
     </div>
-    
     <div class="sidebar">
         <h1 class="sidebar-title">Library</h1>
         <div class="search-container">
@@ -1116,9 +1121,7 @@
         const body = document.body;
         const menuBtn = document.createElement('button');
         const storedLightMode = localStorage.getItem('theme') || 'dark';
-        
-        let shardContainer; 
-        let shards = [];
+
         let songs = JSON.parse(localStorage.getItem('songs')) || [];
         let currentSongId = null;
         let db;
@@ -1266,19 +1269,27 @@ function resetPlayer() {
   playQueue = [];
   currentQueueIndex = -1;
   
+  // Set default album art or transparent image
   const defaultImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAH0CAYAAADL1t+KAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAPgSURBVHhe7cEBAQAAAIIg/69uSEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACcqAFFFQAB8Dl/nAAAAABJRU5ErkJggg==";
   albumArtImg.src = defaultImage;
   
-  updateAllBackgrounds(''); // Clear all backgrounds
-    
+  // Update background
+  const backgroundElement = document.querySelector('.background-blur');
+  backgroundElement.classList.remove('rotating');
+  backgroundElement.style.backgroundImage = '';
+  
+  // Update player controls
   musicTitle.textContent = 'No song playing';
   musicArtist.textContent = '';
   document.getElementById('currentTime').textContent = '-:--';
   document.getElementById('duration').textContent = '-:--';
   playPauseBtn.innerHTML = '<span class="material-symbols-rounded">playlist_remove</span>';
   playPauseBtn.classList.remove('playing');
+  
+  // Update title
   document.title = 'Music';
   
+  // Update favicon if needed
   const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
   links.forEach(link => link.parentNode.removeChild(link));
   const defaultFavicon = document.createElement('link');
@@ -1538,6 +1549,7 @@ function updateSongsArrayFromDOM() {
 function loadAndPlaySong(song) {
     if (!song) return;
     
+    // Stop any current playback to avoid errors
     audioPlayer.pause();
     
     const transaction = db.transaction(['musicFiles'], 'readonly');
@@ -1551,31 +1563,53 @@ function loadAndPlaySong(song) {
             }
             song.url = URL.createObjectURL(new Blob([request.result.file]));
             
+            // Set up audio player
             audioPlayer.src = song.url;
             audioPlayer.currentTime = 0;
             musicTitle.textContent = song.name;
             musicArtist.textContent = song.artist;
             
-            updateAllBackgrounds(song.albumArt);
+            const backgroundElement = document.querySelector('.background-blur');
+            backgroundElement.classList.add('changing');
+            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
             albumArtImg.src = song.albumArt;
+            
+            // Update favicon
             updateFavicon(song.albumArt);
+            
+            setTimeout(() => {
+                backgroundElement.classList.remove('changing');
+            }, 500);
             
             currentSongId = song.id;
             document.title = `${song.name} by ${song.artist}`;
             
+            // Small delay before attempting to play
             setTimeout(() => {
                 const playPromise = audioPlayer.play();
+                
                 if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                        playPauseBtn.classList.add('playing');
-                    }).catch(error => {
-                        console.log("Playback was prevented:", error.message);
-                        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-                        playPauseBtn.classList.remove('playing');
-                    });
+                    playPromise
+                        .then(() => {
+                            // Playback started successfully
+                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+                            playPauseBtn.classList.add('playing');
+                            document.querySelector('.background-blur').classList.add('rotating');
+                            
+                            // Update media session if available
+                            if ('mediaSession' in navigator) {
+                                updateMediaSessionMetadata(song);
+                                updateMediaSessionPlaybackState('playing');
+                            }
+                        })
+                        .catch(error => {
+                            console.log("Playback was prevented:", error.message);
+                            // Update UI to reflect paused state
+                            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+                            playPauseBtn.classList.remove('playing');
+                        });
                 }
-            }, 50);
+            }, 50); // Small delay of 50ms
             
             renderSidebar();
         }
@@ -1786,7 +1820,9 @@ function setUpSongPlayback(song) {
     musicTitle.textContent = song.name;
     musicArtist.textContent = song.artist;
     
-    updateAllBackgrounds(song.albumArt);
+    const backgroundElement = document.querySelector('.background-blur');
+    backgroundElement.classList.add('changing');
+    backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
     albumArtImg.src = song.albumArt;
     
     // Update favicon
@@ -1814,21 +1850,31 @@ async function loadSong(song) {
     
     request.onsuccess = (event) => {
         if (request.result && request.result.file) {
+            // Check if it's a valid audio file
             if (!isAudioFile(request.result.file)) {
                 console.error('Invalid audio file type');
-                playNextSong();
+                playNextSong(); // Skip to next song
                 return;
             }
 
+            // Continue with loading the song
             song.url = URL.createObjectURL(request.result.file);
             audioPlayer.src = song.url;
             audioPlayer.currentTime = 0;
             musicTitle.textContent = song.name;
             musicArtist.textContent = song.artist;
 
-            updateAllBackgrounds(song.albumArt);
+            const backgroundElement = document.querySelector('.background-blur');
+            backgroundElement.classList.add('changing');
+            backgroundElement.style.backgroundImage = `url('${song.albumArt}')`;
             albumArtImg.src = song.albumArt;
+            
+            // Update favicon
             updateFavicon(song.albumArt);
+
+            setTimeout(() => {
+                backgroundElement.classList.remove('changing');
+            }, 500);
 
             currentSongId = song.id;
             playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
@@ -2081,34 +2127,6 @@ async function saveSongs() {
   });
 }
 
-function initializeShards() {
-    const shardElements = document.querySelectorAll('.distortion-shard');
-    shardElements.forEach((el, i) => {
-        shards.push({
-            element: el,
-            // Assign each shard a different part of the image to "split" it
-            bgPos: `${i * 50}% 50%`, 
-            // Give each shard its own random speed and direction
-            rotationSpeed: (Math.random() - 0.5) * 0.1,
-            xDrift: (Math.random() - 0.5) * 0.2,
-            yDrift: (Math.random() - 0.5) * 0.2,
-            // Current transform values
-            x: 0,
-            y: 0,
-            rotation: Math.random() * 360,
-        });
-        el.style.backgroundPosition = shards[i].bgPos;
-    });
-}
-
-function updateAllBackgrounds(imageUrl) {
-    shardContainer.querySelector('.background-blur').style.backgroundImage = `url('${imageUrl}')`;
-    shards.forEach(shard => {
-        shard.element.style.backgroundImage = `url('${imageUrl}')`;
-    });
-}
-
-// REPLACE your entire initVisualizer function with this one
 function initVisualizer() {
     if (isVisualizerInitialized) return;
 
@@ -2122,18 +2140,20 @@ function initVisualizer() {
     }
 
     analyser.fftSize = 32;
-    analyser.smoothingTimeConstant = 0.88;
+    analyser.smoothingTimeConstant = 0.85;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
+    // Get the two new turbulence layers and the displacement map
     const displacementFilter = document.getElementById('displacement');
-    const turbulenceFilter = document.getElementById('turbulence');
+    const turbulence1 = document.getElementById('turbulence1');
+    const turbulence2 = document.getElementById('turbulence2');
 
-    // --- Retuned for the soft, wavy effect ---
-    const baselineDistortion = 80;
-    const peakDistortion = 150;
+    // Retuned parameters for a more dramatic effect
+    const baselineDistortion = 70;
+    const peakDistortion = 160;
+    const decayFactor = 0.95;     
     let currentDistortion = baselineDistortion;
-    const decayFactor = 0.96;     
 
     let beatCooldown = 0;
     let lastBassEnergy = 0;
@@ -2147,28 +2167,26 @@ function initVisualizer() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        // --- Beat Detection ---
+        // --- Beat Detection Logic ---
         const bassEnergy = (dataArray[0] + dataArray[1]) / 2;
-        if (bassEnergy > lastBassEnergy * 1.16 && beatCooldown === 0 && bassEnergy > 110) {
+        if (bassEnergy > lastBassEnergy * 1.15 && beatCooldown === 0 && bassEnergy > 120) {
+            // BEAT: Spike the distortion
             currentDistortion = peakDistortion;
-            beatCooldown = 20;
+            beatCooldown = 15;
         }
 
+        // --- THE KEY: Animate the two layers independently for rotation and movement ---
+        const time = Date.now();
+        // Layer 1: Animate the 'seed' for a slow, large morphing effect
+        turbulence1.setAttribute('seed', time / 25);
+        // Layer 2: Animate the 'baseFrequency' for a constant, faster "rotating" feel
+        const freqX = 0.03 + Math.sin(time / 800) * 0.01;
+        const freqY = 0.02 + Math.cos(time / 650) * 0.008;
+        turbulence2.setAttribute('baseFrequency', `${freqX} ${freqY}`);
+        
+        // Apply the distortion scale
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
         displacementFilter.setAttribute('scale', currentDistortion);
-        
-        // --- Independent Shard Movement ---
-        const shardTime = Date.now() * 0.00005; // Use a slow clock for shard drifting
-        shards.forEach((shard) => {
-            shard.rotation += shard.rotationSpeed;
-            shard.x = Math.sin(shardTime * shard.xDrift * 10) * 80;
-            shard.y = Math.cos(shardTime * shard.yDrift * 10) * 80;
-            shard.element.style.transform = `translate(${shard.x}px, ${shard.y}px) rotate(${shard.rotation}deg)`;
-        });
-
-        // --- Constant Liquid Wave Animation ---
-        // Animate the 'seed' to make the distortion texture itself evolve and warp over time.
-        turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
         // --- Bar Visualizer Logic (Unchanged) ---
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
@@ -2480,9 +2498,13 @@ function playSong(song) {
       musicTitle.textContent = song.name;
       musicArtist.textContent = song.artist;
       
-      updateAllBackgrounds(song.albumArt);
+      const backgroundBlur = document.querySelector('.background-blur');
+      backgroundBlur.classList.add('changing');
+      backgroundBlur.style.backgroundImage = `url('${song.albumArt}')`;
       albumArtImg.src = song.albumArt;
       updateFavicon(song.albumArt);
+      
+      setTimeout(() => backgroundBlur.classList.remove('changing'), 500);
       
       setTimeout(() => {
         const playPromise = audioPlayer.play();
@@ -2490,6 +2512,7 @@ function playSong(song) {
           playPromise.then(() => {
             playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
             playPauseBtn.classList.add('playing');
+            document.querySelector('.background-blur').classList.add('rotating');
             if ('mediaSession' in navigator) {
               updateMediaSessionMetadata(song);
               updateMediaSessionPlaybackState('playing');
@@ -3093,17 +3116,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => renderSidebar(), 300); // Re-render with search
-        });
-
-        shardContainer = document.getElementById('distortion-container');
-        initializeShards(); 
-        
-        await initDB();
-        searchInput = document.getElementById('searchInput');
-        
-        searchInput.addEventListener('input', () => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => renderSidebar(), 300);
         });
 
         // Setup filter buttons
