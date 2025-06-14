@@ -2095,14 +2095,14 @@ function initVisualizer() {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     analyser = audioContext.createAnalyser();
     
-    // Only create if not created before
+    // Connect the source only once
     if (!source) {
         source = audioContext.createMediaElementSource(audioPlayer);
         source.connect(analyser);
         analyser.connect(audioContext.destination);
     }
 
-    analyser.fftSize = 32; // Number of bars
+    analyser.fftSize = 32; // Results in 16 bars
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
@@ -2116,36 +2116,37 @@ function initVisualizer() {
 
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const barWidth = (canvas.width / bufferLength) * 1.5;
+        // --- FIX for Padding and Width ---
+        const gap = 3; // The space between bars
+        const totalGaps = (bufferLength - 1) * gap;
+        const barWidth = (canvas.width - totalGaps) / bufferLength;
         let x = 0;
 
-        // CSS variable color
-        const style = getComputedStyle(document.documentElement);
-        const textColor = style.getPropertyValue('--text-color').trim();
+        // --- FIX for Color ---
+        // Get the computed style once per frame, outside the loop
+        const style = getComputedStyle(document.body);
+        const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
 
         for (let i = 0; i < bufferLength; i++) {
             const barHeight = dataArray[i] / 2.5;
+            
+            // Do not draw if bar height is negligible
+            if (barHeight < 1) continue;
 
+            // --- FIX for Rounded Rectangle and Color ---
+            // Set the fill style for each bar
             canvasCtx.fillStyle = textColor;
 
-            const radius = 4;
-            const centerY = canvas.height / 2;
-            const y = centerY - barHeight / 2;
+            const radius = 3;
+            const y = (canvas.height - barHeight) / 2; // Center the bar vertically
 
+            // Use the modern, built-in roundRect() method. It's much simpler and more reliable.
             canvasCtx.beginPath();
-            canvasCtx.moveTo(x + radius, y);
-            canvasCtx.lineTo(x + barWidth - radius, y);
-            canvasCtx.quadraticCurveTo(x + barWidth, y, x + barWidth, y + radius);
-            canvasCtx.lineTo(x + barWidth, y + barHeight - radius);
-            canvasCtx.quadraticCurveTo(x + barWidth, y + barHeight, x + barWidth - radius, y + barHeight);
-            canvasCtx.lineTo(x + radius, y + barHeight);
-            canvasCtx.quadraticCurveTo(x, y + barHeight, x, y + barHeight - radius);
-            canvasCtx.lineTo(x, y + radius);
-            canvasCtx.quadraticCurveTo(x, y, x + radius, y);
-            canvasCtx.closePath();
+            canvasCtx.roundRect(x, y, barWidth, barHeight, radius);
             canvasCtx.fill();
 
-            x += barWidth + 1;
+            // Move to the next bar's position
+            x += barWidth + gap;
         }
     }
 
