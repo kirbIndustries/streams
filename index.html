@@ -2140,13 +2140,16 @@ function initVisualizer() {
     const numBars = 6;
     const barIndices = [2, 10, 30, 100, 200, 400];
     
-    // --- UPDATED: Sensitivity multipliers have been significantly reduced for better balance ---
-    const sensitivityMultipliers = [1.0, 1.15, 1.3, 1.5, 1.7, 1.8];
+    // --- FINAL TUNING PARAMETERS ---
 
-    // --- NEW: A tunable power curve for the bar height ---
-    // Higher values (e.g., 2.5) = more "punchy", sensitive to peaks.
-    // Lower values (e.g., 1.5) = more "smooth" and linear.
-    const powerCurve = 1.8;
+    // 1. A global "volume knob" for the visualizer to prevent peaking. 0.8 means bars can reach max 80% of canvas height.
+    const maxHeightFactor = 0.8; 
+
+    // 2. A higher power curve makes the bars more responsive to peaks, and less to sustained noise.
+    const powerCurve = 2.4; 
+
+    // 3. Re-tuned sensitivity to work well with the new curve and height factor.
+    const sensitivityMultipliers = [1.0, 1.1, 1.25, 1.45, 1.8, 2.0];
 
 
     function draw() {
@@ -2185,11 +2188,10 @@ function initVisualizer() {
 
         for (let i = 0; i < numBars; i++) {
             const x = i * (barWidth + gap);
-
             const value = Math.min(dataArray[barIndices[i]] * sensitivityMultipliers[i], 255);
             
-            // Use the new powerCurve variable here
-            const barHeight = Math.pow(value / 255, powerCurve) * canvas.height * 0.9;
+            // The final, corrected height calculation using all our tuning parameters
+            const barHeight = Math.pow(value / 255, powerCurve) * canvas.height * maxHeightFactor;
             
             if (barHeight < barWidth) {
                 const dotRadius = barHeight / 2;
