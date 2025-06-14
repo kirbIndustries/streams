@@ -2188,6 +2188,9 @@ function initVisualizer() {
         for (let i = 0; i < numBars; i++) {
             const barHeight = Math.pow(dataArray[barIndices[i]] / 255, 2.5) * canvas.height * 0.9;
             if (barHeight < barWidth) continue;
+            
+            const y = (canvas.height - barHeight) / 2; // Restore the y-coordinate calculation
+
             canvasCtx.fillStyle = textColor;
             canvasCtx.beginPath();
             canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
