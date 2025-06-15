@@ -2168,6 +2168,80 @@ function updateAllBackgrounds(imageUrl) {
     });
 }
 
+class BeatDetector {
+    /**
+     * Creates a new BeatDetector.
+     * @param {number} historySize The number of past frames to average for the threshold.
+     * @param {number} thresholdMultiplier How much louder the current sound must be than the average to be considered a beat.
+     * @param {number[][]} frequencyBands An array of [start, end] frequency bin indices to monitor.
+     * @param {number} decayRate How quickly the beat effect should fade.
+     */
+    constructor(historySize = 60, thresholdMultiplier = 1.15, frequencyBands = [[0, 3]], decayRate = 0.96) {
+        this.historySize = historySize;
+        this.thresholdMultiplier = thresholdMultiplier;
+        this.frequencyBands = frequencyBands;
+        this.decayRate = decayRate;
+
+        // Initialize history and other state variables for each band
+        this.histories = Array(frequencyBands.length).fill(null).map(() => Array(historySize).fill(0));
+        this.lastEnergies = Array(frequencyBands.length).fill(0);
+        this.beatCooldowns = Array(frequencyBands.length).fill(0);
+        this.currentDistortions = Array(frequencyBands.length).fill(0);
+    }
+
+    /**
+     * Analyzes the current audio frame and returns true if a beat is detected in any monitored band.
+     * @param {Uint8Array} dataArray The frequency data from the analyser.
+     * @param {number} baselineDistortion The baseline value for the distortion effect.
+     * @param {number} peakDistortion The peak value for the distortion effect.
+     * @returns {number} The calculated distortion value for this frame.
+     */
+    update(dataArray, baselineDistortion, peakDistortion) {
+        let overallDistortion = 0;
+
+        this.frequencyBands.forEach((band, index) => {
+            // 1. Calculate the average energy for the current frequency band
+            const start = band[0];
+            const end = band[1];
+            let currentEnergy = 0;
+            for (let i = start; i <= end; i++) {
+                currentEnergy += dataArray[i];
+            }
+            currentEnergy /= (end - start + 1);
+
+            // 2. Calculate the adaptive threshold from the recent history
+            const history = this.histories[index];
+            const averageHistoryEnergy = history.reduce((a, b) => a + b, 0) / history.length;
+            const threshold = averageHistoryEnergy * this.thresholdMultiplier;
+
+            // 3. Detect the beat
+            if (currentEnergy > threshold && this.beatCooldowns[index] === 0) {
+                this.currentDistortions[index] = peakDistortion;
+                this.beatCooldowns[index] = 10; // Set a short cooldown
+            }
+
+            // 4. Update the history buffer
+            history.push(currentEnergy);
+            if (history.length > this.historySize) {
+                history.shift(); // Keep the history at a fixed size
+            }
+            
+            // 5. Decay the distortion and cooldown for this band
+            this.currentDistortions[index] = baselineDistortion + (this.currentDistortions[index] - baselineDistortion) * this.decayRate;
+            if (this.beatCooldowns[index] > 0) {
+                this.beatCooldowns[index]--;
+            }
+
+            // Use the strongest distortion from any band as the final output
+            if(this.currentDistortions[index] > overallDistortion) {
+                overallDistortion = this.currentDistortions[index];
+            }
+        });
+        
+        return overallDistortion;
+    }
+}
+
 function initVisualizer() {
     if (isVisualizerInitialized) return;
 
@@ -2209,32 +2283,22 @@ function initVisualizer() {
 
     const baselineDistortion = 80;
     const peakDistortion = 150;
-    let currentDistortion = baselineDistortion;
-    const decayFactor = 0.96;     
-
-    let beatCooldown = 0;
-    let lastBassEnergy = 0;
+    const beatDetector = new BeatDetector(60, 1.2, [[0, 3], [4, 8]]);
 
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
     const numBars = 6;
     const barIndices = [5, 10, 30, 100, 200, 400];
-    const sensitivityMultipliers = [1, 1.05, 1, 1.15, 1.25, 1.4];
+    const sensitivityMultipliers = [1, 1.05, 1.1, 1.15, 1.25, 1.4];
     const powerCurve = 2.2;
 
     function draw() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        const bassEnergy = (dataArray[0] + dataArray[1]) / 2;
-        if (bassEnergy > lastBassEnergy * 1.16 && beatCooldown === 0 && bassEnergy > 110) {
-            currentDistortion = peakDistortion;
-            beatCooldown = 10;
-        }
-
-        currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
+        const currentDistortion = beatDetector.update(dataArray, baselineDistortion, peakDistortion);
         displacementFilter.setAttribute('scale', currentDistortion);
-        
+
         const shardTime = Date.now() * 0.00005;
         shards.forEach((shard) => {
             shard.rotation += shard.rotationSpeed;
@@ -2280,9 +2344,6 @@ function initVisualizer() {
             }
         }
         canvasCtx.globalAlpha = 1.0; 
-
-        lastBassEnergy = bassEnergy;
-        if (beatCooldown > 0) beatCooldown--;
     }
 
     draw();
