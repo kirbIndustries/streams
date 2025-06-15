@@ -1492,32 +1492,31 @@ function createPlayQueue() {
 }
 
 function resetPlayer() {
-  audioPlayer.pause();
-  audioPlayer.currentTime = 0;
-  currentSongId = null;
-  playQueue = [];
-  currentQueueIndex = -1;
-  
-  const defaultImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAH0CAYAAADL1t+KAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAPgSURBVHhe7cEBAQAAAIIg/69uSEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACcqAFFFQAB8Dl/nAAAAABJRU5ErkJggg==";
-  albumArtImg.src = defaultImage;
-  
-  updateAllBackgrounds(''); // Clear all backgrounds
-    
-  musicTitle.textContent = 'No song playing';
-  musicArtist.textContent = '';
-  document.getElementById('currentTime').textContent = '-:--';
-  document.getElementById('duration').textContent = '-:--';
-  playPauseBtn.innerHTML = '<span class="material-symbols-rounded">playlist_remove</span>';
-  playPauseBtn.classList.remove('playing');
-  document.title = 'Music';
-  
-  const links = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon']");
-  links.forEach(link => link.parentNode.removeChild(link));
-  const defaultFavicon = document.createElement('link');
-  defaultFavicon.rel = 'icon';
-  defaultFavicon.type = 'image/png';
-  defaultFavicon.href = '/music/favicon.png';
-  document.head.appendChild(defaultFavicon);
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+    currentSongId = null;
+    playQueue = [];
+    currentQueueIndex = -1;
+
+    const defaultImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAH0CAYAAADL1t+KAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAPgSURBVHhe7cEBAQAAAIIg/69uSEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACcqAFFFQAB8Dl/nAAAAABJRU5ErkJggg==";
+    albumArtImg.src = defaultImage;
+
+    updateAllBackgrounds('');
+
+    musicTitle.textContent = 'No song playing';
+    musicArtist.textContent = '';
+    document.getElementById('currentTime').textContent = '-:--';
+    document.getElementById('duration').textContent = '-:--';
+    playPauseBtn.innerHTML = '<span class="material-symbols-rounded">playlist_remove</span>';
+    playPauseBtn.classList.remove('playing');
+    document.title = 'Music';
+    updateFavicon(defaultImage);
+
+    // --- KEY ADDITION: Clear the media session ---
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = 'none';
+    }
 }
     
         function formatTime(seconds) {
@@ -2729,7 +2728,6 @@ async function playSong(song, { isTransition = false } = {}) {
     isPlayerLoading = true;
 
     try {
-        // Only pause if this is NOT a crossfade transition
         if (!isTransition) {
             audioPlayer.pause();
         }
@@ -2745,6 +2743,7 @@ async function playSong(song, { isTransition = false } = {}) {
         currentSongId = song.id;
         updatePlayQueue();
 
+        albumArtImg.classList.add('fade-out');
         await new Promise(resolve => setTimeout(resolve, 200));
 
         if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
@@ -2754,6 +2753,11 @@ async function playSong(song, { isTransition = false } = {}) {
         audioPlayer.src = fileUrl;
         updatePlayerUI(song);
         renderSidebar();
+        
+        // --- KEY ADDITION: Update metadata for the new song ---
+        if ('mediaSession' in navigator) {
+            updateMediaSessionMetadata(song);
+        }
 
         await audioPlayer.play();
 
@@ -3299,54 +3303,91 @@ function groupSongsByAlbum(songs) {
   
   return Object.values(albums);
 }
-
 if ('mediaSession' in navigator) {
+
     function updateMediaSessionMetadata(song) {
+        if (!song) return;
         navigator.mediaSession.metadata = new MediaMetadata({
             title: song.name,
             artist: song.artist,
             album: song.album,
             artwork: [
-                { src: song.albumArt, sizes: '512x512', type: 'image/jpeg' }
+                { src: song.albumArt, sizes: '96x96', type: 'image/png' },
+                { src: song.albumArt, sizes: '128x128', type: 'image/png' },
+                { src: song.albumArt, sizes: '192x192', type: 'image/png' },
+                { src: song.albumArt, sizes: '256x256', type: 'image/png' },
+                { src: song.albumArt, sizes: '384x384', type: 'image/png' },
+                { src: song.albumArt, sizes: '512x512', type: 'image/png' },
             ]
-        });
-    }
-
-    function setupMediaSessionActions() {
-        navigator.mediaSession.setActionHandler('play', () => {
-            audioPlayer.play();
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            playPauseBtn.classList.add('playing');
-            document.querySelector('.background-blur').classList.add('rotating');
-        });
-
-        navigator.mediaSession.setActionHandler('pause', () => {
-            audioPlayer.pause();
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-            playPauseBtn.classList.remove('playing');
-        });
-
-        navigator.mediaSession.setActionHandler('previoustrack', () => playPreviousSong());
-        navigator.mediaSession.setActionHandler('nexttrack', () => playNextSong());
-
-        navigator.mediaSession.setActionHandler('seekto', (event) => {
-            if (event.fastSeek && 'fastSeek' in audioPlayer) audioPlayer.fastSeek(event.seekTime);
-            else audioPlayer.currentTime = event.seekTime;
-        });
-
-        navigator.mediaSession.setActionHandler('stop', () => {
-            audioPlayer.pause();
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-            playPauseBtn.classList.remove('playing');
-            audioPlayer.currentTime = 0;
-            updateMediaSessionPlaybackState('paused');
         });
     }
 
     function updateMediaSessionPlaybackState(state) {
         navigator.mediaSession.playbackState = state;
     }
+
+    function updateMediaSessionPositionState() {
+        if (isNaN(audioPlayer.duration)) return;
+        
+        navigator.mediaSession.setPositionState({
+            duration: audioPlayer.duration,
+            playbackRate: audioPlayer.playbackRate,
+            position: audioPlayer.currentTime,
+        });
+    }
+
+    function setupMediaSessionActions() {
+        // Play action from OS
+        navigator.mediaSession.setActionHandler('play', () => {
+            audioPlayer.play().catch(e => console.error("Media Session play failed", e));
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+            playPauseBtn.classList.add('playing');
+            updateMediaSessionPlaybackState('playing');
+        });
+
+        // Pause action from OS
+        navigator.mediaSession.setActionHandler('pause', () => {
+            audioPlayer.pause();
+            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+            playPauseBtn.classList.remove('playing');
+            updateMediaSessionPlaybackState('paused');
+        });
+
+        // Next Track action
+        navigator.mediaSession.setActionHandler('nexttrack', () => playNextSong({ userInitiated: true }));
+
+        // Previous Track action
+        navigator.mediaSession.setActionHandler('previoustrack', () => playPreviousSong());
+        
+        // Stop action
+        navigator.mediaSession.setActionHandler('stop', () => resetPlayer());
+
+        // Seek Forward action (e.g., from car display or keyboard)
+        navigator.mediaSession.setActionHandler('seekforward', (details) => {
+            const skipTime = details.seekOffset || 10; // Default to 10s
+            audioPlayer.currentTime = Math.min(audioPlayer.currentTime + skipTime, audioPlayer.duration);
+            updateMediaSessionPositionState();
+        });
+
+        // Seek Backward action
+        navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+            const skipTime = details.seekOffset || 10; // Default to 10s
+            audioPlayer.currentTime = Math.max(audioPlayer.currentTime - skipTime, 0);
+            updateMediaSessionPositionState();
+        });
+
+        // Seek To specific time
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+            if (details.fastSeek && 'fastSeek' in audioPlayer) {
+                audioPlayer.fastSeek(details.seekTime);
+            } else {
+                audioPlayer.currentTime = details.seekTime;
+            }
+            updateMediaSessionPositionState();
+        });
+    }
     
+    // Initialize the handlers
     setupMediaSessionActions();
 }
         
@@ -3477,11 +3518,15 @@ audioPlayer.addEventListener('timeupdate', async () => {
         if(audioPlayer.duration) durationDisplay.textContent = formatTime(audioPlayer.duration);
         updatePageTitle();
 
+        // --- KEY ADDITION: Update the live position for OS controls ---
+        if ('mediaSession' in navigator) {
+            updateMediaSessionPositionState();
+        }
+
         // Crossfade logic
         if (crossfadeEnabled && audioPlayer.duration > 0 && audioPlayer.duration - audioPlayer.currentTime < 3) {
             if (!audioPlayer.isFading) { 
                  audioPlayer.isFading = true;
-                 // Call with the isTransition flag
                  playNextSong({ isTransition: true });
             }
         }
@@ -3501,21 +3546,15 @@ audioPlayer.addEventListener('timeupdate', async () => {
             }
             
             if (newLrcLineIndex !== currentLrcLineIndex) {
-                // Remove active class from old line
                 if (currentLrcLineIndex !== -1) {
                     const oldLine = document.getElementById(`lyric-line-${currentLrcLineIndex}`);
                     if (oldLine) oldLine.classList.remove('active-lyric');
                 }
                 
-                // Add active class to new line
                 const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
                 if (newLine) {
                     newLine.classList.add('active-lyric');
-                    // Scroll the new line into the center of the view
-                    newLine.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'center'
-                    });
+                    newLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
                 currentLrcLineIndex = newLrcLineIndex;
             }
