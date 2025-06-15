@@ -2173,20 +2173,22 @@ class BeatDetector {
      * Creates a new BeatDetector.
      * @param {number} historySize The number of past frames to average for the threshold.
      * @param {number} thresholdMultiplier How much louder the current sound must be than the average to be considered a beat.
-     * @param {number} intensityScale A scaling factor for beat strength. A beat 1.5x louder than the average will produce a 100% strength pulse.
+     * @param {number} intensityScale A scaling factor for beat strength.
      * @param {number[][]} frequencyBands An array of [start, end] frequency bin indices to monitor.
      * @param {number} decayRate How quickly the beat effect should fade.
      */
     constructor(historySize = 60, thresholdMultiplier = 1.15, intensityScale = 1.5, frequencyBands = [[0, 3]], decayRate = 0.96) {
         this.historySize = historySize;
         this.thresholdMultiplier = thresholdMultiplier;
-        this.intensityScale = intensityScale; // New parameter for scaling beat strength
+        this.intensityScale = intensityScale;
         this.frequencyBands = frequencyBands;
         this.decayRate = decayRate;
 
         this.histories = Array(frequencyBands.length).fill(null).map(() => Array(historySize).fill(0));
         this.beatCooldowns = Array(frequencyBands.length).fill(0);
         this.currentDistortions = Array(frequencyBands.length).fill(0);
+        // --- NEW: Track the energy of the last registered beat ---
+        this.lastBeatEnergies = Array(frequencyBands.length).fill(0);
     }
 
     /**
@@ -2200,7 +2202,6 @@ class BeatDetector {
         let overallDistortion = 0;
 
         this.frequencyBands.forEach((band, index) => {
-            // 1. Calculate the average energy for the current frequency band
             const start = band[0];
             const end = band[1];
             let currentEnergy = 0;
@@ -2209,35 +2210,31 @@ class BeatDetector {
             }
             currentEnergy /= (end - start + 1);
 
-            // 2. Calculate the adaptive threshold from the recent history
             const history = this.histories[index];
-            const averageHistoryEnergy = history.reduce((a, b) => a + b, 0) / history.length || 1; // Avoid division by zero
+            const averageHistoryEnergy = history.reduce((a, b) => a + b, 0) / history.length || 1;
             const threshold = averageHistoryEnergy * this.thresholdMultiplier;
 
-            // --- MODIFICATION START: Calculate beat strength instead of just detecting a beat ---
-            if (currentEnergy > threshold && this.beatCooldowns[index] === 0) {
-                // A. Calculate how strong the beat is (0.0 to 1.0+)
-                const beatStrength = (currentEnergy / threshold - 1.0) / (this.intensityScale - 1.0);
-                const clampedStrength = Math.min(beatStrength, 1.0); // Cap strength at 100%
+            const isPotentialBeat = currentEnergy > threshold;
+            // A new beat can "break through" the cooldown if it's at least 10% stronger than the last registered beat.
+            const canBreakCooldown = currentEnergy > (this.lastBeatEnergies[index] * 1.1);
 
-                // B. Calculate the target distortion based on the beat's strength
+            if (isPotentialBeat && (this.beatCooldowns[index] === 0 || canBreakCooldown)) {
+                const beatStrength = Math.min((currentEnergy / threshold - 1.0) / (this.intensityScale - 1.0), 1.0);
                 const distortionRange = peakDistortion - baselineDistortion;
-                const targetDistortion = baselineDistortion + (distortionRange * clampedStrength);
-
-                // C. Set the distortion, but only if this new beat is stronger than the current decaying value
+                const targetDistortion = baselineDistortion + (distortionRange * beatStrength);
+                
                 this.currentDistortions[index] = Math.max(this.currentDistortions[index], targetDistortion);
                 
-                this.beatCooldowns[index] = 10;
+                // IMPORTANT: Update the energy and reset the cooldown for this new beat.
+                this.lastBeatEnergies[index] = currentEnergy;
+                this.beatCooldowns[index] = 10; // Reset the cooldown timer
             }
-            // --- MODIFICATION END ---
 
-            // 4. Update the history buffer
             history.push(currentEnergy);
             if (history.length > this.historySize) {
                 history.shift();
             }
             
-            // 5. Decay the distortion and cooldown for this band
             this.currentDistortions[index] = baselineDistortion + (this.currentDistortions[index] - baselineDistortion) * this.decayRate;
             if (this.beatCooldowns[index] > 0) {
                 this.beatCooldowns[index]--;
