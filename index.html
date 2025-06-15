@@ -667,6 +667,15 @@
         .background-blur.rotating {
             animation: rotate 90s linear infinite;
         }
+
+        @keyframes rotate {
+            from {
+                transform: translate(-50%, -50%) scale(1.42) rotate(0deg);
+            }
+            to {
+                transform: translate(-50%, -50%) scale(1.42) rotate(360deg);
+            }
+        }
         
         /* Common style for ALL moving shards */
         .distortion-shard {
