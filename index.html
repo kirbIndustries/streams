@@ -2173,24 +2173,24 @@ class BeatDetector {
      * Creates a new BeatDetector.
      * @param {number} historySize The number of past frames to average for the threshold.
      * @param {number} thresholdMultiplier How much louder the current sound must be than the average to be considered a beat.
+     * @param {number} intensityScale A scaling factor for beat strength. A beat 1.5x louder than the average will produce a 100% strength pulse.
      * @param {number[][]} frequencyBands An array of [start, end] frequency bin indices to monitor.
      * @param {number} decayRate How quickly the beat effect should fade.
      */
-    constructor(historySize = 60, thresholdMultiplier = 1.15, frequencyBands = [[0, 3]], decayRate = 0.96) {
+    constructor(historySize = 60, thresholdMultiplier = 1.15, intensityScale = 1.5, frequencyBands = [[0, 3]], decayRate = 0.96) {
         this.historySize = historySize;
         this.thresholdMultiplier = thresholdMultiplier;
+        this.intensityScale = intensityScale; // New parameter for scaling beat strength
         this.frequencyBands = frequencyBands;
         this.decayRate = decayRate;
 
-        // Initialize history and other state variables for each band
         this.histories = Array(frequencyBands.length).fill(null).map(() => Array(historySize).fill(0));
-        this.lastEnergies = Array(frequencyBands.length).fill(0);
         this.beatCooldowns = Array(frequencyBands.length).fill(0);
         this.currentDistortions = Array(frequencyBands.length).fill(0);
     }
 
     /**
-     * Analyzes the current audio frame and returns true if a beat is detected in any monitored band.
+     * Analyzes the current audio frame and calculates the appropriate distortion level.
      * @param {Uint8Array} dataArray The frequency data from the analyser.
      * @param {number} baselineDistortion The baseline value for the distortion effect.
      * @param {number} peakDistortion The peak value for the distortion effect.
@@ -2211,19 +2211,30 @@ class BeatDetector {
 
             // 2. Calculate the adaptive threshold from the recent history
             const history = this.histories[index];
-            const averageHistoryEnergy = history.reduce((a, b) => a + b, 0) / history.length;
+            const averageHistoryEnergy = history.reduce((a, b) => a + b, 0) / history.length || 1; // Avoid division by zero
             const threshold = averageHistoryEnergy * this.thresholdMultiplier;
 
-            // 3. Detect the beat
+            // --- MODIFICATION START: Calculate beat strength instead of just detecting a beat ---
             if (currentEnergy > threshold && this.beatCooldowns[index] === 0) {
-                this.currentDistortions[index] = peakDistortion;
-                this.beatCooldowns[index] = 10; // Set a short cooldown
+                // A. Calculate how strong the beat is (0.0 to 1.0+)
+                const beatStrength = (currentEnergy / threshold - 1.0) / (this.intensityScale - 1.0);
+                const clampedStrength = Math.min(beatStrength, 1.0); // Cap strength at 100%
+
+                // B. Calculate the target distortion based on the beat's strength
+                const distortionRange = peakDistortion - baselineDistortion;
+                const targetDistortion = baselineDistortion + (distortionRange * clampedStrength);
+
+                // C. Set the distortion, but only if this new beat is stronger than the current decaying value
+                this.currentDistortions[index] = Math.max(this.currentDistortions[index], targetDistortion);
+                
+                this.beatCooldowns[index] = 10;
             }
+            // --- MODIFICATION END ---
 
             // 4. Update the history buffer
             history.push(currentEnergy);
             if (history.length > this.historySize) {
-                history.shift(); // Keep the history at a fixed size
+                history.shift();
             }
             
             // 5. Decay the distortion and cooldown for this band
@@ -2232,7 +2243,6 @@ class BeatDetector {
                 this.beatCooldowns[index]--;
             }
 
-            // Use the strongest distortion from any band as the final output
             if(this.currentDistortions[index] > overallDistortion) {
                 overallDistortion = this.currentDistortions[index];
             }
@@ -2283,7 +2293,7 @@ function initVisualizer() {
 
     const baselineDistortion = 80;
     const peakDistortion = 150;
-    const beatDetector = new BeatDetector(60, 1.2, [[0, 3], [4, 8]]);
+    const beatDetector = new BeatDetector(60, 1.2, 1.5, [[0, 3], [4, 8]]);
 
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
