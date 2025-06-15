@@ -1308,6 +1308,7 @@
         let shards = [];
         let songs = [];
         let currentSongId = null;
+        let isPlayerLoading = false;
         let db;
         let directoryHandles = []; // For File System Access API
         let isShuffleEnabled = false;
@@ -2584,54 +2585,54 @@ function attachSongAndAlbumEventListeners() {
   });
 }
 
-async function playSong(song, isTransition = false) {
-    if (!song) {
-        console.error("playSong called with an undefined song.");
+async function playSong(song, { isTransition = false } = {}) {
+    if (isPlayerLoading || !song) {
         return;
     }
-
-    if (!isTransition) {
-        audioPlayer.pause();
-    }
+    isPlayerLoading = true;
 
     try {
+        // Only pause if this is NOT a crossfade transition
+        if (!isTransition) {
+            audioPlayer.pause();
+        }
+
         const fileUrl = await getSongFileUrl(song);
+
         if (!fileUrl) {
-            alert(`Could not find the file for "${song.name}". It may have been moved, renamed, or you may need to re-select your music folder.`);
+            alert(`Could not find the file for "${song.name}". It may have been moved or the folder needs to be re-added.`);
+            isPlayerLoading = false;
             return;
         }
-        
+
         currentSongId = song.id;
         updatePlayQueue();
 
-        // Fade out the old artwork
         albumArtImg.classList.add('fade-out');
+        await new Promise(resolve => setTimeout(resolve, 200));
 
-        setTimeout(async () => {
-            updatePlayerUI(song);
-            
-            if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
-                URL.revokeObjectURL(audioPlayer.src);
-            }
-            
-            audioPlayer.src = fileUrl;
-            
-            try {
-                await audioPlayer.play();
-                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-                playPauseBtn.classList.add('playing');
-                if ('mediaSession' in navigator) updateMediaSessionPlaybackState('playing');
-            } catch (e) {
-                console.error('Playback was prevented.', e);
-                playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-                playPauseBtn.classList.remove('playing');
-            }
-            
-            renderSidebar();
-        }, 200); // Shortened timeout for snappier transitions
+        if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
+            URL.revokeObjectURL(audioPlayer.src);
+        }
+
+        audioPlayer.src = fileUrl;
+        updatePlayerUI(song);
+        renderSidebar();
+
+        await audioPlayer.play();
+
+        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+        playPauseBtn.classList.add('playing');
+        if ('mediaSession' in navigator) updateMediaSessionPlaybackState('playing');
 
     } catch (error) {
-        console.error("Failed to play song:", song.name, error);
+        if (error.name !== 'AbortError') {
+            console.error("Failed to play song:", song.name, error);
+        }
+        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+        playPauseBtn.classList.remove('playing');
+    } finally {
+        isPlayerLoading = false;
     }
 }
 
@@ -3005,94 +3006,58 @@ function getDragAfterElement(container, y) {
             renderQueue();
         }
         
-function playNextSong(isTransition = false) {
-    if (!playQueue.length) {
-        playQueue = createPlayQueue();
+function playNextSong({ userInitiated = false, isTransition = false } = {}) {
+    if (userInitiated && repeatMode === 'one') {
+        toggleRepeat();
     }
-    
-    if (repeatMode === 'one') {
+
+    if (!userInitiated && !isTransition && repeatMode === 'one') {
         audioPlayer.currentTime = 0;
-        const playPromise = audioPlayer.play();
-        
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.log("Repeat playback prevented:", error.message);
-            });
-        }
+        audioPlayer.play().catch(e => console.error("Repeat-one playback failed", e));
         return;
     }
-    
+
+    if (!playQueue || playQueue.length === 0) return;
     currentQueueIndex++;
-    
-    // Get current album
-    const currentSong = playQueue[currentQueueIndex - 1];
-    const currentAlbum = currentSong ? currentSong.album : null;
-    
-    if (currentQueueIndex >= playQueue.length || 
-        (repeatMode === 'album' && currentAlbum && 
-         playQueue[currentQueueIndex]?.album !== currentAlbum)) {
-        
-        if (repeatMode === 'album' && currentAlbum) {
-            // Find the first song of the current album
-            currentQueueIndex = playQueue.findIndex(song => song.album === currentAlbum);
-        } else if (repeatMode === 'none') {
+
+    if (currentQueueIndex >= playQueue.length) {
+        if (repeatMode === 'all') {
+            currentQueueIndex = 0;
+        } else {
             resetPlayer();
             return;
-        } else {
-            currentQueueIndex = 0;
         }
     }
-    
+
     const nextSong = playQueue[currentQueueIndex];
     if (nextSong) {
-        playSong(nextSong, isTransition);
-    } else if (!isTransition) {
-        resetPlayer();
+        playSong(nextSong, { isTransition });
     }
 }
 
 function playPreviousSong() {
-    if (!playQueue.length) {
-        playQueue = createPlayQueue();
+    if (repeatMode === 'one') {
+        toggleRepeat();
     }
 
-    // If current time is > 3 seconds, restart song
-    if (audioPlayer.currentTime > 3) {
+    if (!playQueue.length) return;
+
+    if (audioPlayer.currentTime > 5) {
         audioPlayer.currentTime = 0;
-        const playPromise = audioPlayer.play();
-        
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.log("Restart playback prevented:", error.message);
-            });
-        }
+        audioPlayer.play().catch(e => console.error("Restart playback failed", e));
         return;
     }
     
     currentQueueIndex--;
-    
-    // Get current album
-    const currentSong = playQueue[currentQueueIndex + 1];
-    const currentAlbum = currentSong ? currentSong.album : null;
-    
-    if (currentQueueIndex < 0 || 
-        (repeatMode === 'album' && currentAlbum && 
-         playQueue[currentQueueIndex]?.album !== currentAlbum)) {
-        
-        if (repeatMode === 'album' && currentAlbum) {
-            // Find the last song of the current album
-            const albumSongs = playQueue.filter(song => song.album === currentAlbum);
-            currentQueueIndex = playQueue.indexOf(albumSongs[albumSongs.length - 1]);
-        } else if (repeatMode === 'all') {
-            currentQueueIndex = playQueue.length - 1;
-        } else {
-            currentQueueIndex = 0;
-        }
+
+    if (currentQueueIndex < 0) {
+        currentQueueIndex = (repeatMode === 'all') ? playQueue.length - 1 : 0;
     }
-    
+
     const prevSong = playQueue[currentQueueIndex];
     if (prevSong) {
-        loadAndPlaySong(prevSong);
+        // Explicitly call with isTransition: false
+        playSong(prevSong, { isTransition: false });
     }
 }
 
@@ -3120,11 +3085,11 @@ function toggleRepeat() {
     const repeatBtn = document.getElementById('repeatBtn');
     switch(repeatMode) {
         case 'none':
-            repeatMode = 'album';
+            repeatMode = 'all';
             repeatBtn.innerHTML = '<span class="material-symbols-rounded">repeat</span>';
             repeatBtn.classList.add('active');
             break;
-        case 'album':
+        case 'all':
             repeatMode = 'one';
             repeatBtn.innerHTML = '<span class="material-symbols-rounded">repeat_one</span>';
             repeatBtn.classList.add('active');
@@ -3371,7 +3336,8 @@ audioPlayer.addEventListener('timeupdate', async () => {
         if (crossfadeEnabled && audioPlayer.duration > 0 && audioPlayer.duration - audioPlayer.currentTime < 3) {
             if (!audioPlayer.isFading) { 
                  audioPlayer.isFading = true;
-                 playNextSong(true);
+                 // Call with the isTransition flag
+                 playNextSong({ isTransition: true });
             }
         }
 
@@ -3412,7 +3378,6 @@ audioPlayer.addEventListener('timeupdate', async () => {
     }
 });
 
-// Replace your existing playPauseBtn 'click' listener with this
 playPauseBtn.addEventListener('click', () => {
     // Resume audio context on user interaction
     if (audioContext && audioContext.state === 'suspended') {
@@ -3442,7 +3407,7 @@ playPauseBtn.addEventListener('click', () => {
     }
 });
         
-nextBtn.addEventListener('click', () => playNextSong());
+nextBtn.addEventListener('click', () => playNextSong({ userInitiated: true }));
 prevBtn.addEventListener('click', () => playPreviousSong());
 
 function seekAudio(e) {
@@ -3480,11 +3445,8 @@ audioPlayer.addEventListener('play', () => document.querySelector('.background-b
 
 audioPlayer.addEventListener('ended', () => {
     audioPlayer.isFading = false; // Reset fade flag
-    if (repeatMode === 'one') {
-        playSong(songs.find(s => s.id === currentSongId));
-    } else if (!crossfadeEnabled) {
-        playNextSong();
-    }
+    // Call with default options (not user-initiated, not a transition)
+    playNextSong(); 
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
