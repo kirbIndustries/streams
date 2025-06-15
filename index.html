@@ -216,10 +216,6 @@
             border-radius: 20px;
         }
 
-        .fade-out {
-            opacity: 0 !important;
-        }
-
         /* Generic Modal Styling */
         .modal-overlay {
             position: fixed;
@@ -2608,7 +2604,6 @@ async function playSong(song, { isTransition = false } = {}) {
         currentSongId = song.id;
         updatePlayQueue();
 
-        albumArtImg.classList.add('fade-out');
         await new Promise(resolve => setTimeout(resolve, 200));
 
         if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
@@ -3309,7 +3304,6 @@ async function verifyPermission(handle, shouldRequest = false) {
             musicTitle.textContent = song.name;
             musicArtist.textContent = song.artist;
             albumArtImg.src = song.albumArt;
-            albumArtImg.classList.remove('fade-out');
             updateAllBackgrounds(song.albumArt);
             updateFavicon(song.albumArt);
             updateTimeDisplays(progress, audioPlayer.duration);
