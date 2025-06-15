@@ -2814,7 +2814,7 @@ async function removeFolder(folderName) {
         }
 
         async function deleteSong(songId) {
-            const songIndex = songs.findIndex(s => s.id === songIdToDelete);
+            const songIndex = songs.findIndex(s => s.id === songId);
             if (songIndex === -1) return;
         
             const songToDelete = songs[songIndex];
