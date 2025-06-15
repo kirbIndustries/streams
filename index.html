@@ -1271,8 +1271,27 @@
     <div id="equalizerModal" class="modal-overlay">
         <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Equalizer</h2>
-            <p style="text-align: center; color: var(--secondary-text-color);">Equalizer controls will be available here in a future update.</p>
-            <div style="display: flex; justify-content: flex-end; margin-top: 25px;">
+            
+            <div id="eq-bands-container" style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 25px;">
+                <!-- Bass Slider -->
+                <div class="eq-band">
+                    <label for="bass-slider" style="display: block; margin-bottom: 5px; color: var(--secondary-text-color);">Bass</label>
+                    <input type="range" id="bass-slider" class="volume-slider" min="-10" max="10" value="0" step="1">
+                </div>
+                <!-- Mid Slider -->
+                <div class="eq-band">
+                    <label for="mid-slider" style="display: block; margin-bottom: 5px; color: var(--secondary-text-color);">Mid</label>
+                    <input type="range" id="mid-slider" class="volume-slider" min="-10" max="10" value="0" step="1">
+                </div>
+                <!-- Treble Slider -->
+                <div class="eq-band">
+                    <label for="treble-slider" style="display: block; margin-bottom: 5px; color: var(--secondary-text-color);">Treble</label>
+                    <input type="range" id="treble-slider" class="volume-slider" min="-10" max="10" value="0" step="1">
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; gap: 10px;">
+                <button id="resetEq" class="filter-btn">Reset</button>
                 <button id="closeEqModal" class="filter-btn active">Close</button>
             </div>
         </div>
@@ -1328,6 +1347,7 @@
         let editModal, editSongId, editTitle, editArtist, editAlbum, saveEdit, cancelEdit, equalizerModal;
         let crossfadeEnabled = false;
         let sleepTimerId = null;
+        let eqBass, eqMid, eqTreble; // Add these for the EQ
         let playlists = [];
         let playlistModal, sleepTimerModal;
 
@@ -1337,6 +1357,18 @@
         
         function closeModal(modal) {
             if (modal) modal.classList.remove('visible');
+        }
+
+        function showPopupMessage(message) {
+            const popup = document.createElement('div');
+            popup.className = 'popup-message';
+            popup.textContent = message;
+            document.body.appendChild(popup);
+            
+            // The animation is 3s long, remove the element after it's finished
+            setTimeout(() => {
+                popup.remove();
+            }, 3000);
         }
 
 menuBtn.className = 'menu-btn';
@@ -2141,17 +2173,36 @@ function initVisualizer() {
     if (isVisualizerInitialized) return;
 
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Create EQ Filters
+    eqBass = audioContext.createBiquadFilter();
+    eqMid = audioContext.createBiquadFilter();
+    eqTreble = audioContext.createBiquadFilter();
+
+    eqBass.type = 'lowshelf';
+    eqBass.frequency.value = 300; // Bass frequencies up to 300 Hz
+    eqMid.type = 'peaking';
+    eqMid.frequency.value = 1000; // Mids around 1 kHz
+    eqMid.Q.value = 1; // Quality factor
+    eqTreble.type = 'highshelf';
+    eqTreble.frequency.value = 3000; // Treble frequencies above 3 kHz
+    
     analyser = audioContext.createAnalyser();
     
     if (!source) {
         source = audioContext.createMediaElementSource(audioPlayer);
-        source.connect(analyser);
-        analyser.connect(audioContext.destination);
     }
+
+    // Connect nodes in series: source -> bass -> mid -> treble -> analyser -> destination
+    source.connect(eqBass);
+    eqBass.connect(eqMid);
+    eqMid.connect(eqTreble);
+    eqTreble.connect(analyser);
+    analyser.connect(audioContext.destination);
 
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.88;
-    const bufferLength = analyser.frequencyBinCount; // 1024
+    const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
@@ -2169,14 +2220,8 @@ function initVisualizer() {
     const canvasCtx = canvas.getContext('2d');
     const numBars = 6;
     const barIndices = [2, 10, 30, 100, 200, 400];
-    
-    // --- UPDATED: Sensitivity multipliers have been significantly reduced for better balance ---
     const sensitivityMultipliers = [1.0, 1.05, 1.1, 1.15, 1.25, 1.4];
-
-    // --- NEW: A tunable power curve for the bar height ---
-    // Higher values (e.g., 2.5) = more "punchy", sensitive to peaks.
-    // Lower values (e.g., 1.5) = more "smooth" and linear.
-    const powerCurve = 2.2
+    const powerCurve = 2.2;
 
 
     function draw() {
@@ -2215,10 +2260,7 @@ function initVisualizer() {
 
         for (let i = 0; i < numBars; i++) {
             const x = i * (barWidth + gap);
-
             const value = Math.min(dataArray[barIndices[i]] * sensitivityMultipliers[i], 255);
-            
-            // Use the new powerCurve variable here
             const barHeight = Math.pow(value / 255, powerCurve) * canvas.height * 0.9;
             
             if (barHeight < barWidth) {
@@ -2294,13 +2336,43 @@ function renderSidebar() {
 
             switch (currentFilter) {
                 case 'artists':
-                    const artists = [...new Map(searchFilteredSongs.map(s => [s.artist, s])).values()];
-                    musicListContainer.innerHTML = artists.map(artist => `
-                        <div class="music-item" data-artist="${artist.artist}">
-                            <div class="song-info">${artist.artist}</div>
-                        </div>
-                    `).join('');
-                    // Add event listeners for artist clicks if desired
+                    const artistName = musicListContainer.dataset.activeArtist;
+                    // If an artist has been selected, show their songs
+                    if (artistName) {
+                        const backButton = document.createElement('button');
+                        backButton.className = 'sidebar-back-btn';
+                        backButton.innerHTML = `<span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> All Artists`;
+                        backButton.onclick = () => {
+                            delete musicListContainer.dataset.activeArtist;
+                            renderSidebar();
+                        };
+                        musicListContainer.appendChild(backButton);
+                        
+                        const artistSongs = songs.filter(s => s.artist === artistName);
+                        renderSongs(artistSongs); // Use the existing album-grouping render function
+                
+                    } else {
+                    // Otherwise, show the list of all artists
+                        const artists = [...new Map(searchFilteredSongs.map(s => [s.artist, s.albumArt])).entries()];
+                        artists.sort((a,b) => a[0].localeCompare(b[0])); // Sort artists alphabetically
+                
+                        musicListContainer.innerHTML = artists.map(([artist, albumArt]) => `
+                            <div class="music-item" data-artist="${artist}" style="cursor: pointer;">
+                                <div class="song-info">
+                                     <img src="${albumArt || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 5px;">
+                                    <div style="font-size: 1em;">${artist}</div>
+                                </div>
+                            </div>
+                        `).join('');
+                
+                        // Add event listeners to each artist
+                        musicListContainer.querySelectorAll('.music-item').forEach(item => {
+                            item.addEventListener('click', () => {
+                                musicListContainer.dataset.activeArtist = item.dataset.artist;
+                                renderSidebar(); // Re-render to show the artist's songs
+                            });
+                        });
+                    }
                     break;
                 case 'songs':
                     musicListContainer.innerHTML = searchFilteredSongs.map(song => `
@@ -2330,7 +2402,7 @@ function renderSidebar() {
 
 function renderPlaylists() {
     const musicListContainer = document.querySelector('.music-list');
-    musicListContainer.innerHTML = ''; // Clear the list
+    musicListContainer.innerHTML = ''; 
 
     if (playlists.length === 0) {
         musicListContainer.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">playlist_add</span><p>No playlists yet.</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Create one from the "More Options" menu while a song is playing.</p></div>';
@@ -2343,6 +2415,7 @@ function renderPlaylists() {
         
         const item = document.createElement('div');
         item.className = 'music-item';
+        item.style.position = 'relative'; // Needed for positioning the delete button
         item.innerHTML = `
             <div class="song-info">
                 <img src="${albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
@@ -2350,8 +2423,17 @@ function renderPlaylists() {
                     <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${playlist.name}</div>
                     <div class="album-artist" style="font-size: 0.8em;">${playlistSongs.length} songs</div>
                 </div>
-            </div>`;
-        item.onclick = () => renderPlaylistSongs(playlist.id);
+            </div>
+            <button class="remove-from-queue-btn" onclick="deletePlaylist(${playlist.id}, event)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%);">
+                <span class="material-symbols-rounded">delete</span>
+            </button>`;
+        
+        // Add click listener to the item itself, ignoring the button
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return; // Don't trigger if the delete button was clicked
+            renderPlaylistSongs(playlist.id);
+        });
+
         musicListContainer.appendChild(item);
     });
 }
@@ -2362,10 +2444,18 @@ function renderPlaylistSongs(playlistId) {
     if (!playlist) return;
 
     const musicListContainer = document.querySelector('.music-list');
-    musicListContainer.innerHTML = ''; // Clear list
+    musicListContainer.innerHTML = '';
 
-    addBackButtonToSidebar();
-
+    const backButton = document.createElement('button');
+    backButton.className = 'sidebar-back-btn';
+    backButton.innerHTML = `<span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Playlists`;
+    backButton.onclick = () => {
+        activePlaylistId = null; // Clear active playlist
+        currentFilter = 'playlists';
+        renderSidebar();
+    };
+    musicListContainer.appendChild(backButton);
+    
     const playlistSongs = playlist.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
 
     if (playlistSongs.length === 0) {
@@ -2381,14 +2471,65 @@ function renderPlaylistSongs(playlistId) {
                     <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
                     <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
                 </div>
+                <button class="remove-from-queue-btn" onclick="removeSongFromPlaylist(${song.id}, ${playlist.id}, event)" style="margin-left: auto;">
+                    <span class="material-symbols-rounded">playlist_remove</span>
+                </button>
             </div>
         </div>
     `).join('');
 
     musicListContainer.insertAdjacentHTML('beforeend', songsHtml);
-    attachSongAndAlbumEventListeners();
+    
+    // Attach event listeners to the main song item (for playing)
+    musicListContainer.querySelectorAll('.music-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            const songId = parseFloat(item.dataset.id);
+            const songToPlay = songs.find(s => s.id === songId);
+            if (songToPlay) playSong(songToPlay);
+        });
+    });
 }
 
+async function deletePlaylist(playlistId, event) {
+    event.stopPropagation(); // Prevent the click from bubbling up
+    const playlist = playlists.find(p => p.id === playlistId);
+    if (!playlist) return;
+
+    if (confirm(`Are you sure you want to delete the playlist "${playlist.name}"?`)) {
+        // Remove from the array
+        playlists = playlists.filter(p => p.id !== playlistId);
+
+        // Remove from IndexedDB
+        const tx = db.transaction('playlists', 'readwrite');
+        tx.objectStore('playlists').delete(playlistId);
+        await tx.done;
+
+        showPopupMessage(`Playlist "${playlist.name}" deleted`);
+        renderPlaylists(); // Re-render the updated list
+    }
+}
+
+async function removeSongFromPlaylist(songId, playlistId, event) {
+    event.stopPropagation();
+    const playlist = playlists.find(p => p.id === playlistId);
+    const song = songs.find(s => s.id === songId);
+    if (!playlist || !song) return;
+
+    // Remove the songId from the playlist's list
+    playlist.songIds = playlist.songIds.filter(id => id !== songId);
+
+    // Update the playlist in IndexedDB
+    const tx = db.transaction('playlists', 'readwrite');
+    tx.objectStore('playlists').put(playlist);
+    await tx.done;
+    
+    showPopupMessage(`Removed "${song.name}" from "${playlist.name}"`);
+    
+    // Re-render the current playlist view to show the change
+    renderPlaylistSongs(playlistId);
+}
+        
 function addBackButtonToSidebar() {
     const musicListContainer = document.querySelector('.music-list');
     const backButton = document.createElement('button');
@@ -2671,7 +2812,7 @@ async function getSongFileUrl(song) {
     console.warn(`Could not find "${song.handleName}" in any of the connected directories.`);
     return null;
 }
-
+        
 function initModalVariables() {
     // Edit Modal
     editModal = document.getElementById('editModal');
@@ -2693,10 +2834,20 @@ function initModalVariables() {
     document.getElementById('closePlaylistModal').addEventListener('click', () => closeModal(playlistModal)); // Use helper
     document.getElementById('createPlaylistBtn').addEventListener('click', createPlaylistAndAddSong);
 
-    // Equalizer Modal
+    // EQ Modal
     equalizerModal = document.getElementById('equalizerModal');
-    document.getElementById('closeEqModal').addEventListener('click', () => closeModal(equalizerModal)); // Use helper
-
+    document.getElementById('closeEqModal').addEventListener('click', () => closeModal(equalizerModal));
+    document.getElementById('resetEq').addEventListener('click', () => {
+        ['bass-slider', 'mid-slider', 'treble-slider'].forEach(id => {
+            const slider = document.getElementById(id);
+            slider.value = 0;
+            slider.dispatchEvent(new Event('input')); // Trigger update
+        });
+    });
+    document.getElementById('bass-slider').addEventListener('input', (e) => { if(eqBass) eqBass.gain.value = e.target.value; });
+    document.getElementById('mid-slider').addEventListener('input', (e) => { if(eqMid) eqMid.gain.value = e.target.value; });
+    document.getElementById('treble-slider').addEventListener('input', (e) => { if(eqTreble) eqTreble.gain.value = e.target.value; });
+    
     // Manage Folders Modal
     manageFoldersModal = document.getElementById('manageFoldersModal');
     document.getElementById('closeFoldersModal').addEventListener('click', () => closeModal(manageFoldersModal)); // Use helper
