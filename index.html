@@ -663,6 +663,10 @@
             transform: scale(1.2);
             transition: background-image 0.5s ease;
         }
+
+        .background-blur.rotating {
+            animation: rotate 90s linear infinite;
+        }
         
         /* Common style for ALL moving shards */
         .distortion-shard {
@@ -678,6 +682,7 @@
             will-change: transform;
             transition: background-image 0.5s ease;
             scale: 0.75;
+            opacity: 0.5;
         }
         
         /* Define the unique organic shapes for each shard */
