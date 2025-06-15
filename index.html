@@ -2219,7 +2219,7 @@ function initVisualizer() {
     const canvasCtx = canvas.getContext('2d');
     const numBars = 6;
     const barIndices = [5, 10, 30, 100, 200, 400];
-    const sensitivityMultipliers = [0.9, 1.05, 1.1, 1.15, 1.25, 1.4];
+    const sensitivityMultipliers = [1, 1.05, 1, 1.15, 1.25, 1.4];
     const powerCurve = 2.2;
 
     function draw() {
@@ -2229,7 +2229,7 @@ function initVisualizer() {
         const bassEnergy = (dataArray[0] + dataArray[1]) / 2;
         if (bassEnergy > lastBassEnergy * 1.16 && beatCooldown === 0 && bassEnergy > 110) {
             currentDistortion = peakDistortion;
-            beatCooldown = 20;
+            beatCooldown = 10;
         }
 
         currentDistortion = baselineDistortion + (currentDistortion - baselineDistortion) * decayFactor;
