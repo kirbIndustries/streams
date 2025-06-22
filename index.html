@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,700,1,0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <script src="/assets/gurapp/api/gurasuraisu-api.js" defer></script>
     <style>
         :root {
             /* Dark Theme (Default) Variables */
@@ -2139,7 +2140,7 @@ async function migrateToFSA() {
         // 2. Save the updated metadata with the new 'filesystem' storage type
         await saveSongs();
 
-        alert(`Successfully migrated ${blobIdsToDelete.length} songs to use direct file access, freeing up browser storage!`);
+        Gurasuraisu.showPopup(`Successfully migrated ${blobIdsToDelete.length} songs to use direct file access, freeing up browser storage!`);
     }
 }
 
@@ -2804,7 +2805,7 @@ async function playSong(song, { isTransition = false } = {}) {
         const fileUrl = await getSongFileUrl(song);
 
         if (!fileUrl) {
-            alert(`Could not find the file for "${song.name}". It may have been moved or the folder needs to be re-added.`);
+            Gurasuraisu.showPopup(`Could not find the file for "${song.name}". It may have been moved or the folder needs to be re-added.`);
             isPlayerLoading = false;
             return;
         }
@@ -3005,7 +3006,7 @@ async function removeFolder(folderName) {
             moreButton.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (currentSongId) moreOptionsMenu.classList.toggle('visible');
-                else alert('No song is currently playing.');
+                else Gurasuraisu.showPopup('No song is currently playing.');
             });
 
             document.addEventListener('click', () => moreOptionsMenu.classList.remove('visible'));
@@ -3029,7 +3030,7 @@ async function removeFolder(folderName) {
                 if (currentSongElement) {
                     currentSongElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 } else {
-                    alert('Song not found in current view. Try changing filters.');
+                    Gurasuraisu.showPopup('Song not found in current view. Try changing filters.');
                 }
             });
         }
@@ -3756,7 +3757,7 @@ document.getElementById('uploadBtn').addEventListener('click', async () => {
         try {
             const handle = await window.showDirectoryPicker();
             if (directoryHandles.some(h => h.name === handle.name)) {
-                alert("This folder has already been added.");
+                Gurasuraisu.showPopup("This folder has already been added.");
                 return;
             }
             
@@ -3819,9 +3820,9 @@ document.getElementById('uploadBtn').addEventListener('click', async () => {
                     playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
                     console.log('Sleep timer finished.');
                 }, minutes * 60 * 1000);
-                alert(`Sleep timer set for ${minutes} minutes.`);
+                Gurasuraisu.showPopup(`Sleep timer set for ${minutes} minutes.`);
             } else {
-                alert('Sleep timer cancelled.');
+                Gurasuraisu.showPopup('Sleep timer cancelled.');
             }
             closeModal(sleepTimerModal);
         }
@@ -3860,7 +3861,7 @@ async function loadSongsAndPlaylists() {
             if (!newName) return;
         
             if (!currentSongId) {
-                alert("Please play a song before creating a playlist.");
+                Gurasuraisu.showPopup("Please play a song before creating a playlist.");
                 return;
             }
         
@@ -3883,12 +3884,12 @@ async function loadSongsAndPlaylists() {
                 playlists.push(newPlaylist);
                 document.getElementById('newPlaylistName').value = '';
                 closeModal(playlistModal);
-                alert(`Added "${songs.find(s=>s.id === currentSongId).name}" to new playlist "${newName}"`);
+                Gurasuraisu.showPopup(`Added "${songs.find(s=>s.id === currentSongId).name}" to new playlist "${newName}"`);
                 renderSidebar(); // Re-render to show the new playlist
         
             } catch (error) {
                 console.error("Failed to create playlist:", error);
-                alert("Error creating playlist. See console for details.");
+                Gurasuraisu.showPopup("Error creating playlist. See console for details.");
             }
         }
 
@@ -3903,31 +3904,12 @@ async function loadSongsAndPlaylists() {
                 tx.objectStore('playlists').put(playlist);
                 await tx.done;
                 
-                alert(`Added to "${playlist.name}"`);
+                Gurasuraisu.showPopup(`Added to "${playlist.name}"`);
             } else {
-                alert(`Song is already in "${playlist.name}"`);
+                Gurasuraisu.showPopup(`Song is already in "${playlist.name}"`);
             }
             closeModal(playlistModal);
         }
-
-      // Theme synchronization for Gurapp side
-      document.addEventListener('DOMContentLoaded', () => {
-          const storedTheme = localStorage.getItem('theme') || 'dark';
-          document.body.classList.toggle('light-theme', storedTheme === 'light');
-          
-          const animationsEnabled = localStorage.getItem('animationsEnabled') !== 'false';
-          document.body.classList.toggle('reduce-animations', !animationsEnabled);
-          
-          window.addEventListener('message', (event) => {
-              if (event.origin === window.location.origin) {
-                  if (event.data.type === 'themeUpdate') {
-                      document.body.classList.toggle('light-theme', event.data.theme === 'light');
-                  } else if (event.data.type === 'animationsUpdate') {
-                      document.body.classList.toggle('reduce-animations', !event.data.enabled);
-                  }
-              }
-          });
-      });
 
         initDB();
         updatePlayQueue();
