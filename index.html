@@ -824,7 +824,7 @@
         .clickable {
           cursor: pointer;
           transform: scale(1);
-          transition: transform 0.15s cubic-bezier(0.2, 0, 0.38, 0.9);
+          transition: all 0.1s cubic-bezier(0.2, 0, 0.38, 0.9);
         }
         
         /* Active effect (when clicking down) */
@@ -835,7 +835,8 @@
         input[type="submit"]:active,
         .clickable:active {
           transform: scale(0.96);
-          transition: transform 0.1s cubic-bezier(0.2, 0, 0.38, 0.9);
+          transition: all 0.1s cubic-bezier(0.2, 0, 0.38, 0.9);
+          filter: brightness(1.5);
         }
         
         @media (max-width: 768px) {
@@ -930,6 +931,7 @@
             /* Apply scale instantly without transition */
             transform: scale(0.98) !important;
             transition: none !important;
+            filter: brightness(1.5) !important;
         }
         
         /* Adjust for background image with light/dark theme */
