@@ -3598,6 +3598,14 @@ audioPlayer.addEventListener('timeupdate', async () => {
         if(audioPlayer.duration) durationDisplay.textContent = formatTime(audioPlayer.duration);
         updatePageTitle();
 
+        // --- Send progress to parent ---
+        if (audioPlayer.duration) {
+            Gurasuraisu.updateMediaProgress({
+                currentTime: audioPlayer.currentTime,
+                duration: audioPlayer.duration
+            });
+        }
+
         // --- KEY ADDITION: Update the live position for OS controls ---
         if ('mediaSession' in navigator) {
             updateMediaSessionPositionState();
