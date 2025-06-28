@@ -1517,6 +1517,8 @@ function resetPlayer() {
     document.title = 'Music';
     updateFavicon(defaultImage);
 
+    Gurasuraisu.clearMediaSession();
+
     // --- KEY ADDITION: Clear the media session ---
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = null;
