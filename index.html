@@ -3661,6 +3661,7 @@ playPauseBtn.addEventListener('click', () => {
                 playPauseBtn.classList.add('playing');
                 document.querySelector('.background-blur').classList.add('rotating');
                 if ('mediaSession' in navigator) updateMediaSessionPlaybackState('playing');
+                Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
             }).catch(error => console.log("Play button click prevented:", error.message));
         }
     } else {
