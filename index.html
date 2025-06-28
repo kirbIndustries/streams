@@ -1073,7 +1073,7 @@
         }
     </style>
 </head>
-<body>
+<body data-app-name="Music">
     <svg style="position: absolute; width: 0; height: 0;">
         <filter id="albumArtDistortion">
             <feTurbulence 
@@ -2831,7 +2831,24 @@ async function playSong(song, { isTransition = false } = {}) {
             updateMediaSessionMetadata(song);
         }
 
+        if (!activeMediaSessionApp) {
+            Gurasuraisu.registerMediaSession({
+                title: song.name,
+                artist: song.artist,
+                artwork: [{ src: song.albumArt }]
+            });
+        }
+
         await audioPlayer.play();
+
+        Gurasuraisu.updatePlaybackState({ 
+            playbackState: 'playing',
+            metadata: { // Also send new metadata for the new song
+                title: song.name,
+                artist: song.artist,
+                artwork: [{ src: song.albumArt }]
+            }
+        });
 
         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
         playPauseBtn.classList.add('playing');
@@ -3657,6 +3674,7 @@ playPauseBtn.addEventListener('click', () => {
         }
     } else {
         audioPlayer.pause();
+        Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
         playPauseBtn.classList.remove('playing');
         if ('mediaSession' in navigator) updateMediaSessionPlaybackState('paused');
@@ -3912,6 +3930,19 @@ async function loadSongsAndPlaylists() {
             }
             closeModal(playlistModal);
         }
+
+        Gurasuraisu.onMediaControl({
+            playPause: () => {
+                // Trigger a click on the app's own play/pause button
+                document.getElementById('playPauseBtn').click();
+            },
+            next: () => {
+                document.getElementById('nextBtn').click();
+            },
+            prev: () => {
+                document.getElementById('prevBtn').click();
+            }
+        });
 
         initDB();
         updatePlayQueue();
