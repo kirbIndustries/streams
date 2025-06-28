@@ -2826,34 +2826,25 @@ async function playSong(song, { isTransition = false } = {}) {
         updatePlayerUI(song);
         renderSidebar();
         
-        // --- KEY ADDITION: Update metadata for the new song ---
+        Gurasuraisu.registerMediaSession({
+            title: song.name,
+            artist: song.artist,
+            artwork: [{ src: song.albumArt }]
+        });
+
+        // Update the OS-level media session
         if ('mediaSession' in navigator) {
             updateMediaSessionMetadata(song);
         }
 
-        if (!activeMediaSessionApp) {
-            Gurasuraisu.registerMediaSession({
-                title: song.name,
-                artist: song.artist,
-                artwork: [{ src: song.albumArt }]
-            });
-        }
-
         await audioPlayer.play();
-
-        Gurasuraisu.updatePlaybackState({ 
-            playbackState: 'playing',
-            metadata: { // Also send new metadata for the new song
-                title: song.name,
-                artist: song.artist,
-                artwork: [{ src: song.albumArt }]
-            }
-        });
 
         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
         playPauseBtn.classList.add('playing');
         if ('mediaSession' in navigator) updateMediaSessionPlaybackState('playing');
 
+        // Tell the parent the new playback state
+        Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
     } catch (error) {
         if (error.name !== 'AbortError') {
             console.error("Failed to play song:", song.name, error);
