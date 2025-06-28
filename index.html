@@ -2828,11 +2828,14 @@ async function playSong(song, { isTransition = false } = {}) {
         updatePlayerUI(song);
         renderSidebar();
         
-        Gurasuraisu.registerMediaSession({
-            title: song.name,
-            artist: song.artist,
-            artwork: [{ src: song.albumArt }]
-        });
+        Gurasuraisu.registerMediaSession(
+            {
+                title: song.name,
+                artist: song.artist,
+                artwork: [{ src: song.albumArt }]
+            },
+            ['playPause', 'next', 'prev']
+        );
 
         // Update the OS-level media session
         if ('mediaSession' in navigator) {
