@@ -3726,6 +3726,12 @@ audioPlayer.addEventListener('ended', () => {
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
+    Gurasuraisu.registerMediaSession({
+        title: song.name,
+        artist: song.artist,
+        artwork: [{ src: song.albumArt }]
+    });
+    
     try {
         await initDB();
         searchInput = document.getElementById('searchInput');
