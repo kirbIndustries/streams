@@ -1335,6 +1335,7 @@
         let isShuffleEnabled = false;
         let repeatMode = 'none'; // 'none', 'all', or 'one'
         let playQueue = [];
+        let isQueueUserModified = false;
         let currentQueueIndex = -1;
         let searchTimeout;
         let searchInput;
@@ -2838,15 +2839,15 @@ async function playSong(song, { isTransition = false } = {}) {
             return;
         }
 
-        // FIX: Only rebuild the queue if the song isn't already in it.
         const songIndexInQueue = playQueue.findIndex(s => s.id === song.id);
+
+        // If song isn't in queue, it's being played from the library.
+        // This action should reset any manual queue ordering.
         if (songIndexInQueue === -1) {
-            // This means the user clicked a song from the library view,
-            // so we should create a new queue based on the current sort/shuffle settings.
-            updatePlayQueue();
+            isQueueUserModified = false; 
+            updatePlayQueue(); 
         }
-        
-        // Always update the current song ID and the index for playback.
+
         currentSongId = song.id;
         currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
 
@@ -2870,7 +2871,6 @@ async function playSong(song, { isTransition = false } = {}) {
             ['playPause', 'next', 'prev']
         );
 
-        // Update the OS-level media session
         if ('mediaSession' in navigator) {
             updateMediaSessionMetadata(song);
         }
@@ -2881,7 +2881,6 @@ async function playSong(song, { isTransition = false } = {}) {
         playPauseBtn.classList.add('playing');
         if ('mediaSession' in navigator) updateMediaSessionPlaybackState('playing');
 
-        // Tell the parent the new playback state
         Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
     } catch (error) {
         if (error.name !== 'AbortError') {
@@ -3255,24 +3254,25 @@ function getDragAfterElement(container, y) {
     }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
-        function updateQueueFromDOM() {
-            const newQueueOrder = [];
-            document.querySelectorAll('.queue-item').forEach(item => {
-                const songId = parseFloat(item.dataset.id);
-                // Find song from the original playQueue to prevent duplicates
-                const song = playQueue.find(s => s.id === songId);
-                if (song) {
-                    newQueueOrder.push(song);
-                }
-            });
-
-            playQueue = newQueueOrder;
-            // Crucially, find the new index of the currently playing song
-            currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
-            
-            // Re-render the queue to apply new indices
-            renderQueue();
+function updateQueueFromDOM() {
+    const newQueueOrder = [];
+    document.querySelectorAll('.queue-item').forEach(item => {
+        const songId = parseFloat(item.dataset.id);
+        const song = songs.find(s => s.id === songId); // Find from original `songs` to ensure valid data
+        if (song) {
+            newQueueOrder.push(song);
         }
+    });
+
+    playQueue = newQueueOrder;
+    currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
+    
+    // **KEY ADDITION**: Mark the queue as manually modified.
+    isQueueUserModified = true;
+    
+    // Re-render to update the track numbers and lock in the changes.
+    renderQueue();
+}
         
 function playNextSong({ userInitiated = false, isTransition = false } = {}) {
     if (userInitiated && repeatMode === 'one') {
@@ -3340,11 +3340,15 @@ function cleanupBlobs() {
 function searchSongs(query) {
     renderSidebar();
 }
-
+        
 function toggleShuffle() {
     isShuffleEnabled = !isShuffleEnabled;
     let shuffleBtn = document.getElementById("shuffleBtn");
     shuffleBtn.classList.toggle("active");
+
+    // **KEY ADDITION**: Toggling shuffle always creates a new default queue.
+    isQueueUserModified = false;
+    
     updatePlayQueue();
     console.log("Shuffle state:", isShuffleEnabled);
 }
@@ -3371,26 +3375,45 @@ function toggleRepeat() {
 }
     
 function updatePlayQueue() {
-  playQueue = [...songs];
-  
-  if (isShuffleEnabled) {
-    let currentSong = currentSongId ? songs.find(s => s.id === currentSongId) : null;
-    let otherSongs = songs.filter(s => s.id !== currentSongId);
-    
-    for (let i = otherSongs.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [otherSongs[i], otherSongs[j]] = [otherSongs[j], otherSongs[i]];
+    // If the user has manually reordered the queue, do not touch it.
+    // Just find the current index and leave.
+    if (isQueueUserModified) {
+        currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
+        if (sidebarView === 'queue') renderQueue();
+        return;
+    }
+
+    // --- Default Queue Generation Logic ---
+    if (isShuffleEnabled) {
+        let availableSongs = [...songs];
+        let currentSong = currentSongId ? availableSongs.find(s => s.id === currentSongId) : null;
+        if (currentSong) {
+            availableSongs = availableSongs.filter(s => s.id !== currentSongId);
+        }
+        for (let i = availableSongs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [availableSongs[i], availableSongs[j]] = [availableSongs[j], availableSongs[i]];
+        }
+        playQueue = currentSong ? [currentSong, ...availableSongs] : availableSongs;
+    } else {
+        // Create a perfectly sorted queue (Album -> Disc -> Track)
+        const sortedSongs = [...songs].sort((a, b) => {
+            const albumCompare = (a.album || '').localeCompare(b.album || '');
+            if (albumCompare !== 0) return albumCompare;
+            const discCompare = (a.effectiveDiscNumber || 1) - (b.effectiveDiscNumber || 1);
+            if (discCompare !== 0) return discCompare;
+            return (a.trackNumber || 0) - (b.trackNumber || 0);
+        });
+        playQueue = sortedSongs;
     }
     
-    playQueue = currentSong ? [currentSong, ...otherSongs] : otherSongs;
-  }
-  
-  currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
-  if (currentQueueIndex === -1 && playQueue.length > 0) currentQueueIndex = 0;
+    currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
 
-  if (sidebarView === 'queue') renderQueue();
+    if (sidebarView === 'queue') {
+        renderQueue();
+    }
 }
-
+        
 function processAndSortSongs() {
     // 1. Group all songs by their album name.
     const songsByAlbum = songs.reduce((acc, song) => {
