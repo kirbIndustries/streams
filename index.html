@@ -1883,17 +1883,14 @@ async function extractMetadata(file) {
                         albumArt = generateRandomGradient();
                     }
 
-                    // --- FIXED LYRICS EXTRACTION LOGIC ---
                     let lyricsText = null;
                     let lrcData = null;
                     let foundSyncedLyrics = false;
-
                     const lrcCandidates = [
                         tag.tags.USLT?.lyrics,
                         (typeof tag.tags.lyrics === 'object' ? tag.tags.lyrics.lyrics : tag.tags.lyrics),
-                        tag.tags.LYRICS // Common in FLAC files
+                        tag.tags.LYRICS
                     ];
-
                     for (const candidate of lrcCandidates) {
                         if (candidate) {
                             const parsed = parseLRC(candidate);
@@ -1901,21 +1898,31 @@ async function extractMetadata(file) {
                                 lrcData = parsed;
                                 lyricsText = candidate;
                                 foundSyncedLyrics = true;
-                                break; // Stop after finding the first valid synced lyrics
+                                break;
                             }
                         }
                     }
-                    
                     if (!foundSyncedLyrics) {
                         lyricsText = lrcCandidates.find(text => typeof text === 'string' && text.trim() !== '') || null;
                     }
 
-                    // NEW: Extract disc number
+                    // --- ROBUST DISC NUMBER EXTRACTION (FIX) ---
                     let discNumber = null;
-                    const discTag = tag.tags.TPOS || tag.tags.disk;
+                    // jsmediatags often normalizes the disc tag to 'disk' for formats like FLAC.
+                    // TPOS is the fallback for ID3v2 tags (MP3).
+                    const discTag = tag.tags.disk || tag.tags.TPOS;
                     if (discTag) {
-                        // TPOS can be "1/2", so we only take the first part
-                        discNumber = parseInt(String(discTag.data || discTag).split('/')[0], 10) || null;
+                        if (typeof discTag === 'object' && discTag.no) {
+                            // Handles the case where the tag is an object: { no: 1, of: 2 }
+                            discNumber = parseInt(discTag.no, 10);
+                        } else {
+                            // Handles simple numbers or strings like "1" or "1/2"
+                            discNumber = parseInt(String(discTag.data || discTag).split('/')[0], 10);
+                        }
+                        // If parsing fails for any reason, reset to null
+                        if (isNaN(discNumber)) {
+                            discNumber = null;
+                        }
                     }
 
                     resolve({
@@ -1925,14 +1932,13 @@ async function extractMetadata(file) {
                         year: tag.tags.year || '',
                         albumArt: albumArt,
                         trackNumber: parseInt(tag.tags.track, 10) || null,
-                        discNumber: discNumber, // NEW
+                        discNumber: discNumber, // Use the correctly parsed disc number
                         lyrics: lyricsText,
                         lrcData: lrcData
                     });
                 },
                 onError: (error) => {
                     console.error("jsmediatags ERROR for:", file.name, error);
-                    // Fallback for files that can't be read
                     resolve({
                         title: file.name.replace(/\.[^/.]+$/, ""),
                         artist: 'Unknown Artist',
@@ -1940,7 +1946,7 @@ async function extractMetadata(file) {
                         year: '',
                         albumArt: generateRandomGradient(),
                         trackNumber: null,
-                        discNumber: null, // NEW
+                        discNumber: null, // Fallback correctly
                         lyrics: null,
                         lrcData: null
                     });
