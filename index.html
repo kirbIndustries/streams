@@ -1874,6 +1874,9 @@ async function extractMetadata(file) {
         new jsmediatags.Reader(file)
             .read({
                 onSuccess: async function(tag) {
+                    // This console log is for debugging. If the issue persists, the contents of this log will tell us exactly what's wrong.
+                    // console.log(`Tags for ${file.name}:`, tag.tags); 
+
                     let albumArt;
                     if (tag.tags.picture) {
                         const { data, format } = tag.tags.picture;
@@ -1906,33 +1909,37 @@ async function extractMetadata(file) {
                         lyricsText = lrcCandidates.find(text => typeof text === 'string' && text.trim() !== '') || null;
                     }
 
-                    // --- ROBUST DISC NUMBER EXTRACTION (FIX) ---
-                    let discNumber = null;
-                    // jsmediatags often normalizes the disc tag to 'disk' for formats like FLAC.
-                    // TPOS is the fallback for ID3v2 tags (MP3).
-                    const discTag = tag.tags.disk || tag.tags.TPOS;
-                    if (discTag) {
-                        if (typeof discTag === 'object' && discTag.no) {
-                            // Handles the case where the tag is an object: { no: 1, of: 2 }
-                            discNumber = parseInt(discTag.no, 10);
-                        } else {
-                            // Handles simple numbers or strings like "1" or "1/2"
-                            discNumber = parseInt(String(discTag.data || discTag).split('/')[0], 10);
-                        }
-                        // If parsing fails for any reason, reset to null
-                        if (isNaN(discNumber)) {
-                            discNumber = null;
-                        }
-                    }
+                    // --- BULLETPROOF PARSING LOGIC FOR TAGS ---
+                    const parseComplexTag = (rawTag) => {
+                        if (!rawTag) return null;
+                        
+                        // The value might be in `rawTag.data` for some tag types
+                        const value = rawTag.data || rawTag;
 
+                        if (typeof value === 'object' && value.no) {
+                            // Handles format: { no: 1, of: 12 }
+                            return parseInt(value.no, 10);
+                        }
+                        
+                        // Handles formats: "1", "1/12", 1
+                        const parsed = parseInt(String(value).split('/')[0], 10);
+
+                        // Return the number if valid, otherwise null
+                        return isNaN(parsed) ? null : parsed;
+                    };
+
+                    // Check multiple possible tag names, with Vorbis comments (DISCNUMBER) as priority for FLAC.
+                    const discNumber = parseComplexTag(tag.tags.DISCNUMBER || tag.tags.disk || tag.tags.TPOS);
+                    const trackNumber = parseComplexTag(tag.tags.TRACKNUMBER || tag.tags.track);
+                    
                     resolve({
                         title: tag.tags.title || file.name.replace(/\.[^/.]+$/, ""),
                         artist: tag.tags.artist || 'Unknown Artist',
                         album: tag.tags.album || 'Unknown Album',
                         year: tag.tags.year || '',
                         albumArt: albumArt,
-                        trackNumber: parseInt(tag.tags.track, 10) || null,
-                        discNumber: discNumber, // Use the correctly parsed disc number
+                        trackNumber: trackNumber,
+                        discNumber: discNumber,
                         lyrics: lyricsText,
                         lrcData: lrcData
                     });
@@ -1946,7 +1953,7 @@ async function extractMetadata(file) {
                         year: '',
                         albumArt: generateRandomGradient(),
                         trackNumber: null,
-                        discNumber: null, // Fallback correctly
+                        discNumber: null,
                         lyrics: null,
                         lrcData: null
                     });
