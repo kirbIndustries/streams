@@ -1325,6 +1325,7 @@
         const storedLightMode = localStorage.getItem('theme') || 'dark';
 
         let activePlaylistId = null;
+        let currentMediaSessionArtBlobUrl = null;
         let shardContainer; 
         let shards = [];
         let songs = [];
@@ -3493,22 +3494,46 @@ function groupSongsByAlbum(songs) {
 
 if ('mediaSession' in navigator) {
 
-    function updateMediaSessionMetadata(song) {
-        if (!song) return;
-        navigator.mediaSession.metadata = new MediaMetadata({
-            title: song.name,
-            artist: song.artist,
-            album: song.album,
-            artwork: [
-                { src: song.albumArt, sizes: '96x96', type: 'image/png' },
-                { src: song.albumArt, sizes: '128x128', type: 'image/png' },
-                { src: song.albumArt, sizes: '192x192', type: 'image/png' },
-                { src: song.albumArt, sizes: '256x256', type: 'image/png' },
-                { src: song.albumArt, sizes: '384x384', type: 'image/png' },
-                { src: song.albumArt, sizes: '512x512', type: 'image/png' },
-            ]
-        });
+async function updateMediaSessionMetadata(song) {
+    if (!song || !song.albumArt) return;
+
+    // 1. Revoke the previous blob URL to prevent memory leaks.
+    if (currentMediaSessionArtBlobUrl) {
+        URL.revokeObjectURL(currentMediaSessionArtBlobUrl);
+        currentMediaSessionArtBlobUrl = null;
     }
+
+    let artworkSrc = song.albumArt; // Default to the original art in case of failure.
+
+    // 2. We only need to convert if the art is a long data: URL.
+    if (song.albumArt.startsWith('data:')) {
+        try {
+            // 3. Convert the long data: URL into a short, memory-efficient blob: URL.
+            const response = await fetch(song.albumArt);
+            const blob = await response.blob();
+            artworkSrc = URL.createObjectURL(blob);
+            // 4. Store the new blob URL so we can revoke it on the next song change.
+            currentMediaSessionArtBlobUrl = artworkSrc;
+        } catch (e) {
+            console.error("Failed to create blob URL for media session artwork", e);
+        }
+    }
+
+    // 5. Set the metadata using the new, short URL.
+    navigator.mediaSession.metadata = new MediaMetadata({
+        title: song.name,
+        artist: song.artist,
+        album: song.album,
+        artwork: [
+            { src: artworkSrc, sizes: '96x96', type: 'image/png' },
+            { src: artworkSrc, sizes: '128x128', type: 'image/png' },
+            { src: artworkSrc, sizes: '192x192', type: 'image/png' },
+            { src: artworkSrc, sizes: '256x256', type: 'image/png' },
+            { src: artworkSrc, sizes: '384x384', type: 'image/png' },
+            { src: artworkSrc, sizes: '512x512', type: 'image/png' },
+        ]
+    });
+}
 
     function updateMediaSessionPlaybackState(state) {
         navigator.mediaSession.playbackState = state;
