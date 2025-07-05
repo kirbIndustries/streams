@@ -3778,8 +3778,16 @@ playPauseBtn.addEventListener('click', () => {
 
     if (audioPlayer.paused) {
         // Initialize the visualizer on the first play
-        if (!isVisualizerInitialized) {
+        if (!isVisualizerInitialized) { 
             initVisualizer();
+            Gurasuraisu.registerMediaSession(
+                {
+                    title: song.name,
+                    artist: song.artist,
+                    artwork: [{ src: song.albumArt }]
+                },
+                ['playPause', 'next', 'prev']
+            );
         }
 
         const playPromise = audioPlayer.play();
