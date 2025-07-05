@@ -3492,34 +3492,27 @@ function groupSongsByAlbum(songs) {
   });
 }
 
-if ('mediaSession' in navigator) {
-
 async function updateMediaSessionMetadata(song) {
-    if (!song || !song.albumArt) return;
+    if (!('mediaSession' in navigator) || !song || !song.albumArt) return;
 
-    // 1. Revoke the previous blob URL to prevent memory leaks.
     if (currentMediaSessionArtBlobUrl) {
         URL.revokeObjectURL(currentMediaSessionArtBlobUrl);
         currentMediaSessionArtBlobUrl = null;
     }
 
-    let artworkSrc = song.albumArt; // Default to the original art in case of failure.
+    let artworkSrc = song.albumArt;
 
-    // 2. We only need to convert if the art is a long data: URL.
     if (song.albumArt.startsWith('data:')) {
         try {
-            // 3. Convert the long data: URL into a short, memory-efficient blob: URL.
             const response = await fetch(song.albumArt);
             const blob = await response.blob();
             artworkSrc = URL.createObjectURL(blob);
-            // 4. Store the new blob URL so we can revoke it on the next song change.
             currentMediaSessionArtBlobUrl = artworkSrc;
         } catch (e) {
             console.error("Failed to create blob URL for media session artwork", e);
         }
     }
 
-    // 5. Set the metadata using the new, short URL.
     navigator.mediaSession.metadata = new MediaMetadata({
         title: song.name,
         artist: song.artist,
@@ -3535,72 +3528,66 @@ async function updateMediaSessionMetadata(song) {
     });
 }
 
-    function updateMediaSessionPlaybackState(state) {
-        navigator.mediaSession.playbackState = state;
-    }
+function updateMediaSessionPlaybackState(state) {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.playbackState = state;
+}
 
-    function updateMediaSessionPositionState() {
-        if (isNaN(audioPlayer.duration)) return;
-        
-        navigator.mediaSession.setPositionState({
-            duration: audioPlayer.duration,
-            playbackRate: audioPlayer.playbackRate,
-            position: audioPlayer.currentTime,
-        });
-    }
-
-    function setupMediaSessionActions() {
-        // Play action from OS
-        navigator.mediaSession.setActionHandler('play', () => {
-            audioPlayer.play().catch(e => console.error("Media Session play failed", e));
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            playPauseBtn.classList.add('playing');
-            updateMediaSessionPlaybackState('playing');
-        });
-
-        // Pause action from OS
-        navigator.mediaSession.setActionHandler('pause', () => {
-            audioPlayer.pause();
-            playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-            playPauseBtn.classList.remove('playing');
-            updateMediaSessionPlaybackState('paused');
-        });
-
-        // Next Track action
-        navigator.mediaSession.setActionHandler('nexttrack', () => playNextSong({ userInitiated: true }));
-
-        // Previous Track action
-        navigator.mediaSession.setActionHandler('previoustrack', () => playPreviousSong());
-        
-        // Stop action
-        navigator.mediaSession.setActionHandler('stop', () => resetPlayer());
-
-        // Seek Forward action (e.g., from car display or keyboard)
-        navigator.mediaSession.setActionHandler('seekforward', (details) => {
-            const skipTime = details.seekOffset || 10; // Default to 10s
-            audioPlayer.currentTime = Math.min(audioPlayer.currentTime + skipTime, audioPlayer.duration);
-            updateMediaSessionPositionState();
-        });
-
-        // Seek Backward action
-        navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-            const skipTime = details.seekOffset || 10; // Default to 10s
-            audioPlayer.currentTime = Math.max(audioPlayer.currentTime - skipTime, 0);
-            updateMediaSessionPositionState();
-        });
-
-        // Seek To specific time
-        navigator.mediaSession.setActionHandler('seekto', (details) => {
-            if (details.fastSeek && 'fastSeek' in audioPlayer) {
-                audioPlayer.fastSeek(details.seekTime);
-            } else {
-                audioPlayer.currentTime = details.seekTime;
-            }
-            updateMediaSessionPositionState();
-        });
-    }
+function updateMediaSessionPositionState() {
+    if (!('mediaSession' in navigator) || isNaN(audioPlayer.duration)) return;
     
-    // Initialize the handlers
+    navigator.mediaSession.setPositionState({
+        duration: audioPlayer.duration,
+        playbackRate: audioPlayer.playbackRate,
+        position: audioPlayer.currentTime,
+    });
+}
+
+function setupMediaSessionActions() {
+    if (!('mediaSession' in navigator)) return;
+
+    navigator.mediaSession.setActionHandler('play', () => {
+        audioPlayer.play().catch(e => console.error("Media Session play failed", e));
+        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+        playPauseBtn.classList.add('playing');
+        updateMediaSessionPlaybackState('playing');
+    });
+
+    navigator.mediaSession.setActionHandler('pause', () => {
+        audioPlayer.pause();
+        playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+        playPauseBtn.classList.remove('playing');
+        updateMediaSessionPlaybackState('paused');
+    });
+
+    navigator.mediaSession.setActionHandler('nexttrack', () => playNextSong({ userInitiated: true }));
+    navigator.mediaSession.setActionHandler('previoustrack', () => playPreviousSong());
+    navigator.mediaSession.setActionHandler('stop', () => resetPlayer());
+
+    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+        const skipTime = details.seekOffset || 10;
+        audioPlayer.currentTime = Math.min(audioPlayer.currentTime + skipTime, audioPlayer.duration);
+        updateMediaSessionPositionState();
+    });
+
+    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+        const skipTime = details.seekOffset || 10;
+        audioPlayer.currentTime = Math.max(audioPlayer.currentTime - skipTime, 0);
+        updateMediaSessionPositionState();
+    });
+
+    navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.fastSeek && 'fastSeek' in audioPlayer) {
+            audioPlayer.fastSeek(details.seekTime);
+        } else {
+            audioPlayer.currentTime = details.seekTime;
+        }
+        updateMediaSessionPositionState();
+    });
+}
+
+// Initialize the action handlers only if the API is supported.
+if ('mediaSession' in navigator) {
     setupMediaSessionActions();
 }
         
