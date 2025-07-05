@@ -1906,9 +1906,16 @@ async function extractMetadata(file) {
                         }
                     }
                     
-                    // If no synced lyrics were found, find the first available unsynced text
                     if (!foundSyncedLyrics) {
                         lyricsText = lrcCandidates.find(text => typeof text === 'string' && text.trim() !== '') || null;
+                    }
+
+                    // NEW: Extract disc number
+                    let discNumber = null;
+                    const discTag = tag.tags.TPOS || tag.tags.disk;
+                    if (discTag) {
+                        // TPOS can be "1/2", so we only take the first part
+                        discNumber = parseInt(String(discTag.data || discTag).split('/')[0], 10) || null;
                     }
 
                     resolve({
@@ -1918,13 +1925,14 @@ async function extractMetadata(file) {
                         year: tag.tags.year || '',
                         albumArt: albumArt,
                         trackNumber: parseInt(tag.tags.track, 10) || null,
+                        discNumber: discNumber, // NEW
                         lyrics: lyricsText,
                         lrcData: lrcData
                     });
                 },
                 onError: (error) => {
                     console.error("jsmediatags ERROR for:", file.name, error);
-                    // Fallback for files that can't be read (e.g., some WAVs)
+                    // Fallback for files that can't be read
                     resolve({
                         title: file.name.replace(/\.[^/.]+$/, ""),
                         artist: 'Unknown Artist',
@@ -1932,6 +1940,7 @@ async function extractMetadata(file) {
                         year: '',
                         albumArt: generateRandomGradient(),
                         trackNumber: null,
+                        discNumber: null, // NEW
                         lyrics: null,
                         lrcData: null
                     });
@@ -2075,7 +2084,7 @@ async function loadSongsFromStorage() {
         console.error('Error loading songs:', error);
     }
 }
-  
+        
 async function saveSongs() {
     const transaction = db.transaction(['songs'], 'readwrite');
     const store = transaction.objectStore('songs');
@@ -2093,6 +2102,7 @@ async function saveSongs() {
                 const songToStore = {
                     id: song.id, name: song.name, artist: song.artist, album: song.album,
                     year: song.year, albumArt: song.albumArt, trackNumber: song.trackNumber,
+                    discNumber: song.discNumber, // NEW
                     lyrics: song.lyrics, lrcData: song.lrcData, storage: song.storage,
                     handleName: song.handleName, dateAdded: song.dateAdded
                 };
@@ -2815,8 +2825,17 @@ async function playSong(song, { isTransition = false } = {}) {
             return;
         }
 
+        // FIX: Only rebuild the queue if the song isn't already in it.
+        const songIndexInQueue = playQueue.findIndex(s => s.id === song.id);
+        if (songIndexInQueue === -1) {
+            // This means the user clicked a song from the library view,
+            // so we should create a new queue based on the current sort/shuffle settings.
+            updatePlayQueue();
+        }
+        
+        // Always update the current song ID and the index for playback.
         currentSongId = song.id;
-        updatePlayQueue();
+        currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
 
         albumArtImg.classList.add('fade-out');
         await new Promise(resolve => setTimeout(resolve, 200));
@@ -3358,37 +3377,45 @@ function updatePlayQueue() {
 
   if (sidebarView === 'queue') renderQueue();
 }
-        
+
 function groupSongsByAlbum(songs) {
   const albums = {};
   
   songs.forEach(song => {
+    // NEW: Create a unique key for each album/disc combination
     const albumName = song.album || 'Unknown Album';
-    if (!albums[albumName]) {
-      albums[albumName] = {
-        name: albumName,
+    const albumKey = song.discNumber ? `${albumName}::${song.discNumber}` : albumName;
+
+    if (!albums[albumKey]) {
+      // NEW: Append disc number to the display name if it exists
+      const albumDisplayName = song.discNumber ? `${albumName} (Disc ${song.discNumber})` : albumName;
+      albums[albumKey] = {
+        name: albumDisplayName, // Use the new display name
         artist: song.artist,
         year: song.year,
         albumArt: song.albumArt,
         songs: [],
-        dateAdded: song.dateAdded,
-        albumOrder: song.albumOrder
+        // Store original data for sorting
+        originalAlbum: albumName,
+        discNumber: song.discNumber || 1
       };
     }
-    albums[albumName].songs.push(song);
+    albums[albumKey].songs.push(song);
   });
   
-  for (let albumName in albums) {
-    albums[albumName].songs.sort((a, b) => {
-      if (a.trackNumber !== undefined && b.trackNumber !== undefined) {
-        return a.trackNumber - b.trackNumber;
-      }
-      return a.name.localeCompare(b.name);
-    });
+  for (let albumKey in albums) {
+    // Sort songs within each album group by track number
+    albums[albumKey].songs.sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
   }
   
-  return Object.values(albums);
+  // Sort the final list of album groups by album name, then by disc number
+  return Object.values(albums).sort((a, b) => {
+     const albumCompare = a.originalAlbum.localeCompare(b.originalAlbum);
+     if (albumCompare !== 0) return albumCompare;
+     return a.discNumber - b.discNumber;
+  });
 }
+
 if ('mediaSession' in navigator) {
 
     function updateMediaSessionMetadata(song) {
@@ -3852,6 +3879,18 @@ document.getElementById('uploadBtn').addEventListener('click', async () => {
             }
             closeModal(sleepTimerModal);
         }
+
+function sortSongs() {
+    songs.sort((a, b) => {
+        const albumCompare = (a.album || '').localeCompare(b.album || '');
+        if (albumCompare !== 0) return albumCompare;
+
+        const discCompare = (a.discNumber || 1) - (b.discNumber || 1);
+        if (discCompare !== 0) return discCompare;
+
+        return (a.trackNumber || 0) - (b.trackNumber || 0);
+    });
+}
         
 async function loadSongsAndPlaylists() {
     try {
@@ -3863,6 +3902,7 @@ async function loadSongsAndPlaylists() {
             songRequest.onerror = () => reject(songRequest.error);
         });
         songs = Array.isArray(loadedSongs) ? loadedSongs : [];
+        sortSongs(); 
 
         const playlistTx = db.transaction('playlists', 'readonly');
         const playlistStore = playlistTx.objectStore('playlists');
