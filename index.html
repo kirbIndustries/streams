@@ -1328,6 +1328,8 @@
         let currentMediaSessionArtBlobUrl = null;
         let shardContainer; 
         let shards = [];
+        let lastOriginalImageUrl = null;
+        let lastResizedImageUrl = null;
         let songs = [];
         let currentSongId = null;
         let isPlayerLoading = false;
@@ -2194,11 +2196,76 @@ function initializeShards() {
     });
 }
 
-function updateAllBackgrounds(imageUrl) {
-    shardContainer.querySelector('.background-blur').style.backgroundImage = `url('${imageUrl}')`;
+// Helper function to apply the background URL to the distortion elements.
+function setDistortionBackgrounds(url) {
+    const backgroundUrl = url ? `url('${url}')` : '';
+    shardContainer.querySelector('.background-blur').style.backgroundImage = backgroundUrl;
     shards.forEach(shard => {
-        shard.element.style.backgroundImage = `url('${imageUrl}')`;
+        shard.element.style.backgroundImage = backgroundUrl;
     });
+}
+
+// Helper function that takes a high-res image URL and returns a low-res (250x250) data URL.
+async function createResizedImageURL(imageUrl, width, height) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        if (!imageUrl.startsWith('data:')) {
+            img.crossOrigin = 'Anonymous';
+        }
+        
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Resolve with the new, smaller image data URL.
+            resolve(canvas.toDataURL('image/jpeg', 0.8)); 
+        };
+        
+        img.onerror = (err) => {
+            console.error("Failed to load image for resizing.", err);
+            // If resizing fails, reject with the original URL as a fallback.
+            reject(imageUrl); 
+        };
+        
+        img.src = imageUrl;
+    });
+}
+
+async function updateAllBackgrounds(imageUrl) {
+    // If the image is the same as before, use the cached resized version instantly.
+    if (imageUrl === lastOriginalImageUrl && lastResizedImageUrl) {
+        setDistortionBackgrounds(lastResizedImageUrl);
+        return;
+    }
+
+    // If the imageUrl is empty (player reset), clear the backgrounds and cache.
+    if (!imageUrl) {
+        setDistortionBackgrounds('');
+        lastOriginalImageUrl = null;
+        lastResizedImageUrl = null;
+        return;
+    }
+
+    try {
+        // Create the new 250x250 resized image URL.
+        const resizedUrl = await createResizedImageURL(imageUrl, 250, 250);
+        
+        // Cache the original and resized URLs for next time.
+        lastOriginalImageUrl = imageUrl;
+        lastResizedImageUrl = resizedUrl;
+        
+        // Apply the new, smaller background image.
+        setDistortionBackgrounds(resizedUrl);
+
+    } catch (originalUrl) {
+        // If resizing fails for any reason, fall back to using the original full-size image.
+        console.warn("Could not resize background image, falling back to original.");
+        setDistortionBackgrounds(originalUrl);
+    }
 }
 
 class BeatDetector {
