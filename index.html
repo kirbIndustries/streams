@@ -3868,6 +3868,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         shardContainer = document.getElementById('distortion-container');
         initializeShards(); 
+
+        initVisualizer();
         
         await initDB();
         searchInput = document.getElementById('searchInput');
