@@ -3391,41 +3391,80 @@ function updatePlayQueue() {
   if (sidebarView === 'queue') renderQueue();
 }
 
+function processAndSortSongs() {
+    // 1. Group all songs by their album name.
+    const songsByAlbum = songs.reduce((acc, song) => {
+        const albumKey = song.album || 'Unknown Album';
+        if (!acc[albumKey]) {
+            acc[albumKey] = [];
+        }
+        acc[albumKey].push(song);
+        return acc;
+    }, {});
+
+    // 2. For each album, infer disc numbers based on track sequence.
+    for (const albumKey in songsByAlbum) {
+        const albumSongs = songsByAlbum[albumKey];
+
+        // A stable sort order (like by filename) is crucial before inferring.
+        albumSongs.sort((a, b) => (a.handleName || a.name).localeCompare(b.handleName || b.name));
+
+        let inferredDisc = 1;
+        let lastTrack = 0;
+        
+        // 3. Iterate through the album's songs to set an effective disc number.
+        albumSongs.forEach(song => {
+            // A disc change is detected if the track number resets to a lower value.
+            if (song.trackNumber !== null && song.trackNumber < lastTrack) {
+                inferredDisc++;
+            }
+            
+            // 4. Use the explicit disc number if it exists, otherwise use our inferred one.
+            // This creates a reliable value for sorting and grouping.
+            song.effectiveDiscNumber = song.discNumber || inferredDisc;
+            
+            // Update the last track number for the next comparison.
+            lastTrack = song.trackNumber || 0;
+        });
+    }
+}
+
 function groupSongsByAlbum(songs) {
   const albums = {};
   
   songs.forEach(song => {
-    // NEW: Create a unique key for each album/disc combination
+    // Create a unique key using the album name and our reliable effective disc number.
     const albumName = song.album || 'Unknown Album';
-    const albumKey = song.discNumber ? `${albumName}::${song.discNumber}` : albumName;
+    const albumKey = `${albumName}::${song.effectiveDiscNumber}`;
 
     if (!albums[albumKey]) {
-      // NEW: Append disc number to the display name if it exists
-      const albumDisplayName = song.discNumber ? `${albumName} (Disc ${song.discNumber})` : albumName;
+      // Show the disc number in the UI only if there's more than one disc for the album.
+      // This is determined later, for now we just store the number.
+      const albumDisplayName = song.effectiveDiscNumber > 1 ? `${albumName} (Disc ${song.effectiveDiscNumber})` : albumName;
       albums[albumKey] = {
-        name: albumDisplayName, // Use the new display name
+        name: albumDisplayName,
         artist: song.artist,
         year: song.year,
         albumArt: song.albumArt,
         songs: [],
-        // Store original data for sorting
+        // Store original data for sorting the final list of album groups.
         originalAlbum: albumName,
-        discNumber: song.discNumber || 1
+        effectiveDiscNumber: song.effectiveDiscNumber
       };
     }
     albums[albumKey].songs.push(song);
   });
   
+  // Sort the songs *within* each album group by track number.
   for (let albumKey in albums) {
-    // Sort songs within each album group by track number
     albums[albumKey].songs.sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
   }
   
-  // Sort the final list of album groups by album name, then by disc number
+  // Sort the final list of album groups by album name, then by our reliable disc number.
   return Object.values(albums).sort((a, b) => {
      const albumCompare = a.originalAlbum.localeCompare(b.originalAlbum);
      if (albumCompare !== 0) return albumCompare;
-     return a.discNumber - b.discNumber;
+     return a.effectiveDiscNumber - b.effectiveDiscNumber;
   });
 }
 
@@ -3915,7 +3954,9 @@ async function loadSongsAndPlaylists() {
             songRequest.onerror = () => reject(songRequest.error);
         });
         songs = Array.isArray(loadedSongs) ? loadedSongs : [];
-        sortSongs(); 
+        
+        // Call the new processing function to calculate effective disc numbers.
+        processAndSortSongs();
 
         const playlistTx = db.transaction('playlists', 'readonly');
         const playlistStore = playlistTx.objectStore('playlists');
