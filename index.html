@@ -2021,6 +2021,41 @@ async function addSongs(files, storageType) {
     renderSidebar();
 }
 
+async function scanForNewSongs() {
+    if (directoryHandles.length === 0) return;
+
+    console.log("Scanning for new songs in existing directories...");
+    const filesToAdd = [];
+    
+    // Create a set of existing filenames for a quick lookup.
+    // Note: This assumes filenames are unique, which is a limitation of the current design.
+    const existingSongNames = new Set(songs.map(s => s.handleName));
+
+    // Loop through every directory the app has access to.
+    for (const handle of directoryHandles) {
+        try {
+            for await (const entry of handle.values()) {
+                // Check if the entry is a valid audio file and is NOT already in our library.
+                if (entry.kind === 'file' && isAudioFile({ name: entry.name }) && !existingSongNames.has(entry.name)) {
+                    filesToAdd.push(entry);
+                }
+            }
+        } catch (e) {
+            console.error(`Could not scan directory "${handle.name}". It may need to be re-added.`, e);
+        }
+    }
+
+    // If we found any new songs, add them to the library.
+    if (filesToAdd.length > 0) {
+        console.log(`Found ${filesToAdd.length} new songs. Adding them to the library...`);
+        await addSongs(filesToAdd, 'filesystem');
+        return true; // Return true to indicate that the library was updated.
+    }
+    
+    console.log("No new songs found.");
+    return false; // No updates were made.
+}
+
 function parseLRC(lrcText) {
     // Guard clause: If there's no text or no timestamps, it's not LRC.
     if (!lrcText || !lrcText.includes('[')) {
@@ -3673,9 +3708,9 @@ window.addEventListener("load", async () => {
         await initDB();
         initModalVariables();
 
+        // 1. Restore folder permissions first.
         if ('showDirectoryPicker' in window) {
             const tx = db.transaction('config', 'readonly');
-            // Retrieve the array of handles
             const handleReq = tx.objectStore('config').get('directoryHandles');
             const configResult = await new Promise(r => { handleReq.onsuccess = () => r(handleReq.result) });
             
@@ -3691,17 +3726,24 @@ window.addEventListener("load", async () => {
             }
         }
 
+        // 2. Load all songs and playlists from the database.
         await loadSongsAndPlaylists();
-        await migrateToFSA(); // Optional migration logic
 
-        // Resume logic can now safely use the loaded 'songs' array.
+        // 3. **NEW**: Scan the restored folders for any new files and add them.
+        const libraryWasUpdated = await scanForNewSongs();
+
+        // 4. Run optional migration.
+        await migrateToFSA();
+
+        // 5. Resume playback state from last session.
         const savedData = localStorage.getItem("currentSong");
         if (savedData) {
             const { id, progress } = JSON.parse(savedData);
             const song = songs.find(s => s.id === id);
-            if (song && directoryHandles) {
+            if (song) { // Check if song still exists
                 updatePlayerUI(song);
                 currentSongId = song.id;
+                isQueueUserModified = false; // Start with a fresh queue context
                 updatePlayQueue();
                 const fileUrl = await getSongFileUrl(song);
                 if (fileUrl) {
@@ -3715,7 +3757,10 @@ window.addEventListener("load", async () => {
                 }
             }
         }
+        
+        // 6. Finally, render the UI. If the library was updated, this will show the new songs.
         renderSidebar();
+
     } catch (error) {
         console.error('Critical error on application load:', error);
     }
