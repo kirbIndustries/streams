@@ -3973,11 +3973,22 @@ document.getElementById('uploadBtn').addEventListener('click', async () => {
     if ('showDirectoryPicker' in window) {
         try {
             const handle = await window.showDirectoryPicker();
-            if (directoryHandles.some(h => h.name === handle.name)) {
-                Gurasuraisu.showPopup("This folder has already been added.");
-                return;
+
+            let isDuplicate = false;
+            // Iterate through the existing handles to perform a true comparison.
+            for (const existingHandle of directoryHandles) {
+                // Use the built-in API to check if the handles point to the same directory.
+                if (await handle.isSameEntry(existingHandle)) {
+                    isDuplicate = true;
+                    break; // Found a match, no need to check further.
+                }
             }
-            
+
+            if (isDuplicate) {
+                Gurasuraisu.showPopup("This folder has already been added.");
+                return; // Exit the function.
+            }
+
             if (await verifyPermission(handle, true)) {
                 directoryHandles.push(handle);
                 // Save the entire array of handles
@@ -3988,7 +3999,10 @@ document.getElementById('uploadBtn').addEventListener('click', async () => {
                 await processDirectory(handle); // Process only the newly added directory
             }
         } catch (err) {
-            console.log('User cancelled directory picker or permission denied.', err);
+            // Ignore AbortError which happens when the user closes the picker dialog.
+            if (err.name !== 'AbortError') {
+                console.error('Error picking directory:', err);
+            }
         }
     } else {
         document.getElementById('musicUpload').click();
