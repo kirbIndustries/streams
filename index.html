@@ -3151,7 +3151,7 @@ async function removeFolder(folderName) {
             const moreButton = document.querySelector('.more-button');
             const moreOptionsMenu = document.getElementById('moreOptionsMenu');
 
-            document.getElementById('manageFoldersBtn').addEventListener('click', () => openModal(manageFoldersModal)); // Use helper
+            document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
             
             // Toggle menu visibility
             moreButton.addEventListener('click', (e) => {
@@ -3181,7 +3181,7 @@ async function removeFolder(folderName) {
                 if (currentSongElement) {
                     currentSongElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 } else {
-                    Gurasuraisu.showPopup('Song not found in current view. Try changing filters.');
+                    Gurasuraisu.showPopup('Playing song not found');
                 }
             });
         }
