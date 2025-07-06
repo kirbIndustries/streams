@@ -3012,7 +3012,7 @@ function initModalVariables() {
     saveEdit = document.getElementById('saveEdit');
     cancelEdit = document.getElementById('cancelEdit');
     saveEdit.addEventListener('click', saveMetadataChanges);
-    cancelEdit.addEventListener('click', () => closeModal(editModal)); // Use helper
+    cancelEdit.addEventListener('click', () => closeModal(editModal));
 
     // Sleep Timer Modal
     sleepTimerModal = document.getElementById('sleepTimerModal');
@@ -3020,12 +3020,12 @@ function initModalVariables() {
 
     // Playlist Modal
     playlistModal = document.getElementById('playlistModal');
-    document.getElementById('closePlaylistModal').addEventListener('click', () => closeModal(playlistModal)); // Use helper
+    document.getElementById('closePlaylistModal').addEventListener('click', () => closeModal(playlistModal)); // FIX
     document.getElementById('createPlaylistBtn').addEventListener('click', createPlaylistAndAddSong);
 
     // EQ Modal
     equalizerModal = document.getElementById('equalizerModal');
-    document.getElementById('closeEqModal').addEventListener('click', () => closeModal(equalizerModal));
+    document.getElementById('closeEqModal').addEventListener('click', () => closeModal(equalizerModal)); // FIX
     document.getElementById('resetEq').addEventListener('click', () => {
         ['bass-slider', 'mid-slider', 'treble-slider'].forEach(id => {
             const slider = document.getElementById(id);
@@ -3039,7 +3039,7 @@ function initModalVariables() {
     
     // Manage Folders Modal
     manageFoldersModal = document.getElementById('manageFoldersModal');
-    document.getElementById('closeFoldersModal').addEventListener('click', () => closeModal(manageFoldersModal)); // Use helper
+    document.getElementById('closeFoldersModal').addEventListener('click', () => closeModal(manageFoldersModal));
 }
 
 function openManageFoldersModal() {
@@ -3069,7 +3069,8 @@ function openManageFoldersModal() {
             btn.onclick = (e) => removeFolder(e.currentTarget.dataset.name);
         });
     }
-    manageFoldersModal.style.display = 'flex';
+    // FIX: Use the helper function to open the modal correctly.
+    openModal(manageFoldersModal);
 }
 
 async function removeFolder(folderName) {
@@ -3719,28 +3720,6 @@ window.addEventListener("load", async () => {
         console.error('Critical error on application load:', error);
     }
 });
-
-        function initModalVariables() {
-            editModal = document.getElementById('editModal');
-            editSongId = document.getElementById('editSongId');
-            editTitle = document.getElementById('editTitle');
-            editArtist = document.getElementById('editArtist');
-            editAlbum = document.getElementById('editAlbum');
-            saveEdit = document.getElementById('saveEdit');
-            cancelEdit = document.getElementById('cancelEdit');
-            saveEdit.addEventListener('click', saveMetadataChanges);
-            cancelEdit.addEventListener('click', closeEditModal);
-            
-            sleepTimerModal = document.getElementById('sleepTimerModal');
-            document.getElementById('cancelSleepTimer').addEventListener('click', () => setSleepTimer(0));
-            
-            playlistModal = document.getElementById('playlistModal');
-            document.getElementById('closePlaylistModal').addEventListener('click', () => playlistModal.style.display = 'none');
-            document.getElementById('createPlaylistBtn').addEventListener('click', createPlaylistAndAddSong);
-
-            equalizerModal = document.getElementById('equalizerModal');
-            document.getElementById('closeEqModal').addEventListener('click', () => { equalizerModal.style.display = 'none'; });
-        }
 
 async function verifyPermission(handle, shouldRequest = false) {
     const options = { mode: 'read' };
