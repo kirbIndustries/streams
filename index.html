@@ -2870,7 +2870,6 @@ async function renderLyrics() {
     }
 }
 
-
 let currentLrcLineIndex = -1;
 let isShowingDots = false;
 
@@ -3913,8 +3912,6 @@ async function verifyPermission(handle, shouldRequest = false) {
             currentTimeDisplay.textContent = formatTime(current);
             durationDisplay.textContent = duration ? formatTime(duration) : '-:--';
         }
-
-let currentLrcLineIndex = -1; // Keep track of the current line
 
 audioPlayer.addEventListener('timeupdate', async () => {
     if (currentSongId) {
