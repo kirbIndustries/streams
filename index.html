@@ -968,82 +968,29 @@
             width: fit-content;
         }
 
-        .lyrics-container {
-            position: relative;
-            /* This padding is crucial for allowing the first and last lines to be centered */
-            padding: 50vh 0;
-        }
-        
-        /* Styles any text wrapped in parentheses, e.g., (ad-libs) */
-        .lyric-paren {
-            font-size: 0.8em; /* Smaller text */
-            font-weight: 500; /* Slightly lighter weight */
-            opacity: 0.85;
-        }
-        
-        /* Base style for a standard lyric line */
-        .lyric-line {
+        .lyrics-container p {
             white-space: pre-wrap;
-            transition: all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1); /* Authentic ease-in-out curve */
-            margin: 18px 0;
-            padding: 0 10px;
+            transition: all 0.3s ease;
+            margin: 15px 0;
             border-radius: 14px;
             cursor: pointer;
-            font-size: 1.6rem;
-            font-weight: 700;
-            line-height: 1.4;
-            color: var(--secondary-text-color);
-            opacity: 0.7;
-            transform: scale(0.95); /* Inactive lyrics are slightly smaller */
+            font-size: 1.5rem;
+            font-weight: 600;
         }
         
-        /* Styles the container for the instrumental "..." ellipsis */
-        .instrumental-ellipsis {
-            margin: 18px 0;
-            text-align: center;
-            font-size: 1.6rem;
-            font-weight: 700;
+        .lyrics-container p:not(.active-lyric) {
             color: var(--secondary-text-color);
-            letter-spacing: 0.3em;
-            transition: all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
-            opacity: 0.7;
-            transform: scale(0.95);
-            position: relative;
-            display: block; /* Takes up its own line */
-            cursor: default;
-            padding: 5px 1em; /* Add some padding */
-            border-radius: 12px;
-        }
-        
-        /* The progress bar that fills the ellipsis */
-        .ellipsis-progress {
-            position: absolute;
-            top: 0;
-            left: 0;
-            height: 100%;
-            width: 0%; /* Initial width is 0, controlled by JS */
-            background-color: var(--text-color);
-            /* mix-blend-mode creates the authentic effect where the underlying "..." is still visible */
-            mix-blend-mode: screen; 
             opacity: 0.6;
-            border-radius: 12px;
-            transition: width 0.1s linear; /* Smooth linear fill */
+            filter: blur(0.5px);
         }
         
-        /* Styling applied to BOTH lyric lines and instrumentals when they are active */
-        .lyric-line.active-lyric,
-        .instrumental-ellipsis.active-lyric {
+        .lyrics-container p.active-lyric {
             color: var(--text-color);
             opacity: 1;
-            transform: scale(1); /* Active elements scale up to full size */
+            margin: 20px 0;
+            text-shadow: 0 0 30px var(--secondary-text-color);
         }
-        
-        /* Specific size increase for active lyric text */
-        .lyric-line.active-lyric {
-            font-size: 2.2rem;
-            margin: 30px 0; /* Creates more space around the currently sung line */
-        }
-        
+
         .queue-item .song-info {
             display: flex;
             align-items: center;
@@ -2224,47 +2171,6 @@ async function saveSongs() {
     });
 }
 
-function processLrcData(lrcData, duration) {
-    if (!lrcData || lrcData.length === 0) return [];
-
-    const processedData = [];
-    // An instrumental is only inserted if the gap between lyrics is this many seconds or more.
-    const instrumentalGapThreshold = 2.5; 
-
-    // First, calculate the accurate end time for every single line.
-    lrcData.forEach((line, i) => {
-        const nextLine = lrcData[i + 1];
-        // A line ends when the next one begins, or when the song ends.
-        line.endTime = nextLine ? nextLine.time : duration; 
-    });
-
-    lrcData.forEach((line, i) => {
-        // Add the current lyric line to our processed array.
-        processedData.push({
-            type: 'lyric',
-            startTime: line.time,
-            endTime: line.endTime,
-            text: line.text,
-        });
-
-        const nextLine = lrcData[i + 1];
-        // Calculate the silent (instrumental) gap between this line and the next.
-        const gap = nextLine ? nextLine.time - line.endTime : 0;
-        
-        // If the gap is significant, inject a special 'instrumental' object.
-        if (gap > instrumentalGapThreshold) {
-            processedData.push({
-                type: 'instrumental',
-                startTime: line.endTime,
-                endTime: nextLine.time,
-                duration: gap,
-            });
-        }
-    });
-    
-    return processedData;
-}
-
 async function migrateToFSA() {
     if (!directoryHandles) return; // Cannot migrate without a handle
 
@@ -2896,60 +2802,42 @@ function renderSongs(filteredSongs = null) {
   attachSongAndAlbumEventListeners();
 }
         
-        async function renderLyrics() {
-            const musicListContainer = document.querySelector('.music-list');
-            const lyricsContainer = document.createElement('div');
-            lyricsContainer.className = 'lyrics-container';
-            // Clear the sidebar and append the new container.
-            musicListContainer.innerHTML = '';
-            musicListContainer.appendChild(lyricsContainer);
-            
-            // Add the back button after clearing
-            addBackButtonToSidebar();
-            lyricsContainer.insertAdjacentHTML('afterbegin', '<div style="height: 20px;"></div>'); // Spacer
-        
-            if (!currentSongId || !audioPlayer.duration || audioPlayer.duration === 0) {
-                lyricsContainer.insertAdjacentHTML('beforeend', `<p class="lyric-line">No song is currently playing.</p>`);
-                return;
-            }
-        
-            const song = songs.find(s => s.id === currentSongId);
-            if (!song || !song.lyrics) {
-                lyricsContainer.insertAdjacentHTML('beforeend', `<p class="lyric-line">No lyrics found for this song.</p>`);
-                return;
-            }
-        
-            if (song.lrcData && song.lrcData.length > 0) {
-                // 1. Process the data to get instrumental breaks etc.
-                const processedLrc = processLrcData(song.lrcData, audioPlayer.duration);
-                
-                // 2. Generate HTML from the processed data
-                let html = processedLrc.map((item, index) => {
-                    if (item.type === 'lyric') {
-                        // Find and wrap anything in () in a special span for styling
-                        const styledText = item.text.replace(/(\(.*?\))/g, '<span class="lyric-paren">$1</span>');
-                        // Use a different class and data attributes for easier selection
-                        return `<p class="lyric-line" data-start="${item.startTime}" data-end="${item.endTime}">${styledText || ' '}</p>`;
-                    } else if (item.type === 'instrumental') {
-                        // Generate the HTML for the progress ellipsis
-                        return `<div class="instrumental-ellipsis" data-start="${item.startTime}" data-end="${item.endTime}">...<div class="ellipsis-progress"></div></div>`;
-                    }
-                    return '';
-                }).join('');
-                
-                lyricsContainer.insertAdjacentHTML('beforeend', html);
-                
-                // 3. Add click-to-seek functionality to LYRIC lines only
-                lyricsContainer.querySelectorAll('.lyric-line').forEach(lineEl => {
-                    lineEl.addEventListener('click', () => {
-                        const seekTime = parseFloat(lineEl.dataset.start);
-                        if (!isNaN(seekTime)) audioPlayer.currentTime = seekTime;
-                    });
-                });
-            } else { 
-                lyricsContainer.insertAdjacentHTML('beforeend', `<p class="lyric-line">${song.lyrics.replace(/\n/g, '<br>')}</p>`);
-            }
-        }
+async function renderLyrics() {
+    const musicListContainer = document.querySelector('.music-list');
+    const lyricsContainer = document.createElement('div');
+    lyricsContainer.className = 'lyrics-container';
+    musicListContainer.appendChild(lyricsContainer);
+
+    if (!currentSongId) {
+        lyricsContainer.innerHTML = `<p>No song is currently playing.</p>`;
+        return;
+    }
+
+    const song = songs.find(s => s.id === currentSongId);
+    if (!song || !song.lyrics) {
+        lyricsContainer.innerHTML = `<p>No lyrics found for this song.</p>`;
+        return;
+    }
+
+    // If we have parsed LRC data, render it as a list
+    if (song.lrcData && song.lrcData.length > 0) {
+        lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
+            `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '...'}</p>`
+        ).join('');
+        // Add click-to-seek functionality to lyrics
+        lyricsContainer.querySelectorAll('p').forEach(lineEl => {
+            lineEl.addEventListener('click', () => {
+                const seekTime = parseFloat(lineEl.dataset.time);
+                if (!isNaN(seekTime)) {
+                    audioPlayer.currentTime = seekTime;
+                }
+            });
+        });
+
+    } else { // Fallback for plain text lyrics
+        lyricsContainer.innerHTML = `<p>${song.lyrics.replace(/\n/g, '<br>')}</p>`;
+    }
+}
 
         function renderQueue() {
             const musicListContainer = document.querySelector('.music-list');
@@ -3944,57 +3832,32 @@ audioPlayer.addEventListener('timeupdate', async () => {
             }
         }
 
+        // Handle LRC lyrics highlighting
         if (song && song.lrcData && sidebarView === 'lyrics') {
             const currentTime = audioPlayer.currentTime;
-            
-            const activeElements = []; // This will hold all currently active lyric/instrumental elements
-            
-            const allRenderedLines = document.querySelectorAll('.lyric-line, .instrumental-ellipsis');
+            let newLrcLineIndex = -1;
 
-            // This single loop handles multi-line highlights and instrumental progress
-            allRenderedLines.forEach(line => {
-                const startTime = parseFloat(line.dataset.start);
-                const endTime = parseFloat(line.dataset.end);
-
-                // Check if the current playback time falls within this line's window
-                if (currentTime >= startTime && currentTime < endTime) {
-                    line.classList.add('active-lyric');
-                    activeElements.push(line);
-
-                    // If the active element is an instrumental, update its progress bar
-                    if (line.classList.contains('instrumental-ellipsis')) {
-                        const duration = endTime - startTime;
-                        const progress = (currentTime - startTime) / duration;
-                        const progressBar = line.querySelector('.ellipsis-progress');
-                        if (progressBar) progressBar.style.width = `${progress * 100}%`;
-                    }
+            // Find the last line whose time is before the current time
+            for (let i = 0; i < song.lrcData.length; i++) {
+                if (song.lrcData[i].time <= currentTime) {
+                    newLrcLineIndex = i;
                 } else {
-                    line.classList.remove('active-lyric');
+                    break;
                 }
-            });
-
-            // This logic handles centering the *entire block* of active lyrics
-            if (activeElements.length > 0) {
-                const sidebar = document.querySelector('.sidebar');
+            }
+            
+            if (newLrcLineIndex !== currentLrcLineIndex) {
+                if (currentLrcLineIndex !== -1) {
+                    const oldLine = document.getElementById(`lyric-line-${currentLrcLineIndex}`);
+                    if (oldLine) oldLine.classList.remove('active-lyric');
+                }
                 
-                // Get the top of the first active element and the bottom of the last one
-                const firstActive = activeElements[0];
-                const lastActive = activeElements[activeElements.length - 1];
-
-                const topPos = firstActive.offsetTop;
-                const bottomPos = lastActive.offsetTop + lastActive.clientHeight;
-                
-                // Calculate the pixel-perfect center of the active block
-                const middleOfBlock = topPos + ((bottomPos - topPos) / 2);
-                
-                const sidebarHeight = sidebar.clientHeight;
-                // Calculate the scroll position needed to place the block's center in the sidebar's center
-                const scrollTop = middleOfBlock - (sidebarHeight / 2);
-
-                sidebar.scrollTo({
-                    top: scrollTop,
-                    behavior: 'smooth'
-                });
+                const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
+                if (newLine) {
+                    newLine.classList.add('active-lyric');
+                    newLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                currentLrcLineIndex = newLrcLineIndex;
             }
         }
     }
