@@ -967,77 +967,28 @@
             margin-bottom: 15px;
             width: fit-content;
         }
-        
-        .lyrics-container {
-            position: relative;
-            padding: 50vh 0; /* Critical for centering the first and last lines */
-        }
-        
-        /* Styles any text wrapped in parentheses */
-        .lyric-paren {
-            font-size: 0.8em;
-            font-weight: 500;
-            opacity: 0.85;
-        }
-        
-        /* Container for the instrumental "..." */
-        .lyric-ellipsis {
-            margin: 18px 0;
-            text-align: center;
-            font-size: 1.6rem;
-            font-weight: 600;
-            color: var(--secondary-text-color);
-            letter-spacing: 0.3em;
-            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-            opacity: 0.7;
-            transform: scale(0.95);
-            position: relative;
-            display: inline-block;
-            cursor: default;
-            line-height: 1.4;
-            padding: 0 0.5em;
-            border-radius: 10px;
-        }
-        
-        /* The progress bar inside the "..." */
-        .ellipsis-progress {
-            position: absolute;
-            top: 0;
-            left: 0;
-            height: 100%;
-            width: 0%; /* Controlled by JavaScript */
-            background-color: var(--text-color);
-            mix-blend-mode: overlay; /* Creates the authentic Apple Music color blend */
-            border-radius: 10px;
-            transition: width 0.1s linear;
-        }
-        
-        /* General lyric line styling */
+
         .lyrics-container p {
             white-space: pre-wrap;
-            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1); /* Smoother, more dynamic transition */
-            margin: 18px 0;
+            transition: all 0.3s ease;
+            margin: 15px 0;
             border-radius: 14px;
             cursor: pointer;
-            font-size: 1.6rem;
+            font-size: 1.5rem;
             font-weight: 600;
-            line-height: 1.4;
-            color: var(--secondary-text-color);
-            opacity: 0.7;
         }
         
-        /* Styling for one or more active lyrics */
-        .lyrics-container p.active-lyric,
-        .lyric-ellipsis.active-lyric {
+        .lyrics-container p:not(.active-lyric) {
+            color: var(--secondary-text-color);
+            opacity: 0.6;
+            filter: blur(0.5px);
+        }
+        
+        .lyrics-container p.active-lyric {
             color: var(--text-color);
             opacity: 1;
-        }
-        
-        /* Active lyric lines get larger */
-        .lyrics-container p.active-lyric {
-            font-size: 2.2rem;
-            margin: 30px 0; /* Add more space around the active line */
-            text-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+            margin: 20px 0;
+            text-shadow: 0 0 30px var(--secondary-text-color);
         }
 
         .queue-item .song-info {
@@ -2016,43 +1967,6 @@ async function extractMetadata(file) {
             });
     });
 }
-
-function processLrcData(lrcData, duration) {
-    if (!lrcData || lrcData.length === 0) return [];
-
-    const processedData = [];
-    const instrumentalGapThreshold = 2.5;
-
-    // Calculate end times for every line
-    lrcData.forEach((line, i) => {
-        const nextLine = lrcData[i + 1];
-        line.endTime = nextLine ? nextLine.time : duration;
-    });
-
-    lrcData.forEach((line, i) => {
-        processedData.push({
-            type: 'lyric',
-            time: line.time,
-            endTime: line.endTime,
-            text: line.text,
-        });
-
-        const nextLine = lrcData[i + 1];
-        const gap = nextLine ? nextLine.time - line.endTime : 0;
-        
-        // If the gap is long enough, inject an ellipsis object
-        if (gap > instrumentalGapThreshold) {
-            processedData.push({
-                type: 'ellipsis',
-                time: line.endTime,
-                endTime: nextLine.time,
-                duration: gap,
-            });
-        }
-    });
-    
-    return processedData;
-}
         
 async function addSongs(files, storageType) {
     const newSongs = [];
@@ -2893,10 +2807,8 @@ async function renderLyrics() {
     const lyricsContainer = document.createElement('div');
     lyricsContainer.className = 'lyrics-container';
     musicListContainer.appendChild(lyricsContainer);
-    
-    lyricsContainer.innerHTML = '';
 
-    if (!currentSongId || !audioPlayer.duration) {
+    if (!currentSongId) {
         lyricsContainer.innerHTML = `<p>No song is currently playing.</p>`;
         return;
     }
@@ -2907,28 +2819,22 @@ async function renderLyrics() {
         return;
     }
 
+    // If we have parsed LRC data, render it as a list
     if (song.lrcData && song.lrcData.length > 0) {
-        const processedLrc = processLrcData(song.lrcData, audioPlayer.duration);
-        
-        let html = processedLrc.map((line, index) => {
-            if (line.type === 'lyric') {
-                const styledText = line.text.replace(/(\(.*?\))/g, '<span class="lyric-paren">$1</span>');
-                return `<p id="lyric-line-${index}" data-start="${line.time}" data-end="${line.endTime}">${styledText || ' '}</p>`;
-            } else if (line.type === 'ellipsis') {
-                return `<div class="lyric-ellipsis" id="ellipsis-line-${index}" data-start="${line.time}" data-end="${line.endTime}">...<div class="ellipsis-progress"></div></div>`;
-            }
-            return '';
-        }).join('');
-        
-        lyricsContainer.innerHTML = html;
-        
+        lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
+            `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '...'}</p>`
+        ).join('');
+        // Add click-to-seek functionality to lyrics
         lyricsContainer.querySelectorAll('p').forEach(lineEl => {
             lineEl.addEventListener('click', () => {
-                const seekTime = parseFloat(lineEl.dataset.start);
-                if (!isNaN(seekTime)) audioPlayer.currentTime = seekTime;
+                const seekTime = parseFloat(lineEl.dataset.time);
+                if (!isNaN(seekTime)) {
+                    audioPlayer.currentTime = seekTime;
+                }
             });
         });
-    } else { 
+
+    } else { // Fallback for plain text lyrics
         lyricsContainer.innerHTML = `<p>${song.lyrics.replace(/\n/g, '<br>')}</p>`;
     }
 }
@@ -3926,50 +3832,32 @@ audioPlayer.addEventListener('timeupdate', async () => {
             }
         }
 
+        // Handle LRC lyrics highlighting
         if (song && song.lrcData && sidebarView === 'lyrics') {
             const currentTime = audioPlayer.currentTime;
-            
-            const activeElements = [];
-            const lyricsLines = document.querySelectorAll('.lyrics-container p, .lyrics-container .lyric-ellipsis');
-            
-            lyricsLines.forEach(line => {
-                const startTime = parseFloat(line.dataset.start);
-                const endTime = parseFloat(line.dataset.end);
-        
-                // Check if the current time falls within this line's duration
-                if (currentTime >= startTime && currentTime < endTime) {
-                    line.classList.add('active-lyric');
-                    activeElements.push(line);
-        
-                    // If it's an active ellipsis, update its progress bar
-                    if (line.classList.contains('lyric-ellipsis')) {
-                        const duration = endTime - startTime;
-                        const progress = (currentTime - startTime) / duration;
-                        const progressBar = line.querySelector('.ellipsis-progress');
-                        if (progressBar) progressBar.style.width = `${progress * 100}%`;
-                    }
+            let newLrcLineIndex = -1;
+
+            // Find the last line whose time is before the current time
+            for (let i = 0; i < song.lrcData.length; i++) {
+                if (song.lrcData[i].time <= currentTime) {
+                    newLrcLineIndex = i;
                 } else {
-                    line.classList.remove('active-lyric');
+                    break;
                 }
-            });
-        
-            // New scrolling logic to center the active block
-            if (activeElements.length > 0) {
-                const sidebar = document.querySelector('.sidebar');
-                const firstActive = activeElements[0];
-                const lastActive = activeElements[activeElements.length - 1];
-        
-                const topPos = firstActive.offsetTop;
-                const bottomPos = lastActive.offsetTop + lastActive.clientHeight;
-                const middleOfBlock = topPos + (bottomPos - topPos) / 2;
+            }
+            
+            if (newLrcLineIndex !== currentLrcLineIndex) {
+                if (currentLrcLineIndex !== -1) {
+                    const oldLine = document.getElementById(`lyric-line-${currentLrcLineIndex}`);
+                    if (oldLine) oldLine.classList.remove('active-lyric');
+                }
                 
-                const sidebarHeight = sidebar.clientHeight;
-                const scrollTop = middleOfBlock - (sidebarHeight / 2);
-        
-                sidebar.scrollTo({
-                    top: scrollTop,
-                    behavior: 'smooth'
-                });
+                const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
+                if (newLine) {
+                    newLine.classList.add('active-lyric');
+                    newLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                currentLrcLineIndex = newLrcLineIndex;
             }
         }
     }
