@@ -102,15 +102,18 @@
             display: none;
         }
         
-        .music-list::-webkit-scrollbar {
+        .music-list::-webkit-scrollbar,
+        .lyrics-container::-webkit-scrollbar {
             width: 4px;
         }
                 
-        .music-list::-webkit-scrollbar-track {
+        .music-list::-webkit-scrollbar-track,
+        .lyrics-container::-webkit-scrollbar-track {
             background: rgba(255, 255, 255, .0);
         }
         
-        .music-list::-webkit-scrollbar-thumb {
+        .music-list::-webkit-scrollbar-thumb,
+        .lyrics-container::-webkit-scrollbar-thumb {
             background: var(--modal-transparent);
             border-radius: 4px;
         } 
