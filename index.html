@@ -94,20 +94,19 @@
             flex-direction: column;
             gap: 20px;
             height: 100vh;
-            overflow-y: auto;
             overflow-x: hidden;
             width: 100%;
         }
         
-        .sidebar::-webkit-scrollbar {
+        .music-list::-webkit-scrollbar {
             width: 4px;
         }
                 
-        .sidebar::-webkit-scrollbar-track {
+        .music-list::-webkit-scrollbar-track {
             background: rgba(255, 255, 255, .0);
         }
         
-        .sidebar::-webkit-scrollbar-thumb {
+        .music-list::-webkit-scrollbar-thumb {
             background: var(--modal-transparent);
             border-radius: 4px;
         } 
@@ -150,7 +149,8 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
-            overflow-y: initial;
+            overflow-y: auto;
+            flex-grow: 1;
         }
 
         .music-item.dragging, .album-section.dragging, .queue-item.dragging {
@@ -2497,6 +2497,12 @@ function renderSidebar() {
     const sidebarTitleEl = document.querySelector('.sidebar-title');
     const filterContainer = document.querySelector('.filter-container');
 
+    // Explicitly remove the back button before re-rendering
+    const existingBackButton = document.querySelector('.sidebar-back-btn');
+    if (existingBackButton) {
+        existingBackButton.remove();
+    }
+
     musicListContainer.innerHTML = '';
 
     document.querySelector('.lyrics-button').classList.toggle('active', sidebarView === 'lyrics');
@@ -2731,6 +2737,9 @@ async function removeSongFromPlaylist(songId, playlistId, event) {
         
 function addBackButtonToSidebar() {
     const musicListContainer = document.querySelector('.music-list');
+    // Get the parent sidebar to insert the button before the list
+    const sidebar = musicListContainer.parentElement;
+
     const backButton = document.createElement('button');
     backButton.className = 'sidebar-back-btn';
     backButton.innerHTML = `<span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Library`;
@@ -2738,9 +2747,10 @@ function addBackButtonToSidebar() {
         sidebarView = 'library';
         renderSidebar();
     };
-    musicListContainer.appendChild(backButton);
+    
+    // Insert the button before the music list, making it a sibling element
+    sidebar.insertBefore(backButton, musicListContainer);
 }
-
 
 function renderSongs(filteredSongs = null) {
   let songsToRender = filteredSongs || songs;
