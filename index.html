@@ -3177,9 +3177,24 @@ async function removeFolder(folderName) {
             // Scroll to current song button
             document.getElementById('scrollToCurrentBtn').addEventListener('click', () => {
                 if (!currentSongId) return;
-                const currentSongElement = document.querySelector(`.music-item[data-id="${currentSongId}"]`);
-                if (currentSongElement) {
-                    currentSongElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+                const musicListContainer = document.querySelector('.music-list');
+                // We query within the container to make sure the song is in the current view
+                const currentSongElement = musicListContainer.querySelector(`.music-item[data-id="${currentSongId}"]`); 
+        
+                if (musicListContainer && currentSongElement) {
+                    // Find the top-level element to scroll to (either the album section or the item itself)
+                    const scrollTarget = currentSongElement.closest('.album-section') || currentSongElement;
+        
+                    // Calculate the position to scroll to in order to center the target element
+                    const containerHeight = musicListContainer.clientHeight;
+                    const targetScrollTop = scrollTarget.offsetTop - (containerHeight / 2) + (scrollTarget.clientHeight / 2);
+        
+                    // Use the container's own scrollTo method
+                    musicListContainer.scrollTo({
+                        top: targetScrollTop,
+                        behavior: 'smooth'
+                    });
                 } else {
                     Gurasuraisu.showPopup('Playing song not found');
                 }
