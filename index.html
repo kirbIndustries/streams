@@ -940,45 +940,53 @@
             width: fit-content;
         }
 
-        .lyrics-container {
+        .lyrics-view-wrapper {
+            display: flex;
+            flex-direction: column;
             height: 100%;
-            overflow-y: auto;
-            scroll-behavior: smooth;
-            /* Add padding so the active lyric isn't flush with the edge */
-            padding-top: 20px;
-            /* Add significant bottom padding to allow the last lyric to scroll to the top */
-            padding-bottom: 50vh;
+            overflow: hidden; /* Prevent the wrapper itself from scrolling */
         }
 
+        /* This is the new header for the previous lyric text */
+        .previous-lyric-header {
+            flex-shrink: 0; /* Prevent this from shrinking */
+            padding: 10px 15px;
+            color: var(--secondary-text-color);
+            font-size: 0.9em;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            height: 40px; /* Give it a fixed height */
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+        
+        /* Class to fade the header in */
+        .previous-lyric-header.visible {
+            opacity: 1;
+        }
+
+        /* This is the scrollable container for the main lyrics */
+        .lyrics-container {
+            flex-grow: 1; /* Makes it fill the remaining space */
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            padding-bottom: 70vh; /* Ensures last line can scroll to the top */
+        }
+
+        /* All lyric paragraphs now have a base transition */
         .lyrics-container p {
             white-space: pre-wrap;
-            /* Increase transition duration for a slower, smoother fade */
-            transition: all 0.5s ease;
-            margin: 15px 0;
+            transition: all 0.4s ease-out; /* Slower, smoother transition for filter/opacity */
+            margin: 18px 0;
+            padding: 0 10px;
             border-radius: 14px;
             cursor: pointer;
             font-size: 1.5rem;
             font-weight: 600;
-            /* All lines are now blurred by default */
-            filter: blur(5px);
-            opacity: 0.5;
-            color: var(--secondary-text-color);
         }
-        
-        /* New class for the line immediately preceding the active one */
-        .lyrics-container p.previous-lyric {
-            filter: blur(2px);
-            opacity: 0.7;
-        }
-        
-        .lyrics-container p.active-lyric {
-            color: var(--text-color);
-            opacity: 1;
-            margin: 20px 0;
-            /* Active line is perfectly clear */
-            filter: blur(0px);
-        }
-
+ 
         .queue-item .song-info {
             display: flex;
             align-items: center;
@@ -2818,20 +2826,26 @@ function renderSongs(filteredSongs = null) {
         
 async function renderLyrics() {
     const musicListContainer = document.querySelector('.music-list');
-    const lyricsContainer = document.createElement('div');
-    lyricsContainer.className = 'lyrics-container';
-    lyricsContainer.id = 'lyrics-scroll-container'; // Add ID for easy targeting
+    
+    // Create the new structure
+    const lyricsViewWrapper = document.createElement('div');
+    lyricsViewWrapper.className = 'lyrics-view-wrapper';
+    lyricsViewWrapper.innerHTML = `
+        <div id="previous-lyric-display" class="previous-lyric-header"></div>
+        <div id="lyrics-scroll-container" class="lyrics-container"></div>
+    `;
+    musicListContainer.appendChild(lyricsViewWrapper);
 
-    musicListContainer.appendChild(lyricsContainer);
+    const lyricsContainer = document.getElementById('lyrics-scroll-container');
 
     if (!currentSongId) {
-        lyricsContainer.innerHTML = `<p>No song is currently playing.</p>`;
+        lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No song is currently playing.</p>`;
         return;
     }
 
     const song = songs.find(s => s.id === currentSongId);
     if (!song || !song.lyrics) {
-        lyricsContainer.innerHTML = `<p>No lyrics found for this song.</p>`;
+        lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found for this song.</p>`;
         return;
     }
 
@@ -2850,7 +2864,7 @@ async function renderLyrics() {
         });
 
     } else {
-        lyricsContainer.innerHTML = `<p>${song.lyrics.replace(/\n/g, '<br>')}</p>`;
+        lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">${song.lyrics.replace(/\n/g, '<br>')}</p>`;
     }
 }
 
@@ -2961,8 +2975,6 @@ async function playSong(song, { isTransition = false } = {}) {
 
         const songIndexInQueue = playQueue.findIndex(s => s.id === song.id);
 
-        // If song isn't in queue, it's being played from the library.
-        // This action should reset any manual queue ordering.
         if (songIndexInQueue === -1) {
             isQueueUserModified = false; 
             updatePlayQueue(); 
@@ -2980,15 +2992,24 @@ async function playSong(song, { isTransition = false } = {}) {
 
         audioPlayer.src = fileUrl;
         updatePlayerUI(song);
-        renderSidebar();
         
-        if (sidebarView === 'lyrics') {
-            const lyricsContainer = document.getElementById('lyrics-scroll-container');
-            if (lyricsContainer) {
-                lyricsContainer.scrollTop = 0;
-            }
-            currentLrcLineIndex = -1; // Reset the tracker for the new song
+        // We need to render the sidebar *before* resetting lyric state
+        // to ensure the containers are on the page.
+        renderSidebar(); 
+
+        // --- START: MODIFIED LYRICS RESET LOGIC ---
+        const lyricsContainer = document.getElementById('lyrics-scroll-container');
+        const prevLyricDisplay = document.getElementById('previous-lyric-display');
+
+        if (lyricsContainer) {
+            lyricsContainer.scrollTop = 0;
         }
+        if (prevLyricDisplay) {
+            prevLyricDisplay.textContent = '';
+            prevLyricDisplay.classList.remove('visible');
+        }
+        currentLrcLineIndex = -1; // Reset the tracker for the new song
+        // --- END: MODIFIED LYRICS RESET LOGIC ---
         
         Gurasuraisu.registerMediaSession(
             {
@@ -3020,7 +3041,7 @@ async function playSong(song, { isTransition = false } = {}) {
         isPlayerLoading = false;
     }
 }
-
+        
 async function getSongFileUrl(song) {
     if (!song) return null;
 
@@ -3884,25 +3905,54 @@ audioPlayer.addEventListener('timeupdate', async () => {
             }
             
             if (newLrcLineIndex !== currentLrcLineIndex) {
-                // Remove old classes from previous lines
-                const oldLine = document.getElementById(`lyric-line-${currentLrcLineIndex}`);
-                if (oldLine) oldLine.classList.remove('active-lyric', 'previous-lyric');
-                const oldPreviousLine = document.getElementById(`lyric-line-${currentLrcLineIndex - 1}`);
-                if (oldPreviousLine) oldPreviousLine.classList.remove('previous-lyric');
+                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p');
+                if(allLyricElements.length === 0) return;
+
+                // --- Configuration for the visual effect ---
+                const MAX_BLUR = 5; // The max blur in pixels
+                const BLUR_STEP = 1.5; // How much blur to add for each line of distance
+                const MIN_OPACITY = 0.4; // The minimum opacity for distant lines
+                const OPACITY_STEP = 0.15; // How much opacity to remove for each line
                 
-                // Add new classes to current lines
+                // Apply gradient blur/opacity to all lines
+                allLyricElements.forEach((el, index) => {
+                    const distance = Math.abs(index - newLrcLineIndex);
+                    
+                    let blurValue, opacityValue;
+
+                    if (distance === 0) { // The active line
+                        blurValue = 0;
+                        opacityValue = 1;
+                    } else { // All other lines
+                        blurValue = Math.min(MAX_BLUR, distance * BLUR_STEP);
+                        opacityValue = Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
+                    }
+                    
+                    el.style.filter = `blur(${blurValue}px)`;
+                    el.style.opacity = opacityValue;
+                });
+
+                // Scroll the new active line to the top
                 const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
                 if (newLine) {
-                    newLine.classList.add('active-lyric');
-                    // Use scrollIntoView to position the active line at the top
                     newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
 
-                    // Highlight the line right before the new active one
-                    const newPreviousLine = document.getElementById(`lyric-line-${newLrcLineIndex - 1}`);
-                    if (newPreviousLine) {
-                        newPreviousLine.classList.add('previous-lyric');
+                // Update the "previous lyric" header
+                const prevLyricDisplay = document.getElementById('previous-lyric-display');
+                if (prevLyricDisplay) {
+                    // Find the text of the line that was just active
+                    const previousLineData = song.lrcData[currentLrcLineIndex];
+                    if (previousLineData && previousLineData.text) {
+                        prevLyricDisplay.textContent = previousLineData.text;
+                        prevLyricDisplay.classList.add('visible');
+                    } else {
+                        // Hide it if there was no previous line (e.g., on first line)
+                        prevLyricDisplay.classList.remove('visible');
                     }
                 }
+
+                // Finally, update the index tracker
                 currentLrcLineIndex = newLrcLineIndex;
             }
         }
