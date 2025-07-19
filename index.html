@@ -3180,7 +3180,7 @@ async function removeFolder(folderName) {
                 if (!currentSongId) return;
                 const currentSongElement = document.querySelector(`.music-item[data-id="${currentSongId}"]`);
                 if (currentSongElement) {
-                    currentSongElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    currentSongElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 } else {
                     Gurasuraisu.showPopup('Playing song not found');
                 }
@@ -3854,7 +3854,7 @@ audioPlayer.addEventListener('timeupdate', async () => {
                 const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
                 if (newLine) {
                     newLine.classList.add('active-lyric');
-                    newLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
                 currentLrcLineIndex = newLrcLineIndex;
             }
