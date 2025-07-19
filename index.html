@@ -1105,8 +1105,6 @@
     
     <div class="sidebar">
         <h1 class="sidebar-title">Library</h1>
-        <div id="sidebar-header-controls"></div>
-    
         <div class="search-container">
             <div class="filter-container" style="display: flex;">
                 <button class="filter-btn active" data-filter="albums"><span class="material-symbols-rounded" style="font-size: 18px;">album</span></button>
@@ -1119,16 +1117,17 @@
                 <input type="text" id="searchInput" placeholder="Search" class="search-input">
             </div>
         </div>
+        <div id="sidebar-header-controls"></div>
         <div class="music-list"></div>
-            <div id="upload-controls-container" style="display: flex; gap: 10px;">
-                <button class="upload-btn" id="uploadBtn" style="flex-grow: 1;">
-                    <span class="material-symbols-rounded">add</span> Add Folder
-                </button>
-                <button class="upload-btn" id="manageFoldersBtn" style="flex-grow: 0;">
-                    <span class="material-symbols-rounded">folder_managed</span>
-                </button>
-            </div>
-            <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
+        <div id="upload-controls-container" style="display: flex; gap: 10px;">
+            <button class="upload-btn" id="uploadBtn" style="flex-grow: 1;">
+                <span class="material-symbols-rounded">add</span> Add Folder
+            </button>
+            <button class="upload-btn" id="manageFoldersBtn" style="flex-grow: 0;">
+                <span class="material-symbols-rounded">folder_managed</span>
+            </button>
+        </div>
+        <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
     </div>
     <div class="main-content">
         <div class="album-art">
