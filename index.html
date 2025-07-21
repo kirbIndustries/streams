@@ -1284,17 +1284,17 @@
                 <span class="material-symbols-rounded" style="font-size: 18px;">gps_fixed</span>
             </button>
             <div class="view-controls">
-                <button id="toggleViewBtn" class="upload-btn" style="flex-grow: 0;">
+                <button id="toggleViewBtn" class="upload-btn">
                     <span class="material-symbols-rounded">dashboard</span>
                 </button>
                 <button id="sortBtn" class="upload-btn" style="flex-grow: 1;">
                     <span class="material-symbols-rounded">sort</span><span id="sort-mode-display">Date</span>
                 </button>
             </div>
-            <button class="upload-btn" id="uploadBtn" style="flex-grow: 0;">
+            <button class="upload-btn" id="uploadBtn">
                 <span class="material-symbols-rounded">add</span>
             </button>
-            <button class="upload-btn" id="manageFoldersBtn" style="flex-grow: 0;">
+            <button class="upload-btn" id="manageFoldersBtn">
                 <span class="material-symbols-rounded">folder_managed</span>
             </button>
         </div>
@@ -2812,7 +2812,7 @@ function renderSidebar() {
     // Update button states based on global variables
     document.querySelector('.lyrics-button').classList.toggle('active', sidebarView === 'lyrics');
     document.querySelector('.queue-button').classList.toggle('active', sidebarView === 'queue');
-    document.getElementById('toggleViewBtn').innerHTML = `<span class="material-symbols-rounded">${currentViewMode === 'list' ? 'grid_view' : 'view_list'}</span>`;
+    document.getElementById('toggleViewBtn').innerHTML = `<span class="material-symbols-rounded">${currentViewMode === 'list' ? 'dashboard' : 'table_rows'}</span>`;
 
     const addBackButton = (buttonText, onClickAction) => {
         const backButton = document.createElement('button');
