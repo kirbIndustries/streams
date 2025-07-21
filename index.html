@@ -422,12 +422,23 @@
             vertical-align: middle;
         }
 
-        .lyrics-button, .queue-button, .more-button, .goto-btn {
+        .lyrics-button, .queue-button, .more-button {
             background: var(--search-background);
             border: 1px solid var(--glass-border);
             cursor: pointer;
             width: 37px;
             height: 37px;
+            color: var(--text-color);
+            border-radius: 50%;
+            transition: background 0.2s ease;
+            backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
+        }
+
+        .goto-btn {
+            background: var(--search-background);
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+            padding: 10px 16px;
             color: var(--text-color);
             border-radius: 50%;
             transition: background 0.2s ease;
@@ -1139,6 +1150,9 @@
         <div id="sidebar-header-controls"></div>
         <div class="music-list"></div>
         <div id="upload-controls-container" style="display: flex; gap: 10px;">
+            <button id="scrollToCurrentBtn" class="goto-btn">
+                <span class="material-symbols-rounded" style="font-size: 18px;">gps_fixed</span>
+            </button>
             <button class="upload-btn" id="uploadBtn" style="flex-grow: 1;">
                 <span class="material-symbols-rounded">add</span> Add Folder
             </button>
@@ -1186,9 +1200,6 @@
             </button>
         </div>
         <div class="controls-container">
-            <button id="scrollToCurrentBtn" class="goto-btn">
-                <span class="material-symbols-rounded" style="font-size: 18px;">gps_fixed</span>
-            </button>
             <button class="lyrics-button">
                 <span class="material-symbols-rounded" style="font-size: 18px;">tooltip_2</span>
             </button>
