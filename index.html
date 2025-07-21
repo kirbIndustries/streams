@@ -2382,33 +2382,27 @@ async function updateAllBackgrounds(imageUrl) {
 
 class BeatDetector {
     /**
-     * A more robust beat detection algorithm using statistical variance.
-     * @param {number} historySize The number of past energy frames to analyze. A larger size provides a more stable baseline.
-     * @param {number} sensitivity How many standard deviations above the average energy a frame must be to be considered a beat.
-     * @param {number[][]} frequencyBands An array of [start, end] frequency bin indices to monitor.
-     * @param {number} minBeatThreshold An absolute energy floor to prevent detecting beats in silence.
-     * @param {number} decayRate How quickly the beat "pulse" fades after being triggered. 0.9 = fast, 0.98 = slow.
+     * A BPM-aware beat detection and visualization pulse generator.
+     * It analyzes beat timings to estimate the song's tempo and adjusts the visual decay rate accordingly.
      */
-    constructor(historySize = 120, sensitivity = 1.8, frequencyBands = [[0, 5]], minBeatThreshold = 20, decayRate = 0.97) {
+    constructor(historySize = 120, sensitivity = 1.7, frequencyBands = [[0, 10]], minBeatThreshold = 25) {
         this.historySize = historySize;
         this.sensitivity = sensitivity;
         this.frequencyBands = frequencyBands;
         this.minBeatThreshold = minBeatThreshold;
-        this.decayRate = decayRate;
         
-        // Initialize energy history buffers for each frequency band
         this.energyHistories = this.frequencyBands.map(() => []);
-        
-        // This value represents the "pulse" of the beat, from 0.0 to 1.0.
         this.beatValue = 0.0;
+
+        // --- BPM ANALYSIS PROPERTIES ---
+        this.bpm = 120; // Default starting BPM
+        this.beatTimes = []; // Stores timestamps of the last N beats
+        this.interBeatIntervals = []; // Stores the time (ms) between beats
+        this.lastBeatTime = 0;
+        this.minBPM = 70;
+        this.maxBPM = 190;
     }
 
-    /**
-     * Calculates the standard deviation of an array of numbers.
-     * @param {number[]} array The array of numbers.
-     * @param {number} mean The pre-calculated mean of the array.
-     * @returns {number} The standard deviation.
-     */
     _calculateStandardDeviation(array, mean) {
         if (array.length < 2) return 0;
         const variance = array.reduce((acc, val) => acc + (val - mean) ** 2, 0) / array.length;
@@ -2416,57 +2410,103 @@ class BeatDetector {
     }
 
     /**
-     * Analyzes the current audio frame and updates the internal beat pulse value.
-     * @param {Uint8Array} dataArray The frequency data from the audio analyser.
-     * @returns {number} The current smoothed beat pulse value (0.0 to 1.0).
+     * Estimates the BPM by finding the most common interval between recent beats.
+     * This uses a histogram/binning approach to be robust against noise.
      */
+    _calculateBPM() {
+        if (this.interBeatIntervals.length < 10) return; // Not enough data yet
+
+        const bpmBins = {};
+        const binSize = 5; // Group BPMs into bins of 5 (e.g., 120-124, 125-129)
+
+        this.interBeatIntervals.forEach(ibi => {
+            if (ibi > 0) {
+                const beatBPM = 60000 / ibi;
+                if (beatBPM > this.minBPM && beatBPM < this.maxBPM) {
+                    const bin = Math.floor(beatBPM / binSize) * binSize;
+                    bpmBins[bin] = (bpmBins[bin] || 0) + 1;
+                }
+            }
+        });
+
+        if (Object.keys(bpmBins).length === 0) return;
+
+        // Find the bin with the most beats
+        let bestBin = null;
+        let maxCount = 0;
+        for (const bin in bpmBins) {
+            if (bpmBins[bin] > maxCount) {
+                maxCount = bpmBins[bin];
+                bestBin = parseInt(bin);
+            }
+        }
+        
+        // Smoothly update the BPM towards the best estimate
+        if (bestBin) {
+            this.bpm += (bestBin - this.bpm) * 0.1;
+        }
+    }
+
     update(dataArray) {
         let beatDetectedThisFrame = false;
 
         for (let i = 0; i < this.frequencyBands.length; i++) {
             const band = this.frequencyBands[i];
             const history = this.energyHistories[i];
-
-            // Calculate the current energy in the specified frequency band
+            
             let currentEnergy = 0;
-            for (let j = band[0]; j <= band[1]; j++) {
-                currentEnergy += dataArray[j];
-            }
+            for (let j = band[0]; j <= band[1]; j++) currentEnergy += dataArray[j];
             currentEnergy /= (band[1] - band[0] + 1);
 
-            // If history buffer isn't full yet, we can't perform analysis
             if (history.length < this.historySize) {
                 history.push(currentEnergy);
                 continue;
             }
 
-            // Calculate the average (mean) energy of the history
             const averageEnergy = history.reduce((a, b) => a + b, 0) / history.length;
-
-            // Calculate the standard deviation
             const stdDev = this._calculateStandardDeviation(history, averageEnergy);
-
-            // The threshold is dynamic, based on the music's recent history
             const dynamicThreshold = averageEnergy + (this.sensitivity * stdDev);
             
-            // A beat is detected if the current energy surpasses the dynamic threshold AND the minimum absolute threshold
             if (currentEnergy > dynamicThreshold && currentEnergy > this.minBeatThreshold) {
                 beatDetectedThisFrame = true;
             }
 
-            // Update the history buffer by adding the new energy and removing the oldest
             history.push(currentEnergy);
             history.shift();
         }
 
+        const now = performance.now();
         if (beatDetectedThisFrame) {
-            // If a beat was found, set the pulse to its maximum value (1.0)
             this.beatValue = 1.0;
-        } else {
-            // If no beat, smoothly decay the existing pulse value
-            this.beatValue *= this.decayRate;
-            this.beatValue = Math.max(0, this.beatValue); // Ensure it doesn't go below 0
+            
+            // Record beat timing for BPM analysis
+            if (this.lastBeatTime > 0) {
+                const ibi = now - this.lastBeatTime;
+                this.interBeatIntervals.push(ibi);
+                if (this.interBeatIntervals.length > 30) this.interBeatIntervals.shift();
+                
+                // Recalculate BPM with the new data point
+                this._calculateBPM();
+            }
+            this.lastBeatTime = now;
         }
+
+        // --- DYNAMIC DECAY RATE ---
+        // Calculate the duration of a single beat in milliseconds.
+        const beatDurationMs = 60000 / this.bpm;
+        // We want the pulse to last for roughly half a beat to feel snappy.
+        const targetDecayTimeMs = beatDurationMs * 0.5;
+        // Calculate the decay rate needed to fade to near-zero over that time at 60fps.
+        // A simple mapping provides a very effective approximation.
+        const fastDecay = 0.90; // For high BPM
+        const slowDecay = 0.98; // For low BPM
+        const decayRange = slowDecay - fastDecay;
+        const bpmRange = this.maxBPM - this.minBPM;
+        const normalizedBPM = (this.bpm - this.minBPM) / bpmRange;
+        const dynamicDecayRate = slowDecay - (normalizedBPM * decayRange);
+        
+        this.beatValue *= dynamicDecayRate;
+        this.beatValue = Math.max(0, this.beatValue);
 
         return this.beatValue;
     }
@@ -2512,7 +2552,10 @@ function initVisualizer() {
 
     const baselineDistortion = 80;
     const peakDistortion = 150;
-    const beatDetector = new BeatDetector(120, 1.7, [[0, 10]], 25, 0.97);
+
+    // --- UPDATED CONSTRUCTOR CALL ---
+    // The decay rate is now calculated internally, so we don't pass it here.
+    const beatDetector = new BeatDetector(120, 1.7, [[0, 10]], 25);
     
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
@@ -2520,35 +2563,35 @@ function initVisualizer() {
     const barIndices = [5, 10, 30, 100, 200, 400];
     const sensitivityMultipliers = [1, 1.05, 1.1, 1.15, 1.25, 1.4];
     const powerCurve = 2.2;
+    
+    let smoothedPulse = 0.0; 
+    const smoothingFactor = 0.2;
 
     function draw() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        const beatPulse = beatDetector.update(dataArray);
+        const beatPulseTarget = beatDetector.update(dataArray);
+        smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
+
         const distortionRange = peakDistortion - baselineDistortion;
-        const currentDistortion = baselineDistortion + (beatPulse * distortionRange);
+        const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
         displacementFilter.setAttribute('scale', currentDistortion);
 
-        // --- START: REVISED SHARD MOVEMENT LOGIC ---
-        const maxShift = 40; // Max pixels to shift outwards on beat
-        const outwardShift = beatPulse * maxShift;
+        const maxShift = 40; 
+        const outwardShift = smoothedPulse * maxShift;
         const shardTime = Date.now() * 0.00005;
 
         shards.forEach((shard) => {
             shard.rotation += shard.rotationSpeed;
             
-            // Calculate the base position: its home position plus a small random drift.
             const baseX = shard.homeX + Math.sin(shardTime * shard.xDrift * 10) * 15;
             const baseY = shard.homeY + Math.cos(shardTime * shard.yDrift * 10) * 15;
-
-            // Add the beat-driven outward shift along the shard's PRE-CALCULATED direction vector.
             const totalX = baseX + (shard.dirX * outwardShift);
             const totalY = baseY + (shard.dirY * outwardShift);
             
             shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
         });
-        // --- END: REVISED SHARD MOVEMENT LOGIC ---
 
         turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
