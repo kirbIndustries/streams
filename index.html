@@ -2310,82 +2310,93 @@ async function updateAllBackgrounds(imageUrl) {
 
 class BeatDetector {
     /**
-     * Creates a new BeatDetector.
-     * @param {number} historySize The number of past frames to average for the threshold.
-     * @param {number} thresholdMultiplier How much louder the current sound must be than the average to be considered a beat.
-     * @param {number} intensityScale A scaling factor for beat strength.
+     * A more robust beat detection algorithm using statistical variance.
+     * @param {number} historySize The number of past energy frames to analyze. A larger size provides a more stable baseline.
+     * @param {number} sensitivity How many standard deviations above the average energy a frame must be to be considered a beat.
      * @param {number[][]} frequencyBands An array of [start, end] frequency bin indices to monitor.
-     * @param {number} decayRate How quickly the beat effect should fade.
+     * @param {number} minBeatThreshold An absolute energy floor to prevent detecting beats in silence.
+     * @param {number} decayRate How quickly the beat "pulse" fades after being triggered. 0.9 = fast, 0.98 = slow.
      */
-    constructor(historySize = 60, thresholdMultiplier = 1.15, intensityScale = 1.5, frequencyBands = [[0, 3]], decayRate = 0.96) {
+    constructor(historySize = 120, sensitivity = 1.8, frequencyBands = [[0, 5]], minBeatThreshold = 20, decayRate = 0.97) {
         this.historySize = historySize;
-        this.thresholdMultiplier = thresholdMultiplier;
-        this.intensityScale = intensityScale;
+        this.sensitivity = sensitivity;
         this.frequencyBands = frequencyBands;
+        this.minBeatThreshold = minBeatThreshold;
         this.decayRate = decayRate;
-
-        this.histories = Array(frequencyBands.length).fill(null).map(() => Array(historySize).fill(0));
-        this.beatCooldowns = Array(frequencyBands.length).fill(0);
-        this.currentDistortions = Array(frequencyBands.length).fill(0);
-        // --- NEW: Track the energy of the last registered beat ---
-        this.lastBeatEnergies = Array(frequencyBands.length).fill(0);
+        
+        // Initialize energy history buffers for each frequency band
+        this.energyHistories = this.frequencyBands.map(() => []);
+        
+        // This value represents the "pulse" of the beat, from 0.0 to 1.0.
+        this.beatValue = 0.0;
     }
 
     /**
-     * Analyzes the current audio frame and calculates the appropriate distortion level.
-     * @param {Uint8Array} dataArray The frequency data from the analyser.
-     * @param {number} baselineDistortion The baseline value for the distortion effect.
-     * @param {number} peakDistortion The peak value for the distortion effect.
-     * @returns {number} The calculated distortion value for this frame.
+     * Calculates the standard deviation of an array of numbers.
+     * @param {number[]} array The array of numbers.
+     * @param {number} mean The pre-calculated mean of the array.
+     * @returns {number} The standard deviation.
      */
-    update(dataArray, baselineDistortion, peakDistortion) {
-        let overallDistortion = 0;
+    _calculateStandardDeviation(array, mean) {
+        if (array.length < 2) return 0;
+        const variance = array.reduce((acc, val) => acc + (val - mean) ** 2, 0) / array.length;
+        return Math.sqrt(variance);
+    }
 
-        this.frequencyBands.forEach((band, index) => {
-            const start = band[0];
-            const end = band[1];
+    /**
+     * Analyzes the current audio frame and updates the internal beat pulse value.
+     * @param {Uint8Array} dataArray The frequency data from the audio analyser.
+     * @returns {number} The current smoothed beat pulse value (0.0 to 1.0).
+     */
+    update(dataArray) {
+        let beatDetectedThisFrame = false;
+
+        for (let i = 0; i < this.frequencyBands.length; i++) {
+            const band = this.frequencyBands[i];
+            const history = this.energyHistories[i];
+
+            // Calculate the current energy in the specified frequency band
             let currentEnergy = 0;
-            for (let i = start; i <= end; i++) {
-                currentEnergy += dataArray[i];
+            for (let j = band[0]; j <= band[1]; j++) {
+                currentEnergy += dataArray[j];
             }
-            currentEnergy /= (end - start + 1);
+            currentEnergy /= (band[1] - band[0] + 1);
 
-            const history = this.histories[index];
-            const averageHistoryEnergy = history.reduce((a, b) => a + b, 0) / history.length || 1;
-            const threshold = averageHistoryEnergy * this.thresholdMultiplier;
-
-            const isPotentialBeat = currentEnergy > threshold;
-            // A new beat can "break through" the cooldown if it's at least 10% stronger than the last registered beat.
-            const canBreakCooldown = currentEnergy > (this.lastBeatEnergies[index] * 1.1);
-
-            if (isPotentialBeat && (this.beatCooldowns[index] === 0 || canBreakCooldown)) {
-                const beatStrength = Math.min((currentEnergy / threshold - 1.0) / (this.intensityScale - 1.0), 1.0);
-                const distortionRange = peakDistortion - baselineDistortion;
-                const targetDistortion = baselineDistortion + (distortionRange * beatStrength);
-                
-                this.currentDistortions[index] = Math.max(this.currentDistortions[index], targetDistortion);
-                
-                // IMPORTANT: Update the energy and reset the cooldown for this new beat.
-                this.lastBeatEnergies[index] = currentEnergy;
-                this.beatCooldowns[index] = 10; // Reset the cooldown timer
+            // If history buffer isn't full yet, we can't perform analysis
+            if (history.length < this.historySize) {
+                history.push(currentEnergy);
+                continue;
             }
 
-            history.push(currentEnergy);
-            if (history.length > this.historySize) {
-                history.shift();
-            }
+            // Calculate the average (mean) energy of the history
+            const averageEnergy = history.reduce((a, b) => a + b, 0) / history.length;
+
+            // Calculate the standard deviation
+            const stdDev = this._calculateStandardDeviation(history, averageEnergy);
+
+            // The threshold is dynamic, based on the music's recent history
+            const dynamicThreshold = averageEnergy + (this.sensitivity * stdDev);
             
-            this.currentDistortions[index] = baselineDistortion + (this.currentDistortions[index] - baselineDistortion) * this.decayRate;
-            if (this.beatCooldowns[index] > 0) {
-                this.beatCooldowns[index]--;
+            // A beat is detected if the current energy surpasses the dynamic threshold AND the minimum absolute threshold
+            if (currentEnergy > dynamicThreshold && currentEnergy > this.minBeatThreshold) {
+                beatDetectedThisFrame = true;
             }
 
-            if(this.currentDistortions[index] > overallDistortion) {
-                overallDistortion = this.currentDistortions[index];
-            }
-        });
-        
-        return overallDistortion;
+            // Update the history buffer by adding the new energy and removing the oldest
+            history.push(currentEnergy);
+            history.shift();
+        }
+
+        if (beatDetectedThisFrame) {
+            // If a beat was found, set the pulse to its maximum value (1.0)
+            this.beatValue = 1.0;
+        } else {
+            // If no beat, smoothly decay the existing pulse value
+            this.beatValue *= this.decayRate;
+            this.beatValue = Math.max(0, this.beatValue); // Ensure it doesn't go below 0
+        }
+
+        return this.beatValue;
     }
 }
 
@@ -2400,12 +2411,12 @@ function initVisualizer() {
     eqTreble = audioContext.createBiquadFilter();
 
     eqBass.type = 'lowshelf';
-    eqBass.frequency.value = 300; // Bass frequencies up to 300 Hz
+    eqBass.frequency.value = 300; 
     eqMid.type = 'peaking';
-    eqMid.frequency.value = 1000; // Mids around 1 kHz
-    eqMid.Q.value = 1; // Quality factor
+    eqMid.frequency.value = 1000;
+    eqMid.Q.value = 1; 
     eqTreble.type = 'highshelf';
-    eqTreble.frequency.value = 3000; // Treble frequencies above 3 kHz
+    eqTreble.frequency.value = 3000;
     
     analyser = audioContext.createAnalyser();
     
@@ -2413,7 +2424,6 @@ function initVisualizer() {
         source = audioContext.createMediaElementSource(audioPlayer);
     }
 
-    // Connect nodes in series: source -> bass -> mid -> treble -> analyser -> destination
     source.connect(eqBass);
     eqBass.connect(eqMid);
     eqMid.connect(eqTreble);
@@ -2421,17 +2431,27 @@ function initVisualizer() {
     analyser.connect(audioContext.destination);
 
     analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.88;
+    analyser.smoothingTimeConstant = 0.8; // A lower value here makes the raw data more responsive
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
     const turbulenceFilter = document.getElementById('turbulence');
 
+    // --- START: UPDATED BEAT DETECTION LOGIC ---
     const baselineDistortion = 80;
     const peakDistortion = 150;
-    const beatDetector = new BeatDetector(60, 1.2, 1.5, [[0, 3], [4, 8]]);
 
+    // Instantiate the new, more accurate detector.
+    // We focus on the low-end frequencies (0-10) where bass and kick drums live.
+    const beatDetector = new BeatDetector(
+        120,    // historySize: Analyze the last ~2 seconds of audio (at 60fps)
+        1.7,    // sensitivity: A good starting point
+        [[0, 10]], // frequencyBands: Focus on deep bass and kick frequencies
+        25,     // minBeatThreshold: Avoid triggers from silence or noise
+        0.97    // decayRate: A smooth, medium decay
+    );
+    
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
     const numBars = 6;
@@ -2443,8 +2463,15 @@ function initVisualizer() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        const currentDistortion = beatDetector.update(dataArray, baselineDistortion, peakDistortion);
+        // 1. Get the smoothed "pulse" value (0.0 to 1.0) from the detector.
+        const beatPulse = beatDetector.update(dataArray);
+
+        // 2. Map this pulse to the desired distortion range.
+        const distortionRange = peakDistortion - baselineDistortion;
+        const currentDistortion = baselineDistortion + (beatPulse * distortionRange);
+        
         displacementFilter.setAttribute('scale', currentDistortion);
+        // --- END: UPDATED BEAT DETECTION LOGIC ---
 
         const shardTime = Date.now() * 0.00005;
         shards.forEach((shard) => {
