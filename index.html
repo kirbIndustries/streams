@@ -1487,6 +1487,14 @@ body.prepend(overlay);
     sidebar.style.pointerEvents = 'none';
     overlay.classList.remove('active');
     overlay.style.pointerEvents = 'none';
+
+    // --- START: NEW LOGIC ---
+    // Reset the view to the default library view whenever the sidebar is closed.
+    sidebarView = 'library';
+    // Re-render the sidebar content so it's correct the next time it's opened.
+    // This also handles deactivating the lyrics/queue buttons.
+    renderSidebar(); 
+    // --- END: NEW LOGIC ---
   }
   
   // Run once on load
@@ -1935,9 +1943,6 @@ async function extractMetadata(file) {
         new jsmediatags.Reader(file)
             .read({
                 onSuccess: async function(tag) {
-                    // This console log is for debugging. If the issue persists, the contents of this log will tell us exactly what's wrong.
-                    // console.log(`Tags for ${file.name}:`, tag.tags); 
-
                     let albumArt;
                     if (tag.tags.picture) {
                         const { data, format } = tag.tags.picture;
@@ -1970,33 +1975,30 @@ async function extractMetadata(file) {
                         lyricsText = lrcCandidates.find(text => typeof text === 'string' && text.trim() !== '') || null;
                     }
 
-                    // --- BULLETPROOF PARSING LOGIC FOR TAGS ---
                     const parseComplexTag = (rawTag) => {
                         if (!rawTag) return null;
-                        
-                        // The value might be in `rawTag.data` for some tag types
                         const value = rawTag.data || rawTag;
-
                         if (typeof value === 'object' && value.no) {
-                            // Handles format: { no: 1, of: 12 }
                             return parseInt(value.no, 10);
                         }
-                        
-                        // Handles formats: "1", "1/12", 1
                         const parsed = parseInt(String(value).split('/')[0], 10);
-
-                        // Return the number if valid, otherwise null
                         return isNaN(parsed) ? null : parsed;
                     };
 
-                    // Check multiple possible tag names, with Vorbis comments (DISCNUMBER) as priority for FLAC.
                     const discNumber = parseComplexTag(tag.tags.DISCNUMBER || tag.tags.disk || tag.tags.TPOS);
                     const trackNumber = parseComplexTag(tag.tags.TRACKNUMBER || tag.tags.track);
                     
+                    // --- START: BUG FIX LOGIC ---
+                    // Prioritize the dedicated 'album_artist' tag (TPE2).
+                    // Fall back to the track 'artist' tag if it's not available.
+                    const albumArtist = tag.tags.album_artist || tag.tags.artist || 'Unknown Artist';
+                    // --- END: BUG FIX LOGIC ---
+
                     resolve({
                         title: tag.tags.title || file.name.replace(/\.[^/.]+$/, ""),
                         artist: tag.tags.artist || 'Unknown Artist',
                         album: tag.tags.album || 'Unknown Album',
+                        albumArtist: albumArtist, // Add the new, reliable field
                         year: tag.tags.year || '',
                         albumArt: albumArt,
                         trackNumber: trackNumber,
@@ -2011,6 +2013,7 @@ async function extractMetadata(file) {
                         title: file.name.replace(/\.[^/.]+$/, ""),
                         artist: 'Unknown Artist',
                         album: 'Unknown Album',
+                        albumArtist: 'Unknown Artist', // Ensure fallback has this field
                         year: '',
                         albumArt: generateRandomGradient(),
                         trackNumber: null,
@@ -2207,11 +2210,14 @@ async function saveSongs() {
         const clearRequest = store.clear();
         clearRequest.onsuccess = () => {
             songs.forEach(song => {
-                // Create a clean object to avoid IndexedDB cloning errors with complex properties
+                // Create a clean object to avoid IndexedDB cloning errors
                 const songToStore = {
                     id: song.id, name: song.name, artist: song.artist, album: song.album,
+                    // --- START: BUG FIX LOGIC ---
+                    albumArtist: song.albumArtist, // Add the new field to the database object
+                    // --- END: BUG FIX LOGIC ---
                     year: song.year, albumArt: song.albumArt, trackNumber: song.trackNumber,
-                    discNumber: song.discNumber, // NEW
+                    discNumber: song.discNumber,
                     lyrics: song.lyrics, lrcData: song.lrcData, storage: song.storage,
                     handleName: song.handleName, dateAdded: song.dateAdded
                 };
@@ -3642,42 +3648,45 @@ function updatePlayQueue() {
     }
 }
         
-function processAndSortSongs() {
-    // 1. Group all songs by their album name.
-    const songsByAlbum = songs.reduce((acc, song) => {
-        const albumKey = song.album || 'Unknown Album';
-        if (!acc[albumKey]) {
-            acc[albumKey] = [];
-        }
-        acc[albumKey].push(song);
-        return acc;
-    }, {});
+function groupSongsByAlbum(songsToRender) {
+  const albums = {};
+  
+  songsToRender.forEach(song => {
+    // The key MUST include the album artist to distinguish between different artists' albums with the same name.
+    const albumArtistName = song.albumArtist || song.artist || 'Unknown Artist';
+    const albumName = song.album || 'Unknown Album';
+    const albumKey = `${albumArtistName}::${albumName}::${song.effectiveDiscNumber}`;
 
-    // 2. For each album, infer disc numbers based on track sequence.
-    for (const albumKey in songsByAlbum) {
-        const albumSongs = songsByAlbum[albumKey];
-
-        // A stable sort order (like by filename) is crucial before inferring.
-        albumSongs.sort((a, b) => (a.handleName || a.name).localeCompare(b.handleName || b.name));
-
-        let inferredDisc = 1;
-        let lastTrack = 0;
-        
-        // 3. Iterate through the album's songs to set an effective disc number.
-        albumSongs.forEach(song => {
-            // A disc change is detected if the track number resets to a lower value.
-            if (song.trackNumber !== null && song.trackNumber < lastTrack) {
-                inferredDisc++;
-            }
-            
-            // 4. Use the explicit disc number if it exists, otherwise use our inferred one.
-            // This creates a reliable value for sorting and grouping.
-            song.effectiveDiscNumber = song.discNumber || inferredDisc;
-            
-            // Update the last track number for the next comparison.
-            lastTrack = song.trackNumber || 0;
-        });
+    if (!albums[albumKey]) {
+      const albumDisplayName = song.effectiveDiscNumber > 1 ? `${albumName} (Disc ${song.effectiveDiscNumber})` : albumName;
+      albums[albumKey] = {
+        name: albumDisplayName,
+        // Display the correct ALBUM artist, not the track artist.
+        artist: albumArtistName,
+        year: song.year,
+        albumArt: song.albumArt,
+        songs: [],
+        originalAlbum: albumName,
+        originalAlbumArtist: albumArtistName,
+        effectiveDiscNumber: song.effectiveDiscNumber
+      };
     }
+    albums[albumKey].songs.push(song);
+  });
+  
+  // Sort the songs *within* each album group by track number.
+  for (let albumKey in albums) {
+    albums[albumKey].songs.sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+  }
+  
+  // Sort the final list of album groups logically: by Album Artist, then Album Name, then Disc Number.
+  return Object.values(albums).sort((a, b) => {
+     const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
+     if (artistCompare !== 0) return artistCompare;
+     const albumCompare = a.originalAlbum.localeCompare(b.originalAlbum);
+     if (albumCompare !== 0) return albumCompare;
+     return a.effectiveDiscNumber - b.effectiveDiscNumber;
+  });
 }
 
 function groupSongsByAlbum(songs) {
@@ -4112,14 +4121,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         initVisualizer();
         
-        await initDB();
-        searchInput = document.getElementById('searchInput');
-        
-        searchInput.addEventListener('input', () => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => renderSidebar(), 300);
-        });
-
         // Setup filter buttons
         document.querySelectorAll('.filter-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -4134,12 +4135,45 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('repeatBtn').addEventListener('click', () => toggleRepeat());
 
         document.querySelector('.lyrics-button').addEventListener('click', () => {
-            sidebarView = sidebarView === 'lyrics' ? 'library' : 'lyrics';
-            renderSidebar();
+            const isMobile = window.innerWidth < 800;
+            const isSidebarClosed = !sidebar.classList.contains('open');
+            const isShowingLyrics = sidebarView === 'lyrics';
+
+            if (isShowingLyrics) {
+                // If lyrics are already showing, close the sidebar and revert to library view.
+                sidebarView = 'library';
+                if (isMobile) closeSidebar();
+                else renderSidebar();
+            } else {
+                // Otherwise, switch to lyrics view.
+                sidebarView = 'lyrics';
+                renderSidebar();
+                // And if on mobile and sidebar was closed, open it.
+                if (isMobile && isSidebarClosed) {
+                    openSidebar();
+                }
+            }
         });
+
         document.querySelector('.queue-button').addEventListener('click', () => {
-            sidebarView = sidebarView === 'queue' ? 'library' : 'queue';
-            renderSidebar();
+            const isMobile = window.innerWidth < 800;
+            const isSidebarClosed = !sidebar.classList.contains('open');
+            const isShowingQueue = sidebarView === 'queue';
+
+            if (isShowingQueue) {
+                // If queue is already showing, close the sidebar and revert to library view.
+                sidebarView = 'library';
+                if (isMobile) closeSidebar();
+                else renderSidebar();
+            } else {
+                // Otherwise, switch to queue view.
+                sidebarView = 'queue';
+                renderSidebar();
+                // And if on mobile and sidebar was closed, open it.
+                if (isMobile && isSidebarClosed) {
+                    openSidebar();
+                }
+            }
         });
         
         renderSidebar();
