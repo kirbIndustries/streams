@@ -1283,18 +1283,18 @@
             <button id="scrollToCurrentBtn" class="goto-btn">
                 <span class="material-symbols-rounded" style="font-size: 18px;">gps_fixed</span>
             </button>
-            <div class="view-controls">
-                <button id="toggleViewBtn" class="upload-btn" style="flex-grow: 0;">
+            <div class="view-controls" style="flex-grow: 1;">
+                <button id="toggleViewBtn" class="upload-btn">
                     <span class="material-symbols-rounded">dashboard</span>
                 </button>
-                <button id="sortBtn" class="upload-btn" style="flex-grow: 1;">
+                <button id="sortBtn" class="upload-btn">
                     <span class="material-symbols-rounded">sort</span><span id="sort-mode-display">Date</span>
                 </button>
             </div>
-            <button class="upload-btn" id="uploadBtn" style="flex-grow: 0;">
+            <button class="upload-btn" id="uploadBtn">
                 <span class="material-symbols-rounded">add</span>
             </button>
-            <button class="upload-btn" id="manageFoldersBtn" style="flex-grow: 0;">
+            <button class="upload-btn" id="manageFoldersBtn">
                 <span class="material-symbols-rounded">folder_managed</span>
             </button>
         </div>
@@ -2759,6 +2759,7 @@ function renderSidebar() {
     const sidebarTitleEl = document.querySelector('.sidebar-title');
     const filterContainer = document.querySelector('.filter-container');
     const scrollToCurrentBtn = document.getElementById('scrollToCurrentBtn');
+    const viewControls = document.getElementById('view-controls');
     const uploadBtn = document.getElementById('uploadBtn');
     const manageFoldersBtn = document.getElementById('manageFoldersBtn');
     const headerControlsContainer = document.getElementById('sidebar-header-controls');
@@ -2797,6 +2798,7 @@ function renderSidebar() {
             searchContainer.style.display = 'none';
             filterContainer.style.display = 'none';
             uploadBtn.style.display = 'none';
+            viewControls.style.display = 'none';
             manageFoldersBtn.style.display = 'none';
             // --- START: BUG FIX ---
             // Explicitly show the scroll to current button in the queue view
@@ -2816,6 +2818,7 @@ function renderSidebar() {
             filterContainer.style.display = 'flex';
             scrollToCurrentBtn.style.display = 'block';
             uploadBtn.style.display = 'flex';
+            viewControls.style.display = 'flex';
             manageFoldersBtn.style.display = 'flex';
             sidebarTitleEl.textContent = 'Library';
             
