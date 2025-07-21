@@ -2662,6 +2662,7 @@ function renderSidebar() {
     switch (sidebarView) {
         case 'lyrics':
             searchContainer.style.display = 'none';
+            filterContainer.style.display = 'none';
             scrollToCurrentBtn.style.display = 'none';
             uploadBtn.style.display = 'none';
             manageFoldersBtn.style.display = 'none';
@@ -2674,9 +2675,13 @@ function renderSidebar() {
             break;
         case 'queue':
             searchContainer.style.display = 'none';
+            filterContainer.style.display = 'none';
             uploadBtn.style.display = 'none';
             manageFoldersBtn.style.display = 'none';
-            filterContainer.style.display = 'none';
+            // --- START: BUG FIX ---
+            // Explicitly show the scroll to current button in the queue view
+            scrollToCurrentBtn.style.display = 'block'; 
+            // --- END: BUG FIX ---
             sidebarTitleEl.textContent = 'Up Next';
             addBackButton('Library', () => {
                 sidebarView = 'library';
@@ -2686,12 +2691,12 @@ function renderSidebar() {
             break;
         case 'library':
         default:
-            // Default library view shows controls
+            // Default library view shows all main controls
             searchContainer.style.display = 'block';
+            filterContainer.style.display = 'flex';
             scrollToCurrentBtn.style.display = 'block';
             uploadBtn.style.display = 'flex';
             manageFoldersBtn.style.display = 'flex';
-            filterContainer.style.display = 'flex';
             sidebarTitleEl.textContent = 'Library';
             
             const query = searchInput ? searchInput.value.toLowerCase() : '';
@@ -2705,7 +2710,6 @@ function renderSidebar() {
                 case 'artists':
                     const artistName = musicListContainer.dataset.activeArtist;
                     if (artistName) {
-                        // This is the sub-view for a specific artist's songs
                         addBackButton('All Artists', () => {
                             delete musicListContainer.dataset.activeArtist;
                             renderSidebar();
@@ -2713,7 +2717,6 @@ function renderSidebar() {
                         const artistSongs = songs.filter(s => s.artist === artistName);
                         renderSongs(artistSongs);
                     } else {
-                        // This is the main list of all artists
                         const artists = [...new Map(searchFilteredSongs.map(s => [s.artist, s.albumArt])).entries()];
                         artists.sort((a,b) => a[0].localeCompare(b[0]));
                 
@@ -2750,7 +2753,6 @@ function renderSidebar() {
                     break;
                 case 'playlists':
                     if (activePlaylistId) {
-                        // This is the sub-view for a specific playlist's songs
                         addBackButton('Playlists', () => {
                             activePlaylistId = null;
                             renderSidebar();
