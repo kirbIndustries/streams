@@ -1285,10 +1285,10 @@
             </button>
             <div class="view-controls">
                 <button id="toggleViewBtn" class="upload-btn" style="flex-grow: 0;">
-                    <span class="material-symbols-rounded">grid_view</span>
+                    <span class="material-symbols-rounded">dashboard</span>
                 </button>
                 <button id="sortBtn" class="upload-btn" style="flex-grow: 1;">
-                    <span class="material-symbols-rounded">sort</span><span id="sort-mode-display">Date Added</span>
+                    <span class="material-symbols-rounded">sort</span><span id="sort-mode-display">Date</span>
                 </button>
             </div>
             <button class="upload-btn" id="uploadBtn" style="flex-grow: 0;">
@@ -4379,13 +4379,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         toggleViewBtn.addEventListener('click', () => {
             currentViewMode = currentViewMode === 'list' ? 'grid' : 'list';
             musicList.classList.toggle('grid-view', currentViewMode === 'grid');
-            toggleViewBtn.innerHTML = `<span class="material-symbols-rounded">${currentViewMode === 'list' ? 'grid_view' : 'view_list'}</span>`;
+            toggleViewBtn.innerHTML = `<span class="material-symbols-rounded">${currentViewMode === 'list' ? 'dashboard' : 'table_rows'}</span>`;
             renderSidebar(); // Re-render to apply view-specific templates if needed
         });
     
         sortBtn.addEventListener('click', () => {
             currentSortMode = currentSortMode === 'dateAdded' ? 'alpha' : 'dateAdded';
-            sortModeDisplay.textContent = currentSortMode === 'dateAdded' ? 'Date Added' : 'Alphabetical';
+            sortModeDisplay.textContent = currentSortMode === 'dateAdded' ? 'Date' : 'ABC';
             renderSidebar();
         });
     
