@@ -2595,6 +2595,36 @@ function initVisualizer() {
     draw();
     isVisualizerInitialized = true;
 }
+
+function processAndSortSongs() {
+    // Group songs by a composite key of Album Artist and Album Name to correctly isolate albums.
+    const songsByAlbum = songs.reduce((acc, song) => {
+        const albumArtistKey = song.albumArtist || 'Unknown Artist';
+        const albumKey = `${albumArtistKey}::${song.album || 'Unknown Album'}`;
+        if (!acc[albumKey]) {
+            acc[albumKey] = [];
+        }
+        acc[albumKey].push(song);
+        return acc;
+    }, {});
+
+    // Now, infer disc numbers safely within each correctly isolated album group.
+    for (const albumKey in songsByAlbum) {
+        const albumSongs = songsByAlbum[albumKey];
+        albumSongs.sort((a, b) => (a.handleName || a.name).localeCompare(b.handleName || b.name));
+
+        let inferredDisc = 1;
+        let lastTrack = 0;
+        
+        albumSongs.forEach(song => {
+            if (song.trackNumber !== null && song.trackNumber < lastTrack) {
+                inferredDisc++;
+            }
+            song.effectiveDiscNumber = song.discNumber || inferredDisc;
+            lastTrack = song.trackNumber || 0;
+        });
+    }
+}
         
 function renderSidebar() {
     const musicListContainer = document.querySelector('.music-list');
