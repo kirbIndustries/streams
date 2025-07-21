@@ -2595,9 +2595,9 @@ function renderSidebar() {
     const searchContainer = document.querySelector('.search-container');
     const sidebarTitleEl = document.querySelector('.sidebar-title');
     const filterContainer = document.querySelector('.filter-container');
-    
-    // Get references to the new containers
-    const uploadControlsContainer = document.getElementById('upload-controls-container');
+    const scrollToCurrentBtn = document.getElementById('scrollToCurrentBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const manageFoldersBtn = document.getElementById('manageFoldersBtn');
     const headerControlsContainer = document.getElementById('sidebar-header-controls');
 
     // Clear dynamic content at the start
@@ -2619,8 +2619,9 @@ function renderSidebar() {
     switch (sidebarView) {
         case 'lyrics':
             searchContainer.style.display = 'none';
-            uploadControlsContainer.style.display = 'none';
-            filterContainer.style.display = 'none';
+            scrollToCurrentBtn.style.display = 'none';
+            uploadBtn.style.display = 'none';
+            manageFoldersBtn.style.display = 'none';
             sidebarTitleEl.textContent = 'Lyrics';
             addBackButton('Library', () => {
                 sidebarView = 'library';
@@ -2630,7 +2631,8 @@ function renderSidebar() {
             break;
         case 'queue':
             searchContainer.style.display = 'none';
-            uploadControlsContainer.style.display = 'none';
+            uploadBtn.style.display = 'none';
+            manageFoldersBtn.style.display = 'none';
             filterContainer.style.display = 'none';
             sidebarTitleEl.textContent = 'Up Next';
             addBackButton('Library', () => {
@@ -2643,7 +2645,9 @@ function renderSidebar() {
         default:
             // Default library view shows controls
             searchContainer.style.display = 'block';
-            uploadControlsContainer.style.display = 'flex';
+            scrollToCurrentBtn.style.display = 'inline-flex';
+            uploadBtn.style.display = 'inline-flex';
+            manageFoldersBtn.style.display = 'inline-flex';
             filterContainer.style.display = 'flex';
             sidebarTitleEl.textContent = 'Library';
             
