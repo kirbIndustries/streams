@@ -2787,6 +2787,7 @@ function renderSidebar() {
             filterContainer.style.display = 'none';
             scrollToCurrentBtn.style.display = 'none';
             uploadBtn.style.display = 'none';
+            viewControls.style.display = 'none';
             manageFoldersBtn.style.display = 'none';
             sidebarTitleEl.textContent = 'Lyrics';
             addBackButton('Library', () => {
@@ -2847,34 +2848,33 @@ function renderSidebar() {
 
             switch (currentFilter) {
                 case 'artists':
-                    const artistName = musicListContainer.dataset.activeArtist;
-                    if (artistName) {
-                        addBackButton('All Artists', () => {
-                            delete musicListContainer.dataset.activeArtist;
-                            renderSidebar();
-                        });
-                        const artistSongs = songs.filter(s => s.artist === artistName);
-                        renderSongs(artistSongs);
-                    } else {
-                        const artists = [...new Map(searchFilteredSongs.map(s => [s.artist, s.albumArt])).entries()];
-                        artists.sort((a,b) => a[0].localeCompare(b[0]));
-                
-                        musicListContainer.innerHTML = artists.map(([artist, albumArt]) => `
-                            <div class="music-item" data-artist="${artist}" style="cursor: pointer;">
-                                <div class="song-info">
-                                     <img src="${albumArt || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 5px;">
-                                    <div style="font-size: 1em;">${artist}</div>
-                                </div>
-                            </div>
-                        `).join('');
-                
-                        musicListContainer.querySelectorAll('.music-item').forEach(item => {
-                            item.addEventListener('click', () => {
-                                musicListContainer.dataset.activeArtist = item.dataset.artist;
-                                renderSidebar();
-                            });
-                        });
+                    const artistsMap = new Map();
+                    searchFilteredSongs.forEach(song => {
+                        const artist = song.artist || 'Unknown Artist';
+                        if (!artistsMap.has(artist)) {
+                            artistsMap.set(artist, { art: song.albumArt, date: song.dateAdded });
+                        } else if (song.dateAdded > artistsMap.get(artist).date) {
+                            artistsMap.get(artist).date = song.dateAdded; // Update to newest song's date
+                        }
+                    });
+
+                    let artistsList = Array.from(artistsMap.entries());
+
+                    if (currentSortMode === 'dateAdded') {
+                        artistsList.sort((a, b) => b[1].date - a[1].date);
+                    } else { // 'alpha'
+                        artistsList.sort((a, b) => a[0].localeCompare(b[0]));
                     }
+
+                    musicListContainer.innerHTML = artistsList.map(([artist, data]) => `
+                        <div class="music-item" data-artist="${artist}" style="cursor: pointer;">
+                            <div class="song-info">
+                                 <img src="${data.art || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 5px;">
+                                <div style="font-size: 1em;">${artist}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                    attachSongAndAlbumEventListeners();
                     break;
                 case 'songs':
                     if (currentSortMode === 'dateAdded') {
@@ -3919,7 +3919,6 @@ function groupSongsByAlbum(songsToRender) {
         originalAlbum: albumName,
         originalAlbumArtist: albumArtistName,
         effectiveDiscNumber: song.effectiveDiscNumber,
-        // Store the date of the first song in the album for sorting
         dateAdded: song.dateAdded 
       };
     }
@@ -3933,18 +3932,18 @@ function groupSongsByAlbum(songsToRender) {
   let albumArray = Object.values(albums);
   
   if (currentSortMode === 'dateAdded') {
-      // Primary sort: newest first (descending date)
-      // Secondary sort: alphabetical by artist, then album
       albumArray.sort((a, b) => {
-          if (b.dateAdded !== a.dateAdded) {
-              return b.dateAdded - a.dateAdded;
+          // --- START: BUG FIX ---
+          // Sort by date ASCENDING (oldest first), as requested.
+          if (a.dateAdded !== b.dateAdded) {
+              return a.dateAdded - b.dateAdded;
           }
+          // --- END: BUG FIX ---
           const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
           if (artistCompare !== 0) return artistCompare;
           return a.originalAlbum.localeCompare(b.originalAlbum);
       });
   } else { // 'alpha'
-      // Primary sort: alphabetical by artist, then album, then disc number
       albumArray.sort((a, b) => {
          const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
          if (artistCompare !== 0) return artistCompare;
