@@ -4020,7 +4020,6 @@ playPauseBtn.addEventListener('click', () => {
         Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
         playPauseBtn.classList.remove('playing');
-        document.querySelector('.background-blur').classList.remove('rotating');
         if ('mediaSession' in navigator) updateMediaSessionPlaybackState('paused');
     }
 });
