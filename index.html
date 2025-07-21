@@ -1547,6 +1547,9 @@ function resetPlayer() {
     albumArtImg.src = defaultImage;
 
     updateAllBackgrounds('');
+    
+    // Ensure rotation class is removed on reset
+    document.querySelector('.background-blur').classList.remove('rotating');
 
     musicTitle.textContent = 'No song playing';
     musicArtist.textContent = '';
@@ -1559,7 +1562,6 @@ function resetPlayer() {
 
     Gurasuraisu.clearMediaSession();
 
-    // --- KEY ADDITION: Clear the media session ---
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = null;
         navigator.mediaSession.playbackState = 'none';
@@ -2431,15 +2433,21 @@ class BeatDetector {
 }
 
 function initVisualizer() {
+    // If the class is present, disable the entire visualizer and exit.
+    if (document.body.classList.contains('reduce-animations')) {
+        // Also hide the canvas element so it doesn't take up empty space.
+        const canvas = document.getElementById('visualizerCanvas');
+        if (canvas) canvas.style.display = 'none';
+        return; 
+    }
+
     if (isVisualizerInitialized) return;
 
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     
-    // Create EQ Filters
     eqBass = audioContext.createBiquadFilter();
     eqMid = audioContext.createBiquadFilter();
     eqTreble = audioContext.createBiquadFilter();
-
     eqBass.type = 'lowshelf';
     eqBass.frequency.value = 300; 
     eqMid.type = 'peaking';
@@ -2461,26 +2469,16 @@ function initVisualizer() {
     analyser.connect(audioContext.destination);
 
     analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.8; // A lower value here makes the raw data more responsive
+    analyser.smoothingTimeConstant = 0.8;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
     const displacementFilter = document.getElementById('displacement');
     const turbulenceFilter = document.getElementById('turbulence');
 
-    // --- START: UPDATED BEAT DETECTION LOGIC ---
     const baselineDistortion = 80;
     const peakDistortion = 150;
-
-    // Instantiate the new, more accurate detector.
-    // We focus on the low-end frequencies (0-10) where bass and kick drums live.
-    const beatDetector = new BeatDetector(
-        120,    // historySize: Analyze the last ~2 seconds of audio (at 60fps)
-        1.7,    // sensitivity: A good starting point
-        [[0, 10]], // frequencyBands: Focus on deep bass and kick frequencies
-        25,     // minBeatThreshold: Avoid triggers from silence or noise
-        0.97    // decayRate: A smooth, medium decay
-    );
+    const beatDetector = new BeatDetector(120, 1.7, [[0, 10]], 25, 0.97);
     
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
@@ -2493,23 +2491,30 @@ function initVisualizer() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        // 1. Get the smoothed "pulse" value (0.0 to 1.0) from the detector.
         const beatPulse = beatDetector.update(dataArray);
-
-        // 2. Map this pulse to the desired distortion range.
         const distortionRange = peakDistortion - baselineDistortion;
         const currentDistortion = baselineDistortion + (beatPulse * distortionRange);
-        
         displacementFilter.setAttribute('scale', currentDistortion);
-        // --- END: UPDATED BEAT DETECTION LOGIC ---
 
+        // --- START: NEW SHARD MOVEMENT LOGIC ---
+        const maxShift = 40; // Max pixels to shift outwards on beat
+        const outwardShift = beatPulse * maxShift;
         const shardTime = Date.now() * 0.00005;
+
         shards.forEach((shard) => {
             shard.rotation += shard.rotationSpeed;
-            shard.x = Math.sin(shardTime * shard.xDrift * 10) * 80;
-            shard.y = Math.cos(shardTime * shard.yDrift * 10) * 80;
-            shard.element.style.transform = `translate(${shard.x}px, ${shard.y}px) rotate(${shard.rotation}deg)`;
+            
+            // Calculate the base random drift position
+            const baseX = Math.sin(shardTime * shard.xDrift * 10) * 80;
+            const baseY = Math.cos(shardTime * shard.yDrift * 10) * 80;
+
+            // Add the beat-driven outward shift along the shard's natural drift direction
+            const totalX = baseX + (shard.xDrift * outwardShift);
+            const totalY = baseY + (shard.yDrift * outwardShift);
+            
+            shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
         });
+        // --- END: NEW SHARD MOVEMENT LOGIC ---
 
         turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
@@ -2523,7 +2528,6 @@ function initVisualizer() {
         const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
         canvasCtx.fillStyle = textColor;
 
-
         for (let i = 0; i < numBars; i++) {
             const x = i * (barWidth + gap);
             const value = Math.min(dataArray[barIndices[i]] * sensitivityMultipliers[i], 255);
@@ -2532,12 +2536,10 @@ function initVisualizer() {
             if (barHeight < barWidth) {
                 const dotRadius = barHeight / 2;
                 if (dotRadius < 1) continue;
-
                 canvasCtx.globalAlpha = barHeight / barWidth;
                 canvasCtx.beginPath();
                 canvasCtx.arc(x + barWidth / 2, canvas.height / 2, dotRadius, 0, 2 * Math.PI);
                 canvasCtx.fill();
-
             } else {
                 const y = (canvas.height - barHeight) / 2;
                 const pillRadius = barWidth / 2;
@@ -3958,13 +3960,11 @@ audioPlayer.addEventListener('timeupdate', async () => {
 });
 
 playPauseBtn.addEventListener('click', () => {
-    // Resume audio context on user interaction
     if (audioContext && audioContext.state === 'suspended') {
         audioContext.resume();
     }
 
     if (audioPlayer.paused) {
-        // Initialize the visualizer on the first play
         if (!isVisualizerInitialized) { 
             initVisualizer();
             Gurasuraisu.registerMediaSession(
@@ -3982,7 +3982,12 @@ playPauseBtn.addEventListener('click', () => {
             playPromise.then(() => {
                 playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
                 playPauseBtn.classList.add('playing');
-                document.querySelector('.background-blur').classList.add('rotating');
+                
+                // Conditionally start rotation
+                if (!document.body.classList.contains('reduce-animations')) {
+                    document.querySelector('.background-blur').classList.add('rotating');
+                }
+                
                 if ('mediaSession' in navigator) updateMediaSessionPlaybackState('playing');
                 Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
             }).catch(error => console.log("Play button click prevented:", error.message));
@@ -3992,6 +3997,8 @@ playPauseBtn.addEventListener('click', () => {
         Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
         playPauseBtn.classList.remove('playing');
+        // Explicitly stop rotation on pause
+        document.querySelector('.background-blur').classList.remove('rotating');
         if ('mediaSession' in navigator) updateMediaSessionPlaybackState('paused');
     }
 });
@@ -4030,8 +4037,13 @@ volumeSlider.addEventListener('input', (e) => {
     else volumeIcon.textContent = 'volume_up';
 });
 
-audioPlayer.addEventListener('play', () => document.querySelector('.background-blur').classList.add('rotating'));
-
+audioPlayer.addEventListener('play', () => {
+    // Conditionally start rotation
+    if (!document.body.classList.contains('reduce-animations')) {
+        document.querySelector('.background-blur').classList.add('rotating');
+    }
+});
+        
 audioPlayer.addEventListener('ended', () => {
     audioPlayer.isFading = false; // Reset fade flag
     // Call with default options (not user-initiated, not a transition)
