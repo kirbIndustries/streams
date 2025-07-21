@@ -2250,19 +2250,39 @@ async function migrateToFSA() {
 
 function initializeShards() {
     const shardElements = document.querySelectorAll('.distortion-shard');
+    
+    // Define the 'home' or base positions for each shard, spread out around the center.
+    const homePositions = [
+        { x: -50, y: -80 }, // Top-left-ish
+        { x: 80, y: 40 },  // Right-ish
+        { x: -70, y: 60 }   // Bottom-left-ish
+    ];
+
     shardElements.forEach((el, i) => {
+        const homeX = homePositions[i % homePositions.length].x;
+        const homeY = homePositions[i % homePositions.length].y;
+        
+        // Calculate the magnitude (length) of the vector from the center (0,0) to the home position.
+        const magnitude = Math.sqrt(homeX * homeX + homeY * homeY);
+        
+        // Normalize the vector to get a pure direction (a "unit vector" of length 1).
+        // This vector points directly from the center to the shard's home.
+        const dirX = magnitude > 0 ? homeX / magnitude : 0;
+        const dirY = magnitude > 0 ? homeY / magnitude : 0;
+
         shards.push({
             element: el,
-            // Assign each shard a different part of the image to "split" it
             bgPos: `${i * 50}% 50%`, 
-            // Give each shard its own random speed and direction
             rotationSpeed: (Math.random() - 0.5) * 0.1,
-            xDrift: (Math.random() - 0.5) * 0.2,
+            xDrift: (Math.random() - 0.5) * 0.2, // For small, subtle random movement
             yDrift: (Math.random() - 0.5) * 0.2,
-            // Current transform values
-            x: 0,
-            y: 0,
             rotation: Math.random() * 360,
+            
+            // --- NEW PROPERTIES ---
+            homeX: homeX,
+            homeY: homeY,
+            dirX: dirX, // The pre-calculated outward direction X
+            dirY: dirY  // The pre-calculated outward direction Y
         });
         el.style.backgroundPosition = shards[i].bgPos;
     });
@@ -2433,9 +2453,7 @@ class BeatDetector {
 }
 
 function initVisualizer() {
-    // If the class is present, disable the entire visualizer and exit.
     if (document.body.classList.contains('reduce-animations')) {
-        // Also hide the canvas element so it doesn't take up empty space.
         const canvas = document.getElementById('visualizerCanvas');
         if (canvas) canvas.style.display = 'none';
         return; 
@@ -2448,13 +2466,9 @@ function initVisualizer() {
     eqBass = audioContext.createBiquadFilter();
     eqMid = audioContext.createBiquadFilter();
     eqTreble = audioContext.createBiquadFilter();
-    eqBass.type = 'lowshelf';
-    eqBass.frequency.value = 300; 
-    eqMid.type = 'peaking';
-    eqMid.frequency.value = 1000;
-    eqMid.Q.value = 1; 
-    eqTreble.type = 'highshelf';
-    eqTreble.frequency.value = 3000;
+    eqBass.type = 'lowshelf'; eqBass.frequency.value = 300; 
+    eqMid.type = 'peaking'; eqMid.frequency.value = 1000; eqMid.Q.value = 1; 
+    eqTreble.type = 'highshelf'; eqTreble.frequency.value = 3000;
     
     analyser = audioContext.createAnalyser();
     
@@ -2496,7 +2510,7 @@ function initVisualizer() {
         const currentDistortion = baselineDistortion + (beatPulse * distortionRange);
         displacementFilter.setAttribute('scale', currentDistortion);
 
-        // --- START: NEW SHARD MOVEMENT LOGIC ---
+        // --- START: REVISED SHARD MOVEMENT LOGIC ---
         const maxShift = 40; // Max pixels to shift outwards on beat
         const outwardShift = beatPulse * maxShift;
         const shardTime = Date.now() * 0.00005;
@@ -2504,17 +2518,17 @@ function initVisualizer() {
         shards.forEach((shard) => {
             shard.rotation += shard.rotationSpeed;
             
-            // Calculate the base random drift position
-            const baseX = Math.sin(shardTime * shard.xDrift * 10) * 80;
-            const baseY = Math.cos(shardTime * shard.yDrift * 10) * 80;
+            // Calculate the base position: its home position plus a small random drift.
+            const baseX = shard.homeX + Math.sin(shardTime * shard.xDrift * 10) * 15;
+            const baseY = shard.homeY + Math.cos(shardTime * shard.yDrift * 10) * 15;
 
-            // Add the beat-driven outward shift along the shard's natural drift direction
-            const totalX = baseX + (shard.xDrift * outwardShift);
-            const totalY = baseY + (shard.yDrift * outwardShift);
+            // Add the beat-driven outward shift along the shard's PRE-CALCULATED direction vector.
+            const totalX = baseX + (shard.dirX * outwardShift);
+            const totalY = baseY + (shard.dirY * outwardShift);
             
             shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
         });
-        // --- END: NEW SHARD MOVEMENT LOGIC ---
+        // --- END: REVISED SHARD MOVEMENT LOGIC ---
 
         turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
