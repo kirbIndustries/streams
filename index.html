@@ -2382,25 +2382,21 @@ async function updateAllBackgrounds(imageUrl) {
 
 class BeatDetector {
     /**
-     * A BPM-aware beat detection and visualization pulse generator.
-     * It analyzes beat timings to estimate the song's tempo and adjusts the visual decay rate accordingly.
+     * A robust multi-band spectral flux beat detection algorithm.
+     * It detects sudden increases in energy across multiple frequency bands.
      */
-    constructor(historySize = 120, sensitivity = 1.7, frequencyBands = [[0, 10]], minBeatThreshold = 25) {
+    constructor(frequencyBands, historySize = 60, sensitivity = 1.4, minFluxThreshold = 5) {
+        this.frequencyBands = frequencyBands;
         this.historySize = historySize;
         this.sensitivity = sensitivity;
-        this.frequencyBands = frequencyBands;
-        this.minBeatThreshold = minBeatThreshold;
-        
-        this.energyHistories = this.frequencyBands.map(() => []);
-        this.beatValue = 0.0;
+        this.minFluxThreshold = minFluxThreshold;
 
-        // --- BPM ANALYSIS PROPERTIES ---
-        this.bpm = 120; // Default starting BPM
-        this.beatTimes = []; // Stores timestamps of the last N beats
-        this.interBeatIntervals = []; // Stores the time (ms) between beats
-        this.lastBeatTime = 0;
-        this.minBPM = 70;
-        this.maxBPM = 190;
+        // --- State for each band ---
+        this.fluxHistories = this.frequencyBands.map(() => []);
+        this.lastEnergies = new Array(this.frequencyBands.length).fill(0);
+        
+        this.beatValue = 0.0;
+        this.decayRate = 0.96; // A reliable, medium-fast decay.
     }
 
     _calculateStandardDeviation(array, mean) {
@@ -2409,104 +2405,47 @@ class BeatDetector {
         return Math.sqrt(variance);
     }
 
-    /**
-     * Estimates the BPM by finding the most common interval between recent beats.
-     * This uses a histogram/binning approach to be robust against noise.
-     */
-    _calculateBPM() {
-        if (this.interBeatIntervals.length < 10) return; // Not enough data yet
-
-        const bpmBins = {};
-        const binSize = 5; // Group BPMs into bins of 5 (e.g., 120-124, 125-129)
-
-        this.interBeatIntervals.forEach(ibi => {
-            if (ibi > 0) {
-                const beatBPM = 60000 / ibi;
-                if (beatBPM > this.minBPM && beatBPM < this.maxBPM) {
-                    const bin = Math.floor(beatBPM / binSize) * binSize;
-                    bpmBins[bin] = (bpmBins[bin] || 0) + 1;
-                }
-            }
-        });
-
-        if (Object.keys(bpmBins).length === 0) return;
-
-        // Find the bin with the most beats
-        let bestBin = null;
-        let maxCount = 0;
-        for (const bin in bpmBins) {
-            if (bpmBins[bin] > maxCount) {
-                maxCount = bpmBins[bin];
-                bestBin = parseInt(bin);
-            }
-        }
-        
-        // Smoothly update the BPM towards the best estimate
-        if (bestBin) {
-            this.bpm += (bestBin - this.bpm) * 0.1;
-        }
-    }
-
     update(dataArray) {
         let beatDetectedThisFrame = false;
 
         for (let i = 0; i < this.frequencyBands.length; i++) {
             const band = this.frequencyBands[i];
-            const history = this.energyHistories[i];
+            const history = this.fluxHistories[i];
             
+            // 1. Calculate current energy in the band
             let currentEnergy = 0;
             for (let j = band[0]; j <= band[1]; j++) currentEnergy += dataArray[j];
             currentEnergy /= (band[1] - band[0] + 1);
 
+            // 2. Calculate Spectral Flux (the increase in energy since the last frame)
+            const flux = Math.max(0, currentEnergy - this.lastEnergies[i]);
+            this.lastEnergies[i] = currentEnergy;
+
+            // 3. Compare flux against a dynamic threshold for that band's flux history
             if (history.length < this.historySize) {
-                history.push(currentEnergy);
+                history.push(flux);
                 continue;
             }
-
-            const averageEnergy = history.reduce((a, b) => a + b, 0) / history.length;
-            const stdDev = this._calculateStandardDeviation(history, averageEnergy);
-            const dynamicThreshold = averageEnergy + (this.sensitivity * stdDev);
             
-            if (currentEnergy > dynamicThreshold && currentEnergy > this.minBeatThreshold) {
+            const averageFlux = history.reduce((a, b) => a + b, 0) / history.length;
+            const stdDev = this._calculateStandardDeviation(history, averageFlux);
+            const dynamicThreshold = averageFlux + (this.sensitivity * stdDev);
+
+            // 4. A beat is detected if flux surpasses both thresholds
+            if (flux > dynamicThreshold && flux > this.minFluxThreshold) {
                 beatDetectedThisFrame = true;
             }
 
-            history.push(currentEnergy);
+            // Update the flux history for this band
+            history.push(flux);
             history.shift();
         }
 
-        const now = performance.now();
         if (beatDetectedThisFrame) {
             this.beatValue = 1.0;
-            
-            // Record beat timing for BPM analysis
-            if (this.lastBeatTime > 0) {
-                const ibi = now - this.lastBeatTime;
-                this.interBeatIntervals.push(ibi);
-                if (this.interBeatIntervals.length > 30) this.interBeatIntervals.shift();
-                
-                // Recalculate BPM with the new data point
-                this._calculateBPM();
-            }
-            this.lastBeatTime = now;
+        } else {
+            this.beatValue *= this.decayRate;
         }
-
-        // --- DYNAMIC DECAY RATE ---
-        // Calculate the duration of a single beat in milliseconds.
-        const beatDurationMs = 60000 / this.bpm;
-        // We want the pulse to last for roughly half a beat to feel snappy.
-        const targetDecayTimeMs = beatDurationMs * 0.5;
-        // Calculate the decay rate needed to fade to near-zero over that time at 60fps.
-        // A simple mapping provides a very effective approximation.
-        const fastDecay = 0.90; // For high BPM
-        const slowDecay = 0.98; // For low BPM
-        const decayRange = slowDecay - fastDecay;
-        const bpmRange = this.maxBPM - this.minBPM;
-        const normalizedBPM = (this.bpm - this.minBPM) / bpmRange;
-        const dynamicDecayRate = slowDecay - (normalizedBPM * decayRange);
-        
-        this.beatValue *= dynamicDecayRate;
-        this.beatValue = Math.max(0, this.beatValue);
 
         return this.beatValue;
     }
@@ -2553,9 +2492,16 @@ function initVisualizer() {
     const baselineDistortion = 80;
     const peakDistortion = 150;
 
-    // --- UPDATED CONSTRUCTOR CALL ---
-    // The decay rate is now calculated internally, so we don't pass it here.
-    const beatDetector = new BeatDetector(120, 1.7, [[0, 10]], 25);
+    // --- START: NEW MULTI-BAND BEAT DETECTOR ---
+    const beatDetector = new BeatDetector(
+        [
+            [0, 10],    // Bass and kick drum
+            [20, 50],   // Snare drum and mid-range body
+            [80, 120]   // Hi-hats and sharp transients
+        ], 
+        60, 1.5 // History size and sensitivity
+    );
+    // --- END: NEW MULTI-BAND BEAT DETECTOR ---
     
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
