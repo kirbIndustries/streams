@@ -858,12 +858,13 @@
         @media (max-width: 768px) {
             .sidebar {
                 position: fixed;
-                left: -100%;
-                top: 0;
-                bottom: 0;
+                bottom: -100%;
+                left: 0;
+                height: 90vh;
                 background: var(--modal-background);
-                border-right: 1px solid var(--glass-border);
-                transition: left 0.3s ease;
+                border-top: 1px solid var(--glass-border);
+                border-radius: 25px 25px 0 0;
+                transition: bottom 0.3s ease;
                 z-index: 100;
                 backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter);
                 padding: 25px 20px 25px 25px;
@@ -871,8 +872,7 @@
             }
         
             .sidebar.open {
-                left: 0;
-                width: 75vw;
+                bottom: 0;
             }
         
             .menu-btn {
