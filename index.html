@@ -2382,21 +2382,27 @@ async function updateAllBackgrounds(imageUrl) {
 
 class BeatDetector {
     /**
-     * A robust multi-band spectral flux beat detection algorithm.
-     * It detects sudden increases in energy across multiple frequency bands.
+     * A self-regulating, multi-band spectral flux beat detector.
+     * It dynamically adjusts its own sensitivity based on the music's density.
      */
-    constructor(frequencyBands, historySize = 60, sensitivity = 1.4, minFluxThreshold = 5) {
+    constructor(frequencyBands, historySize = 60, minThreshold = 5) {
         this.frequencyBands = frequencyBands;
         this.historySize = historySize;
-        this.sensitivity = sensitivity;
-        this.minFluxThreshold = minFluxThreshold;
+        this.minFluxThreshold = minThreshold;
 
         // --- State for each band ---
         this.fluxHistories = this.frequencyBands.map(() => []);
         this.lastEnergies = new Array(this.frequencyBands.length).fill(0);
         
         this.beatValue = 0.0;
-        this.decayRate = 0.96; // A reliable, medium-fast decay.
+        this.decayRate = 0.96;
+
+        // --- DYNAMIC SENSITIVITY PROPERTIES ---
+        this.dynamicSensitivity = 1.4; // The starting point for our adaptive sensitivity
+        this.minSensitivity = 1.2;     // The most sensitive it can get
+        this.maxSensitivity = 2.4;     // The least sensitive it can get
+        this.increaseFactor = 1.05;    // How much to increase sensitivity after a beat
+        this.decreaseFactor = 0.999;   // How slowly to decrease sensitivity over time
     }
 
     _calculateStandardDeviation(array, mean) {
@@ -2412,16 +2418,13 @@ class BeatDetector {
             const band = this.frequencyBands[i];
             const history = this.fluxHistories[i];
             
-            // 1. Calculate current energy in the band
             let currentEnergy = 0;
             for (let j = band[0]; j <= band[1]; j++) currentEnergy += dataArray[j];
             currentEnergy /= (band[1] - band[0] + 1);
 
-            // 2. Calculate Spectral Flux (the increase in energy since the last frame)
             const flux = Math.max(0, currentEnergy - this.lastEnergies[i]);
             this.lastEnergies[i] = currentEnergy;
 
-            // 3. Compare flux against a dynamic threshold for that band's flux history
             if (history.length < this.historySize) {
                 history.push(flux);
                 continue;
@@ -2429,23 +2432,32 @@ class BeatDetector {
             
             const averageFlux = history.reduce((a, b) => a + b, 0) / history.length;
             const stdDev = this._calculateStandardDeviation(history, averageFlux);
-            const dynamicThreshold = averageFlux + (this.sensitivity * stdDev);
+            
+            // The threshold now uses our DYNAMIC sensitivity value
+            const dynamicThreshold = averageFlux + (this.dynamicSensitivity * stdDev);
 
-            // 4. A beat is detected if flux surpasses both thresholds
             if (flux > dynamicThreshold && flux > this.minFluxThreshold) {
+                // If any band detects a beat, we flag it for the entire frame
                 beatDetectedThisFrame = true;
             }
 
-            // Update the flux history for this band
             history.push(flux);
             history.shift();
         }
 
+        // --- THE ADAPTIVE FEEDBACK LOOP ---
         if (beatDetectedThisFrame) {
             this.beatValue = 1.0;
+            // A beat was found. Become slightly less sensitive to prevent false positives.
+            this.dynamicSensitivity *= this.increaseFactor;
         } else {
             this.beatValue *= this.decayRate;
+            // No beat was found. Gradually become more sensitive.
+            this.dynamicSensitivity *= this.decreaseFactor;
         }
+        
+        // Clamp the sensitivity within our defined min/max bounds.
+        this.dynamicSensitivity = Math.max(this.minSensitivity, Math.min(this.maxSensitivity, this.dynamicSensitivity));
 
         return this.beatValue;
     }
@@ -2492,16 +2504,14 @@ function initVisualizer() {
     const baselineDistortion = 80;
     const peakDistortion = 150;
 
-    // --- START: NEW MULTI-BAND BEAT DETECTOR ---
+    // --- FINAL BEAT DETECTOR CREATION ---
     const beatDetector = new BeatDetector(
         [
-            [0, 10],    // Bass and kick drum
-            [20, 50],   // Snare drum and mid-range body
-            [80, 120]   // Hi-hats and sharp transients
-        ], 
-        60, 1.5 // History size and sensitivity
+            [0, 10],    // Bass
+            [20, 50],   // Mids
+            [80, 120]   // Treble
+        ]
     );
-    // --- END: NEW MULTI-BAND BEAT DETECTOR ---
     
     const canvas = document.getElementById('visualizerCanvas');
     const canvasCtx = canvas.getContext('2d');
@@ -2541,6 +2551,7 @@ function initVisualizer() {
 
         turbulenceFilter.setAttribute('seed', Date.now() / 30);
         
+        // ... (rest of canvas drawing logic remains the same) ...
         if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
         if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2572,7 +2583,7 @@ function initVisualizer() {
                 canvasCtx.fill();
             }
         }
-        canvasCtx.globalAlpha = 1.0; 
+        canvasCtx.globalAlpha = 1.0;
     }
 
     draw();
