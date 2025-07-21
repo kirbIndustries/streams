@@ -315,7 +315,8 @@
             max-width: 500px;
             box-sizing: border-box;
             width: 100%;
-            justify-content: space-between
+            justify-content: space-between;
+            margin-bottom: 50px;
         }
         
         .player-controls button:nth-child(2),
@@ -406,7 +407,8 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-top: 20px;
+            position: fixed;
+            bottom: 30px;
         }
         
         .controls-container span {
@@ -823,6 +825,19 @@
           transition: all 0.1s cubic-bezier(0.2, 0, 0.38, 0.9);
           filter: brightness(1.5);
         }
+
+        @media (min-height: 900px) {
+            .controls-container {
+                position: fixed;
+                bottom: 30px;
+                right: 30px;
+            }
+
+            .player-controls {
+                margin-bottom: 0;
+            }
+        }
+            
         
         @media (max-width: 768px) {
             .sidebar {
