@@ -1542,6 +1542,7 @@
         let playlistModal, sleepTimerModal;
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let currentViewMode = 'list'; // 'list', 'grid'
+        let activeAlbum = null; // Will store { artist, name } of the selected album
 
         function openModal(modal) {
             if (modal) modal.classList.add('visible');
@@ -2828,6 +2829,21 @@ function renderSidebar() {
                 s.artist.toLowerCase().includes(query) ||
                 s.album.toLowerCase().includes(query)
             ) : songs;
+            
+            if (activeAlbum) {
+                const albumSongs = songs.filter(s => s.albumArtist === activeAlbum.artist && s.album === activeAlbum.name);
+                addBackButton('All Albums', () => { activeAlbum = null; renderSidebar(); });
+                renderSongs(albumSongs);
+                return; // Stop further processing
+            }
+            
+            const artistName = musicListContainer.dataset.activeArtist;
+            if (artistName) {
+                addBackButton('All Artists', () => { delete musicListContainer.dataset.activeArtist; renderSidebar(); });
+                const artistSongs = songs.filter(s => s.artist === artistName);
+                renderSongs(artistSongs);
+                return; // Stop further processing
+            } 
 
             switch (currentFilter) {
                 case 'artists':
@@ -2861,6 +2877,11 @@ function renderSidebar() {
                     }
                     break;
                 case 'songs':
+                    if (currentSortMode === 'dateAdded') {
+                        searchFilteredSongs.sort((a, b) => b.dateAdded - a.dateAdded);
+                    } else { // 'alpha'
+                        searchFilteredSongs.sort((a, b) => a.name.localeCompare(b.name));
+                    }
                     musicListContainer.innerHTML = searchFilteredSongs.map(song => `
                         <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
                             <div class="song-info">
@@ -3012,7 +3033,7 @@ async function removeSongFromPlaylist(songId, playlistId, event) {
     // Re-render the current playlist view to show the change
     renderPlaylistSongs(playlistId);
 }
-
+        
 function renderSongs(filteredSongs = null) {
   let songsToRender = filteredSongs || songs;
   let albums = groupSongsByAlbum(songsToRender);
@@ -3024,7 +3045,9 @@ function renderSongs(filteredSongs = null) {
   }
   
   musicListContainer.innerHTML = albums.map(album => `
-    <div class="album-section">
+    <div class="album-section" 
+         data-album-artist="${album.artist}" 
+         data-album-name="${album.originalAlbum}">
       <div class="album-header">
         <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
         <div class="album-info">
@@ -3156,14 +3179,38 @@ function attachSongAndAlbumEventListeners() {
       if (song) playSong(song);
     });
   });
+    
+  // Listener for playing individual songs (works in both views)
+  document.querySelectorAll('.music-item:not(.queue-item)').forEach(item => {
+    item.addEventListener('click', (e) => {
+        if (e.target.closest('.song-actions')) return; // Ignore clicks on the 'more' button
+        const songId = parseFloat(item.dataset.id);
+        const song = songs.find(s => s.id === songId);
+        if (song) playSong(song);
+    });
+  });
 
+  // Listener for the 'more' button on songs
   document.querySelectorAll('.song-actions').forEach(button => {
       button.addEventListener('click', (e) => {
           const songId = parseFloat(button.dataset.id);
           openSongContextMenu(e, songId);
       });
   });
-  
+
+  if (currentViewMode === 'grid') {
+      document.querySelectorAll('.album-section').forEach(albumEl => {
+          albumEl.addEventListener('click', (e) => {
+              if (e.target.closest('.song-actions')) return; // Ignore clicks on context menu
+              activeAlbum = {
+                  artist: albumEl.dataset.albumArtist,
+                  name: albumEl.dataset.albumName
+              };
+              renderSidebar(); // Re-render to show the songs inside the album
+          });
+      });
+  }
+    
   document.querySelectorAll('.delete-album').forEach(button => {
     button.addEventListener('click', async (e) => {
       const albumName = button.dataset.album;
