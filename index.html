@@ -1542,6 +1542,7 @@
         let playlistModal, sleepTimerModal;
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let currentViewMode = 'list'; // 'list', 'grid'
+        let activeAlbumKey = null; // To track when viewing a specific album's contents
 
         function openModal(modal) {
             if (modal) modal.classList.add('visible');
@@ -2752,25 +2753,67 @@ function processAndSortSongs() {
         });
     }
 }
+
+function getSortedAndFilteredSongs() {
+    const query = searchInput ? searchInput.value.toLowerCase() : '';
+    
+    // 1. Filter songs by search query first
+    const filteredSongs = query ? songs.filter(s => 
+        s.name.toLowerCase().includes(query) ||
+        s.artist.toLowerCase().includes(query) ||
+        s.album.toLowerCase().includes(query)
+    ) : [...songs]; // Use a copy to avoid modifying the original array
+
+    // 2. Sort the filtered list based on the current mode
+    if (currentSortMode === 'dateAdded') {
+        // Primary sort: newest first. Secondary: alphabetical.
+        filteredSongs.sort((a, b) => {
+            if (b.dateAdded !== a.dateAdded) return b.dateAdded - a.dateAdded;
+            const artistA = a.albumArtist || a.artist;
+            const artistB = b.albumArtist || b.artist;
+            if (artistA !== artistB) return artistA.localeCompare(artistB);
+            if (a.album !== b.album) return a.album.localeCompare(b.album);
+            if (a.effectiveDiscNumber !== b.effectiveDiscNumber) return a.effectiveDiscNumber - b.effectiveDiscNumber;
+            return (a.trackNumber || 0) - (b.trackNumber || 0);
+        });
+    } else { // 'alpha'
+        // Comprehensive alphabetical sort
+        filteredSongs.sort((a, b) => {
+            const artistA = a.albumArtist || a.artist;
+            const artistB = b.albumArtist || b.artist;
+            if (artistA !== artistB) return artistA.localeCompare(artistB);
+            if (a.album !== b.album) return a.album.localeCompare(b.album);
+            if (a.effectiveDiscNumber !== b.effectiveDiscNumber) return a.effectiveDiscNumber - b.effectiveDiscNumber;
+            return (a.trackNumber || 0) - (b.trackNumber || 0);
+        });
+    }
+    
+    return filteredSongs;
+}
         
 function renderSidebar() {
     const musicListContainer = document.querySelector('.music-list');
     const searchContainer = document.querySelector('.search-container');
+    const viewControls = document.querySelector('.view-controls');
     const sidebarTitleEl = document.querySelector('.sidebar-title');
-    const filterContainer = document.querySelector('.filter-container');
+    const headerControlsContainer = document.getElementById('sidebar-header-controls');
+    
+    // Get individual references to all buttons that need their visibility managed
     const scrollToCurrentBtn = document.getElementById('scrollToCurrentBtn');
     const uploadBtn = document.getElementById('uploadBtn');
     const manageFoldersBtn = document.getElementById('manageFoldersBtn');
-    const headerControlsContainer = document.getElementById('sidebar-header-controls');
 
-    // Clear dynamic content at the start
+    // --- START: CORRECTED LOGIC ---
+    // Reset view-specific elements
+    headerControlsContainer.innerHTML = '';
     musicListContainer.innerHTML = '';
-    headerControlsContainer.innerHTML = ''; // Clear the back button area
+    musicListContainer.className = 'music-list'; // Reset classes before applying new ones
 
+    // Update button states based on global variables
     document.querySelector('.lyrics-button').classList.toggle('active', sidebarView === 'lyrics');
     document.querySelector('.queue-button').classList.toggle('active', sidebarView === 'queue');
-    
-    // Function to create and add a back button to the non-scrollable header
+    document.getElementById('toggleViewBtn').innerHTML = `<span class="material-symbols-rounded">${currentViewMode === 'list' ? 'grid_view' : 'view_list'}</span>`;
+
     const addBackButton = (buttonText, onClickAction) => {
         const backButton = document.createElement('button');
         backButton.className = 'sidebar-back-btn';
@@ -2778,114 +2821,76 @@ function renderSidebar() {
         backButton.onclick = onClickAction;
         headerControlsContainer.appendChild(backButton);
     };
+    
+    // Default to hiding all optional controls, then enable them as needed.
+    searchContainer.style.display = 'none';
+    viewControls.style.display = 'none';
+    uploadBtn.style.display = 'none';
+    manageFoldersBtn.style.display = 'none';
+    scrollToCurrentBtn.style.display = 'none';
 
     switch (sidebarView) {
         case 'lyrics':
-            searchContainer.style.display = 'none';
-            filterContainer.style.display = 'none';
-            scrollToCurrentBtn.style.display = 'none';
-            uploadBtn.style.display = 'none';
-            manageFoldersBtn.style.display = 'none';
             sidebarTitleEl.textContent = 'Lyrics';
-            addBackButton('Library', () => {
-                sidebarView = 'library';
-                renderSidebar();
-            });
+            addBackButton('Library', () => { sidebarView = 'library'; renderSidebar(); });
             renderLyrics();
             break;
+
         case 'queue':
-            searchContainer.style.display = 'none';
-            filterContainer.style.display = 'none';
-            uploadBtn.style.display = 'none';
-            manageFoldersBtn.style.display = 'none';
-            // --- START: BUG FIX ---
-            // Explicitly show the scroll to current button in the queue view
-            scrollToCurrentBtn.style.display = 'block'; 
-            // --- END: BUG FIX ---
             sidebarTitleEl.textContent = 'Up Next';
-            addBackButton('Library', () => {
-                sidebarView = 'library';
-                renderSidebar();
-            });
+            scrollToCurrentBtn.style.display = 'block'; // Show only the relevant button
+            addBackButton('Library', () => { sidebarView = 'library'; renderSidebar(); });
             renderQueue();
             break;
+
         case 'library':
         default:
-            // Default library view shows all main controls
+            sidebarTitleEl.textContent = 'Library';
+            // Show all library-related controls
             searchContainer.style.display = 'block';
-            filterContainer.style.display = 'flex';
-            scrollToCurrentBtn.style.display = 'block';
+            viewControls.style.display = 'flex';
             uploadBtn.style.display = 'flex';
             manageFoldersBtn.style.display = 'flex';
-            sidebarTitleEl.textContent = 'Library';
-            
-            const query = searchInput ? searchInput.value.toLowerCase() : '';
-            const searchFilteredSongs = query ? songs.filter(s => 
-                s.name.toLowerCase().includes(query) ||
-                s.artist.toLowerCase().includes(query) ||
-                s.album.toLowerCase().includes(query)
-            ) : songs;
+            scrollToCurrentBtn.style.display = 'block';
 
-            switch (currentFilter) {
-                case 'artists':
-                    const artistName = musicListContainer.dataset.activeArtist;
-                    if (artistName) {
-                        addBackButton('All Artists', () => {
-                            delete musicListContainer.dataset.activeArtist;
-                            renderSidebar();
-                        });
-                        const artistSongs = songs.filter(s => s.artist === artistName);
-                        renderSongs(artistSongs);
-                    } else {
-                        const artists = [...new Map(searchFilteredSongs.map(s => [s.artist, s.albumArt])).entries()];
-                        artists.sort((a,b) => a[0].localeCompare(b[0]));
+            if (activeAlbumKey) {
+                // If we are viewing a specific album's songs...
+                viewControls.style.display = 'none'; // Hide sort/view toggles
+                const [artist, album, disc] = activeAlbumKey.split('::');
+                const albumSongs = songs.filter(s => 
+                    (s.albumArtist || s.artist) === artist && 
+                    s.album === album && 
+                    s.effectiveDiscNumber == disc
+                ).sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0)); // Ensure track order
+
+                addBackButton('Back to Albums', () => {
+                    activeAlbumKey = null;
+                    renderSidebar();
+                });
+                renderSongs(albumSongs); // Render the song list for this album
+                musicListContainer.classList.remove('grid-view'); // Force list view
+            } else {
+                // Otherwise, we are in the main library view.
+                const songsToRender = getSortedAndFilteredSongs();
                 
-                        musicListContainer.innerHTML = artists.map(([artist, albumArt]) => `
-                            <div class="music-item" data-artist="${artist}" style="cursor: pointer;">
-                                <div class="song-info">
-                                     <img src="${albumArt || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 5px;">
-                                    <div style="font-size: 1em;">${artist}</div>
-                                </div>
-                            </div>
-                        `).join('');
-                
-                        musicListContainer.querySelectorAll('.music-item').forEach(item => {
-                            item.addEventListener('click', () => {
-                                musicListContainer.dataset.activeArtist = item.dataset.artist;
-                                renderSidebar();
-                            });
-                        });
-                    }
-                    break;
-                case 'songs':
-                    musicListContainer.innerHTML = searchFilteredSongs.map(song => `
-                        <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
-                            <div class="song-info">
-                                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
-                                <div>
-                                    <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
-                                    <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('');
-                    attachSongAndAlbumEventListeners();
-                    break;
-                case 'playlists':
-                    if (activePlaylistId) {
-                        addBackButton('Playlists', () => {
-                            activePlaylistId = null;
-                            renderSidebar();
-                        });
-                        renderPlaylistSongs(activePlaylistId);
-                    } else {
-                        renderPlaylists();
-                    }
-                    break;
-                case 'albums':
-                default:
-                    renderSongs(searchFilteredSongs);
-                    break;
+                // Apply the correct view class (grid or list)
+                if (currentViewMode === 'grid') musicListContainer.classList.add('grid-view');
+
+                switch (currentFilter) {
+                    case 'songs':
+                         musicListContainer.classList.add('songs-mode');
+                         renderSongs(songsToRender.map(s => ({...s, name: s.name, artist: s.artist, albumArt: s.albumArt, songs: [s]})));
+                        break;
+                    case 'artists':
+                        musicListContainer.classList.add('artists-mode');
+                        const artists = [...new Map(songsToRender.map(s => [s.artist, s])).values()];
+                        renderSongs(artists.map(s => ({...s, name: s.artist, artist: '', albumArt: s.albumArt, songs: []})));
+                        break;
+                    case 'albums':
+                    default:
+                        renderSongs(songsToRender);
+                        break;
+                }
             }
             break;
     }
@@ -3009,12 +3014,17 @@ async function removeSongFromPlaylist(songId, playlistId, event) {
     // Re-render the current playlist view to show the change
     renderPlaylistSongs(playlistId);
 }
-
+        
 function renderSongs(filteredSongs = null) {
   let songsToRender = filteredSongs || songs;
   let albums = groupSongsByAlbum(songsToRender);
   const musicListContainer = document.querySelector('.music-list');
   
+  musicListContainer.className = 'music-list'; // Reset classes
+  if (currentViewMode === 'grid') musicListContainer.classList.add('grid-view');
+  if (currentFilter === 'songs') musicListContainer.classList.add('songs-mode');
+  if (currentFilter === 'artists') musicListContainer.classList.add('artists-mode');
+
   if (songsToRender.length === 0) {
     musicListContainer.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>';
     return;
@@ -3152,6 +3162,15 @@ function attachSongAndAlbumEventListeners() {
       const song = songs.find(s => s.id === songId);
       if (song) playSong(song);
     });
+  });
+
+  document.querySelectorAll('.music-list.grid-view .album-section').forEach(albumEl => {
+      albumEl.addEventListener('click', () => {
+          activeAlbumKey = albumEl.dataset.albumKey;
+          // Force view back to list to show the songs
+          currentViewMode = 'list'; 
+          renderSidebar();
+      });
   });
 
   document.querySelectorAll('.song-actions').forEach(button => {
@@ -4330,6 +4349,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
+            activeAlbumKey = null; // Reset album view on new search
             searchTimeout = setTimeout(() => renderSidebar(), 300); // Re-render with search
         });
 
@@ -4343,6 +4363,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             btn.addEventListener('click', () => {
                 document.querySelector('.filter-btn.active').classList.remove('active');
                 btn.classList.add('active');
+                activeAlbumKey = null; // Reset album view on filter change
                 currentFilter = btn.dataset.filter;
                 renderSidebar();
             });
