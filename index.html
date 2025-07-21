@@ -1061,7 +1061,7 @@
         .more-options-menu {
             position: absolute;
             background-color: var(--search-background);
-            border-radius: 15px;
+            border-radius: 25px;
             padding: 8px;
             backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
             border: 1px solid var(--glass-border);
@@ -3919,8 +3919,12 @@ function groupSongsByAlbum(songsToRender) {
         originalAlbum: albumName,
         originalAlbumArtist: albumArtistName,
         effectiveDiscNumber: song.effectiveDiscNumber,
+        // Use the newest dateAdded timestamp to represent the album's date
         dateAdded: song.dateAdded 
       };
+    } else if (song.dateAdded > albums[albumKey].dateAdded) {
+        // If we find a newer song in the same album, update the album's date to match
+        albums[albumKey].dateAdded = song.dateAdded;
     }
     albums[albumKey].songs.push(song);
   });
@@ -3932,18 +3936,17 @@ function groupSongsByAlbum(songsToRender) {
   let albumArray = Object.values(albums);
   
   if (currentSortMode === 'dateAdded') {
+      // Primary sort: newest first (descending date). Secondary: alphabetical.
       albumArray.sort((a, b) => {
-          // --- START: BUG FIX ---
-          // Sort by date ASCENDING (oldest first), as requested.
-          if (a.dateAdded !== b.dateAdded) {
-              return a.dateAdded - b.dateAdded;
+          if (b.dateAdded !== a.dateAdded) {
+              return b.dateAdded - a.dateAdded; // THIS IS THE CORRECTED LINE
           }
-          // --- END: BUG FIX ---
           const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
           if (artistCompare !== 0) return artistCompare;
           return a.originalAlbum.localeCompare(b.originalAlbum);
       });
   } else { // 'alpha'
+      // Primary sort: alphabetical by artist, then album, then disc number.
       albumArray.sort((a, b) => {
          const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
          if (artistCompare !== 0) return artistCompare;
