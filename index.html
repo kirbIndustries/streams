@@ -3965,8 +3965,18 @@ playPauseBtn.addEventListener('click', () => {
     }
 
     if (audioPlayer.paused) {
+        // First, get the current song object using the global currentSongId.
+        const song = songs.find(s => s.id === currentSongId);
+
+        // If no song is loaded/selected, we can't proceed.
+        if (!song) {
+            console.warn("Play button clicked, but no song is loaded.");
+            return; 
+        }
+
         if (!isVisualizerInitialized) { 
             initVisualizer();
+            // Now, 'song' is guaranteed to be defined here.
             Gurasuraisu.registerMediaSession(
                 {
                     title: song.name,
@@ -3983,7 +3993,6 @@ playPauseBtn.addEventListener('click', () => {
                 playPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
                 playPauseBtn.classList.add('playing');
                 
-                // Conditionally start rotation
                 if (!document.body.classList.contains('reduce-animations')) {
                     document.querySelector('.background-blur').classList.add('rotating');
                 }
@@ -3997,7 +4006,6 @@ playPauseBtn.addEventListener('click', () => {
         Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
         playPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
         playPauseBtn.classList.remove('playing');
-        // Explicitly stop rotation on pause
         document.querySelector('.background-blur').classList.remove('rotating');
         if ('mediaSession' in navigator) updateMediaSessionPlaybackState('paused');
     }
