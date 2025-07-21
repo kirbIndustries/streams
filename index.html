@@ -1100,6 +1100,107 @@
             background-color: var(--glass-border);
             margin: 8px 0;
         }
+
+        .view-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* --- Grid View Styles --- */
+        .music-list.grid-view {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 15px;
+            align-content: start;
+        }
+
+        .music-list.grid-view .album-section {
+            padding: 0;
+            border-top: none; /* No dividers in grid view */
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .music-list.grid-view .album-header {
+            margin-bottom: 8px;
+            flex-direction: column;
+            gap: 8px;
+            cursor: default; /* No dragging albums in grid view */
+        }
+
+        .music-list.grid-view .album-thumbnail {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
+        }
+
+        .music-list.grid-view .album-info {
+            width: 100%;
+            text-align: left;
+        }
+
+        .music-list.grid-view .album-name {
+            font-size: 1em;
+            white-space: normal;
+        }
+        
+        .music-list.grid-view .album-artist {
+            font-size: 0.85em;
+        }
+        
+        .music-list.grid-view .album-year {
+            display: none; /* Hide year in grid view for space */
+        }
+
+        .music-list.grid-view .album-songs {
+            display: none; /* Hide individual songs in album grid view */
+        }
+
+        /* Song-level grid view */
+        .music-list.grid-view.songs-mode .music-item,
+        .music-list.grid-view.artists-mode .music-item {
+             padding: 8px;
+             display: flex;
+             flex-direction: column;
+             gap: 8px;
+             align-items: center;
+             text-align: center;
+        }
+        .music-list.grid-view.songs-mode .song-info,
+        .music-list.grid-view.artists-mode .song-info {
+            flex-direction: column;
+            gap: 8px;
+        }
+        .music-list.grid-view.songs-mode .album-thumbnail,
+        .music-list.grid-view.artists-mode .album-thumbnail {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            margin-right: 0;
+        }
+        .music-list.grid-view.songs-mode .song-title,
+        .music-list.grid-view.artists-mode div[style*="font-size: 1em;"] {
+            white-space: normal;
+        }
+
+        /* --- Song Context Menu Styles --- */
+        .music-item .song-actions,
+        .album-header .song-actions {
+            position: absolute;
+            right: 8px;
+            top: 8px;
+            background: var(--search-background);
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            z-index: 5;
+        }
     </style>
 </head>
 <body data-app-name="Music">
@@ -1172,6 +1273,14 @@
             </div>
         </div>
         <div id="sidebar-header-controls"></div>
+        <div class="view-controls">
+            <button id="toggleViewBtn" class="upload-btn" style="padding: 10px;">
+                <span class="material-symbols-rounded">grid_view</span>
+            </button>
+            <button id="sortBtn" class="upload-btn" style="flex-grow: 1;">
+                <span class="material-symbols-rounded">sort</span> Sort by: <span id="sort-mode-display">Date Added</span>
+            </button>
+        </div>
         <div class="music-list"></div>
         <div id="upload-controls-container" style="display: flex; gap: 10px;">
             <button id="scrollToCurrentBtn" class="goto-btn">
@@ -1358,6 +1467,17 @@
         </div>
     </div>
 
+    <div id="songContextMenu" class="more-options-menu" style="width: auto;">
+        <div class="menu-item" id="menuAddToQueueNext">
+            <span class="material-symbols-rounded">playlist_play</span>
+            <span>Play Next</span>
+        </div>
+        <div class="menu-item" id="menuAddToQueueLast">
+            <span class="material-symbols-rounded">playlist_add</span>
+            <span>Add to Queue</span>
+        </div>
+    </div>
+
     <script>
         const musicList = document.querySelector('.music-list');
         const musicUpload = document.getElementById('musicUpload');
@@ -1415,6 +1535,8 @@
         let eqBass, eqMid, eqTreble; // Add these for the EQ
         let playlists = [];
         let playlistModal, sleepTimerModal;
+        let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
+        let currentViewMode = 'list'; // 'list', 'grid'
 
         function openModal(modal) {
             if (modal) modal.classList.add('visible');
@@ -2893,16 +3015,6 @@ function renderSongs(filteredSongs = null) {
     return;
   }
   
-  // Sort albums by album order or date
-  albums.sort((a, b) => {
-    let songA = a.songs[0];
-    let songB = b.songs[0];
-    if (songA.albumOrder !== undefined && songB.albumOrder !== undefined) {
-      return songA.albumOrder - songB.albumOrder;
-    }
-    return songA.dateAdded - songB.dateAdded;
-  });
-  
   musicListContainer.innerHTML = albums.map(album => `
     <div class="album-section">
       <div class="album-header">
@@ -2912,11 +3024,6 @@ function renderSongs(filteredSongs = null) {
           <div class="album-artist">${album.artist}</div>
           <div class="album-year">${album.year}</div>
         </div>
-        <div class="album-actions" style="display: none;">
-          <button class="delete-album" data-album="${album.name}">
-            <span class="material-symbols-rounded">delete</span>
-          </button>
-        </div>
       </div>
       <div class="album-songs">
         ${album.songs.map(song => `
@@ -2924,17 +3031,15 @@ function renderSongs(filteredSongs = null) {
             <div class="song-info">
               <span class="track-number">${song.trackNumber ? song.trackNumber + "." : ""}</span>
               <span class="song-title">${song.name}</span>
-              <span class="play-control" style="display:none;"></span>
             </div>
+            <button class="song-actions" data-id="${song.id}">
+                <span class="material-symbols-rounded" style="font-size: 8px;">circle</span>
+            </button>
           </div>
         `).join("")}
       </div>
     </div>
   `).join("");
-  
-  if (playQueue.length === 0) {
-    updatePlayQueue();
-  }
   
   attachSongAndAlbumEventListeners();
 }
@@ -3043,6 +3148,13 @@ function attachSongAndAlbumEventListeners() {
       if (song) playSong(song);
     });
   });
+
+  document.querySelectorAll('.song-actions').forEach(button => {
+      button.addEventListener('click', (e) => {
+          const songId = parseFloat(button.dataset.id);
+          openSongContextMenu(e, songId);
+      });
+  });
   
   document.querySelectorAll('.delete-album').forEach(button => {
     button.addEventListener('click', async (e) => {
@@ -3061,6 +3173,60 @@ function attachSongAndAlbumEventListeners() {
       }
     });
   });
+}
+
+function rebuildQueueFromCurrentView() {
+    const newQueue = [];
+    const currentViewItems = document.querySelectorAll('.music-list .music-item');
+    
+    currentViewItems.forEach(item => {
+        const songId = parseFloat(item.dataset.id);
+        const song = songs.find(s => s.id === songId);
+        if (song) {
+            newQueue.push(song);
+        }
+    });
+
+    playQueue = newQueue;
+    isQueueUserModified = false; // This is now an automatic queue
+    console.log(`Queue rebuilt from current view. ${playQueue.length} songs.`);
+    if (sidebarView === 'queue') renderQueue();
+}
+
+function addToQueue(songId, position = 'last') {
+    const song = songs.find(s => s.id === songId);
+    if (!song) return;
+
+    if (position === 'next') {
+        playQueue.splice(currentQueueIndex + 1, 0, song);
+    } else { // 'last'
+        playQueue.push(song);
+    }
+
+    isQueueUserModified = true; // Any manual addition modifies the queue
+    Gurasuraisu.showPopup(`Added "${song.name}" to queue.`);
+    if (sidebarView === 'queue') renderQueue(); // Refresh if queue is visible
+}
+
+function openSongContextMenu(event, songId) {
+    event.stopPropagation(); // Prevent the click from playing the song
+    const contextMenu = document.getElementById('songContextMenu');
+    
+    // Attach actions
+    document.getElementById('menuAddToQueueNext').onclick = () => {
+        addToQueue(songId, 'next');
+        contextMenu.classList.remove('visible');
+    };
+    document.getElementById('menuAddToQueueLast').onclick = () => {
+        addToQueue(songId, 'last');
+        contextMenu.classList.remove('visible');
+    };
+
+    // Position and show menu
+    const rect = event.currentTarget.getBoundingClientRect();
+    contextMenu.style.top = `${rect.bottom}px`;
+    contextMenu.style.left = `${rect.left}px`;
+    contextMenu.classList.add('visible');
 }
 
 async function playSong(song, { isTransition = false } = {}) {
@@ -3082,11 +3248,12 @@ async function playSong(song, { isTransition = false } = {}) {
             return;
         }
 
+        // If the user plays a song that isn't in the current queue,
+        // or if the queue is user-modified and they click a new song,
+        // rebuild the queue based on the current library view.
         const songIndexInQueue = playQueue.findIndex(s => s.id === song.id);
-
-        if (songIndexInQueue === -1) {
-            isQueueUserModified = false; 
-            updatePlayQueue(); 
+        if (songIndexInQueue === -1 || isQueueUserModified) {
+            rebuildQueueFromCurrentView();
         }
 
         currentSongId = song.id;
@@ -3682,7 +3849,6 @@ function groupSongsByAlbum(songsToRender) {
   const albums = {};
   
   songsToRender.forEach(song => {
-    // The key MUST include the album artist to distinguish between different artists' albums with the same name.
     const albumArtistName = song.albumArtist || song.artist || 'Unknown Artist';
     const albumName = song.album || 'Unknown Album';
     const albumKey = `${albumArtistName}::${albumName}::${song.effectiveDiscNumber}`;
@@ -3691,32 +3857,48 @@ function groupSongsByAlbum(songsToRender) {
       const albumDisplayName = song.effectiveDiscNumber > 1 ? `${albumName} (Disc ${song.effectiveDiscNumber})` : albumName;
       albums[albumKey] = {
         name: albumDisplayName,
-        // Display the correct ALBUM artist, not the track artist.
         artist: albumArtistName,
         year: song.year,
         albumArt: song.albumArt,
         songs: [],
         originalAlbum: albumName,
         originalAlbumArtist: albumArtistName,
-        effectiveDiscNumber: song.effectiveDiscNumber
+        effectiveDiscNumber: song.effectiveDiscNumber,
+        // Store the date of the first song in the album for sorting
+        dateAdded: song.dateAdded 
       };
     }
     albums[albumKey].songs.push(song);
   });
   
-  // Sort the songs *within* each album group by track number.
   for (let albumKey in albums) {
     albums[albumKey].songs.sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
   }
   
-  // Sort the final list of album groups logically: by Album Artist, then Album Name, then Disc Number.
-  return Object.values(albums).sort((a, b) => {
-     const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
-     if (artistCompare !== 0) return artistCompare;
-     const albumCompare = a.originalAlbum.localeCompare(b.originalAlbum);
-     if (albumCompare !== 0) return albumCompare;
-     return a.effectiveDiscNumber - b.effectiveDiscNumber;
-  });
+  let albumArray = Object.values(albums);
+  
+  if (currentSortMode === 'dateAdded') {
+      // Primary sort: newest first (descending date)
+      // Secondary sort: alphabetical by artist, then album
+      albumArray.sort((a, b) => {
+          if (b.dateAdded !== a.dateAdded) {
+              return b.dateAdded - a.dateAdded;
+          }
+          const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
+          if (artistCompare !== 0) return artistCompare;
+          return a.originalAlbum.localeCompare(b.originalAlbum);
+      });
+  } else { // 'alpha'
+      // Primary sort: alphabetical by artist, then album, then disc number
+      albumArray.sort((a, b) => {
+         const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
+         if (artistCompare !== 0) return artistCompare;
+         const albumCompare = a.originalAlbum.localeCompare(b.originalAlbum);
+         if (albumCompare !== 0) return albumCompare;
+         return a.effectiveDiscNumber - b.effectiveDiscNumber;
+      });
+  }
+  return albumArray;
 }
 
 function groupSongsByAlbum(songs) {
@@ -4183,6 +4365,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                     openSidebar();
                 }
             }
+        });
+
+        const toggleViewBtn = document.getElementById('toggleViewBtn');
+        const sortBtn = document.getElementById('sortBtn');
+        const sortModeDisplay = document.getElementById('sort-mode-display');
+    
+        toggleViewBtn.addEventListener('click', () => {
+            currentViewMode = currentViewMode === 'list' ? 'grid' : 'list';
+            musicList.classList.toggle('grid-view', currentViewMode === 'grid');
+            toggleViewBtn.innerHTML = `<span class="material-symbols-rounded">${currentViewMode === 'list' ? 'grid_view' : 'view_list'}</span>`;
+            renderSidebar(); // Re-render to apply view-specific templates if needed
+        });
+    
+        sortBtn.addEventListener('click', () => {
+            currentSortMode = currentSortMode === 'dateAdded' ? 'alpha' : 'dateAdded';
+            sortModeDisplay.textContent = currentSortMode === 'dateAdded' ? 'Date Added' : 'Alphabetical';
+            renderSidebar();
+        });
+    
+        // Close context menu when clicking anywhere else
+        document.addEventListener('click', () => {
+            document.getElementById('songContextMenu').classList.remove('visible');
         });
 
         document.querySelector('.queue-button').addEventListener('click', () => {
