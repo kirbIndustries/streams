@@ -2834,8 +2834,10 @@ function renderSidebar() {
             if (activeAlbum) {
                 const albumSongs = songs.filter(s => s.albumArtist === activeAlbum.artist && s.album === activeAlbum.name);
                 addBackButton('All Albums', () => { activeAlbum = null; renderSidebar(); });
-                renderSongs(albumSongs);
-                return; // Stop further processing
+                // When inside an album, ALWAYS render as a list, regardless of view mode.
+                musicList.classList.remove('grid-view'); 
+                renderSongsAsList(albumSongs);
+                return; 
             }
             
             const artistName = musicListContainer.dataset.activeArtist;
