@@ -287,6 +287,74 @@
             margin-bottom: 20px;
         }
 
+        .library-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .search-container {
+            position: relative;
+            flex-grow: 1;
+            min-width: 200px;
+        }
+
+        .library-search-input {
+            width: 100%;
+            padding: 10px 15px 10px 45px;
+            border-radius: 25px;
+            border: 1px solid var(--glass-border);
+            background: var(--search-background);
+            color: var(--text-color);
+            backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .search-icon {
+            font-size: 22px;
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--secondary-text-color);
+            pointer-events: none;
+        }
+
+        .filter-container, .view-controls, .library-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .filter-container .filter-btn {
+            padding: 8px;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            font-size: 0; /* Hide text */
+        }
+        .filter-container .filter-btn .material-symbols-rounded {
+            font-size: 22px;
+        }
+        
+        .action-btn {
+            background-color: var(--search-background);
+            color: var(--text-color);
+            border: none;
+            border-radius: 50px;
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 42px;
+            backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
+            border: 1px solid var(--glass-border);
+        }
+
           @keyframes fadeInOut {
             0% { opacity: 0; transform: translate(-50%, 20px); }
             10% { opacity: 1; transform: translate(-50%, 0); }
@@ -1471,7 +1539,32 @@
         <!-- Home page content will be built here in a later step -->
     </div>
     <div id="library-view" class="view-container" style="display: none;">
-        <!-- Library page content will be built here in a later step -->
+        <div class="page-content-wrapper">
+            <div class="library-controls">
+                <div class="search-container">
+                    <span class="material-symbols-rounded search-icon">search</span>
+                    <input type="text" id="searchInput" placeholder="Search your library" class="library-search-input">
+                </div>
+                <div class="filter-container">
+                    <button class="filter-btn active" data-filter="albums"><span class="material-symbols-rounded">album</span></button>
+                    <button class="filter-btn" data-filter="artists"><span class="material-symbols-rounded">artist</span></button>
+                    <button class="filter-btn" data-filter="songs"><span class="material-symbols-rounded">music_note</span></button>
+                    <button class="filter-btn" data-filter="playlists"><span class="material-symbols-rounded">queue_music</span></button>
+                </div>
+                <div class="view-controls">
+                    <button id="sortBtn" class="action-btn"><span class="material-symbols-rounded">sort_by_alpha</span><span id="sort-mode-display"></span></button>
+                    <button id="toggleViewBtn" class="action-btn"><span class="material-symbols-rounded">dashboard</span></button>
+                </div>
+                 <div class="library-actions">
+                    <button class="action-btn" id="uploadBtn"><span class="material-symbols-rounded">add</span> Add Music</button>
+                    <button class="action-btn" id="manageFoldersBtn"><span class="material-symbols-rounded">folder_managed</span></button>
+                </div>
+            </div>
+            <div id="library-grid" class="item-grid">
+                <!-- Library content will be rendered here -->
+            </div>
+             <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
+        </div>
     </div>
     <div id="search-view" class="view-container" style="display: none;">
         <!-- Search page content will be built here in a later step -->
@@ -1785,7 +1878,11 @@ function setView(viewName) {
 
     // Toggle visibility of view containers
     viewContainers.forEach(container => {
-        container.style.display = (container.id === `${viewName}-view`) ? 'flex' : 'none';
+        const isVisible = container.id === `${viewName}-view`;
+        container.style.display = isVisible ? 'flex' : 'none';
+        if (isVisible && viewName === 'library') {
+            renderLibraryPage(); // <-- ADD THIS LINE
+        }
     });
 
     const distortionContainer = document.getElementById('distortion-container');
@@ -2687,6 +2784,65 @@ function processAndSortSongs() {
             lastTrack = song.trackNumber || 0;
         });
     }
+}
+
+function renderLibraryPage() {
+    const libraryGrid = document.getElementById('library-grid');
+    if (!libraryGrid) return;
+    
+    libraryGrid.innerHTML = ''; // Clear previous results
+
+    const query = searchInput ? searchInput.value.toLowerCase() : '';
+    const searchFilteredSongs = query ? songs.filter(s => 
+        s.name.toLowerCase().includes(query) ||
+        s.artist.toLowerCase().includes(query) ||
+        s.album.toLowerCase().includes(query)
+    ) : songs;
+
+    if (searchFilteredSongs.length === 0) {
+        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>`;
+        return;
+    }
+
+    let itemsHtml = '';
+    
+    // Based on the active filter, generate the content
+    switch (currentFilter) {
+        case 'artists':
+            // Artist rendering logic will go here
+            break;
+        case 'songs':
+            // Song rendering logic will go here
+            break;
+        case 'playlists':
+            // Playlist rendering logic will go here
+            break;
+        case 'albums':
+        default:
+            const albums = groupSongsByAlbum(searchFilteredSongs);
+            itemsHtml = albums.map(album => `
+                <div class="item-card" data-album-id="${album.artist}::${album.originalAlbum}">
+                    <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${album.name}</div>
+                        <div class="item-card-subtitle">${album.artist}</div>
+                    </div>
+                </div>
+            `).join('');
+            break;
+    }
+    
+    libraryGrid.innerHTML = itemsHtml;
+
+    // Attach event listeners to the newly created cards
+    libraryGrid.querySelectorAll('.item-card').forEach(card => {
+        card.addEventListener('click', () => {
+            // Find first song of the album and play it
+            const [artist, albumName] = card.dataset.albumId.split('::');
+            const songToPlay = songs.find(s => s.albumArtist === artist && s.album === albumName);
+            if(songToPlay) playSong(songToPlay);
+        });
+    });
 }
 
 function renderPlaylists() {
@@ -3868,12 +4024,49 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         await initDB();
         searchInput = document.getElementById('searchInput');
+        const musicUploadInput = document.getElementById('musicUpload');
         
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => {
-                sidebarScrollPosition = 0;
+                if (activeView === 'library') {
+                    renderLibraryPage();
+                }
             }, 300);
+        });
+
+        document.getElementById('uploadBtn').addEventListener('click', async () => {
+            if ('showDirectoryPicker' in window) {
+                try {
+                    const handle = await window.showDirectoryPicker();
+                    if (await verifyPermission(handle, true)) {
+                        directoryHandles.push(handle);
+                        const tx = db.transaction('config', 'readwrite');
+                        tx.objectStore('config').put({ key: 'directoryHandles', value: directoryHandles });
+                        await tx.done;
+                        await processDirectory(handle);
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') console.error('Error picking directory:', err);
+                }
+            } else {
+                musicUploadInput.click();
+            }
+        });
+
+        musicUploadInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) addSongs(e.target.files, 'indexeddb');
+        });
+        
+        document.querySelectorAll('.filter-container .filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelector('.filter-container .filter-btn.active').classList.remove('active');
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                if (activeView === 'library') {
+                    renderLibraryPage();
+                }
+            });
         });
 
         shardContainer = document.getElementById('distortion-container');
