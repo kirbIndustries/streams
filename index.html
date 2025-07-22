@@ -2159,8 +2159,6 @@ async function addSongs(files, storageType) {
             await tx.done;
         }
     }
-    
-    renderSidebar();
 }
 
 async function scanForNewSongs() {
@@ -2240,7 +2238,6 @@ async function loadSongsFromStorage() {
         songs = loadedSongs || [];
         processAndSortSongs();
         updatePlayQueue();
-        renderSidebar();
     } catch (error) {
         console.error('Error loading songs from storage:', error);
     }
@@ -2625,152 +2622,6 @@ function processAndSortSongs() {
         });
     }
 }
-        
-function renderSidebar() {
-    const musicListContainer = document.querySelector('.music-list');
-    if (musicListContainer) sidebarScrollPosition = musicListContainer.scrollTop;
-    
-    const searchContainer = document.querySelector('.search-container');
-    const sidebarTitleEl = document.querySelector('.sidebar-title');
-    const filterContainer = document.querySelector('.filter-container');
-    const scrollToCurrentBtn = document.getElementById('scrollToCurrentBtn');
-    const viewControls = document.querySelector('.view-controls');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const manageFoldersBtn = document.getElementById('manageFoldersBtn');
-    const headerControlsContainer = document.getElementById('sidebar-header-controls');
-
-    musicListContainer.innerHTML = '';
-    headerControlsContainer.innerHTML = '';
-
-    document.querySelector('.lyrics-button').classList.toggle('active', sidebarView === 'lyrics');
-    document.querySelector('.queue-button').classList.toggle('active', sidebarView === 'queue');
-    
-    const addBackButton = (buttonText, onClickAction) => {
-        const backButton = document.createElement('button');
-        backButton.className = 'sidebar-back-btn';
-        backButton.innerHTML = `<span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> ${buttonText}`;
-        backButton.onclick = onClickAction;
-        headerControlsContainer.appendChild(backButton);
-    };
-
-    switch (sidebarView) {
-        case 'lyrics':
-            searchContainer.style.display = 'none';
-            filterContainer.style.display = 'none';
-            scrollToCurrentBtn.style.display = 'none';
-            uploadBtn.style.display = 'none';
-            viewControls.style.display = 'none';
-            manageFoldersBtn.style.display = 'none';
-            sidebarTitleEl.textContent = 'Lyrics';
-            addBackButton('Library', () => { sidebarView = 'library'; renderSidebar(); });
-            renderLyrics();
-            break;
-        case 'queue':
-            searchContainer.style.display = 'none';
-            filterContainer.style.display = 'none';
-            uploadBtn.style.display = 'none';
-            viewControls.style.display = 'none';
-            manageFoldersBtn.style.display = 'none';
-            scrollToCurrentBtn.style.display = 'flex'; 
-            sidebarTitleEl.textContent = 'Up Next';
-            addBackButton('Library', () => { sidebarView = 'library'; renderSidebar(); });
-            renderQueue();
-            break;
-        case 'library':
-        default:
-            searchContainer.style.display = 'block';
-            filterContainer.style.display = 'flex';
-            scrollToCurrentBtn.style.display = 'flex';
-            uploadBtn.style.display = 'flex';
-            viewControls.style.display = 'flex';
-            manageFoldersBtn.style.display = 'flex';
-            sidebarTitleEl.textContent = 'Library';
-            
-            const query = searchInput ? searchInput.value.toLowerCase() : '';
-            const searchFilteredSongs = query ? songs.filter(s => 
-                s.name.toLowerCase().includes(query) ||
-                s.artist.toLowerCase().includes(query) ||
-                s.album.toLowerCase().includes(query)
-            ) : songs;
-            
-            if (activeAlbum) {
-                const albumSongs = songs.filter(s => s.albumArtist === activeAlbum.artist && s.album === activeAlbum.name);
-                addBackButton('All Albums', () => { activeAlbum = null; renderSidebar(); });
-                musicList.classList.remove('grid-view'); 
-                renderSongsAsList(albumSongs);
-                return; 
-            }
-            
-            const artistName = musicListContainer.dataset.activeArtist;
-            if (artistName) {
-                addBackButton('All Artists', () => { delete musicListContainer.dataset.activeArtist; renderSidebar(); });
-                const artistAlbums = groupSongsByAlbum(songs.filter(s => s.artist === artistName));
-                renderSongs(artistAlbums, true); // True indicates we are rendering albums for an artist
-                return;
-            } 
-
-            switch (currentFilter) {
-                case 'artists':
-                    const artistsMap = new Map();
-                    searchFilteredSongs.forEach(song => {
-                        const artist = song.artist || 'Unknown Artist';
-                        if (!artistsMap.has(artist)) {
-                            artistsMap.set(artist, { art: song.albumArt, date: song.dateAdded });
-                        } else if (song.dateAdded > artistsMap.get(artist).date) {
-                            artistsMap.get(artist).art = song.albumArt;
-                            artistsMap.get(artist).date = song.dateAdded;
-                        }
-                    });
-
-                    let artistsList = Array.from(artistsMap.entries());
-                    if (currentSortMode === 'dateAdded') artistsList.sort((a, b) => b[1].date - a[1].date);
-                    else artistsList.sort((a, b) => a[0].localeCompare(b[0]));
-
-                    musicListContainer.innerHTML = artistsList.map(([artist, data]) => `
-                        <div class="music-item" data-artist="${artist}" style="cursor: pointer;">
-                            <div class="song-info">
-                                 <img src="${data.art || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 5px;">
-                                <div style="font-size: 1em;">${artist}</div>
-                            </div>
-                        </div>
-                    `).join('');
-                    
-                    // Specific listener for artist drill-down
-                    musicListContainer.querySelectorAll('div[data-artist]').forEach(item => {
-                        item.addEventListener('click', () => {
-                            musicListContainer.dataset.activeArtist = item.dataset.artist;
-                            sidebarScrollPosition = 0;
-                            renderSidebar();
-                        });
-                    });
-                    break;
-                case 'songs':
-                    if (currentSortMode === 'dateAdded') searchFilteredSongs.sort((a, b) => b.dateAdded - a.dateAdded);
-                    else searchFilteredSongs.sort((a, b) => a.name.localeCompare(b.name));
-                    
-                    renderSongsAsList(searchFilteredSongs);
-                    break;
-                case 'playlists':
-                    if (activePlaylistId) {
-                        addBackButton('Playlists', () => { activePlaylistId = null; renderSidebar(); });
-                        renderPlaylistSongs(activePlaylistId);
-                    } else {
-                        renderPlaylists();
-                    }
-                    break;
-                case 'albums':
-                default:
-                    const albums = groupSongsByAlbum(searchFilteredSongs);
-                    renderSongs(albums);
-                    break;
-            }
-            break;
-    }
-
-    if (musicListContainer) {
-        musicListContainer.scrollTop = sidebarScrollPosition;
-    }
-}
 
 function renderPlaylists() {
     const musicListContainer = document.querySelector('.music-list');
@@ -3036,7 +2887,6 @@ function attachSongAndAlbumEventListeners() {
                   artist: albumEl.dataset.albumArtist,
                   name: albumEl.dataset.albumName
               };
-              renderSidebar();
           });
       });
   } else {
@@ -3048,7 +2898,6 @@ function attachSongAndAlbumEventListeners() {
                   artist: albumSection.dataset.albumArtist,
                   name: albumSection.dataset.albumName
               };
-              renderSidebar();
           });
       });
   }
@@ -3145,9 +2994,6 @@ async function playSong(song) {
         // Update both the main player and the miniplayer
         updatePlayerUI(song);
         updateMiniplayerUI(song, 'paused'); // Initially show as paused
-
-        // Re-render the library list to show the new 'active' song
-        if (activeView === 'library') renderSidebar();
 
         // Register media session
         Gurasuraisu.registerMediaSession(
@@ -3303,7 +3149,6 @@ async function removeFolder(folderName) {
     
     await saveSongs();
     openManageFoldersModal(); 
-    renderSidebar();
 }
       
         function attachEventListeners() {
@@ -3366,7 +3211,6 @@ async function removeFolder(folderName) {
             } else {
                 updatePlayQueue();
             }
-            renderSidebar();
         }
         
         function openEditModal(songId) {
@@ -3397,7 +3241,6 @@ async function removeFolder(folderName) {
             }
 
             await saveSongs();
-            renderSidebar();
             closeModal(editModal);
         }
 
@@ -3569,7 +3412,6 @@ function cleanupBlobs() {
 }
         
 function searchSongs(query) {
-    renderSidebar();
 }
         
 function toggleShuffle() {
@@ -3801,9 +3643,6 @@ window.addEventListener("load", async () => {
                 }
             }
         }
-        
-        renderSidebar();
-
     } catch (error) {
         console.error('Critical error on application load:', error);
     }
@@ -3958,7 +3797,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => {
                 sidebarScrollPosition = 0;
-                renderSidebar();
             }, 300);
         });
 
@@ -3967,16 +3805,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         initVisualizer();
         setupMediaSessionActions();
         attachEventListeners();
-        
-        document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelector('.filter-btn.active[data-filter]').classList.remove('active');
-                btn.classList.add('active');
-                currentFilter = btn.dataset.filter;
-                sidebarScrollPosition = 0;
-                renderSidebar();
-            });
-        });
 
         document.getElementById('shuffleBtn').addEventListener('click', toggleShuffle);
         document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
@@ -3987,25 +3815,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             sidebarView = isShowingLyrics ? 'library' : 'lyrics';
             if (isMobile && !isShowingLyrics) openSidebar();
             else if (isMobile && isShowingLyrics) closeSidebar();
-            else renderSidebar();
-        });
-
-        const toggleViewBtn = document.getElementById('toggleViewBtn');
-        const sortBtn = document.getElementById('sortBtn');
-        const sortModeDisplay = document.getElementById('sort-mode-display');
-    
-        toggleViewBtn.addEventListener('click', () => {
-            currentViewMode = currentViewMode === 'list' ? 'grid' : 'list';
-            musicList.classList.toggle('grid-view', currentViewMode === 'grid');
-            toggleViewBtn.innerHTML = `<span class="material-symbols-rounded">${currentViewMode === 'list' ? 'dashboard' : 'table_rows'}</span>`;
-            renderSidebar();
-        });
-    
-        sortBtn.addEventListener('click', () => {
-            currentSortMode = currentSortMode === 'dateAdded' ? 'alpha' : 'dateAdded';
-            sortModeDisplay.textContent = currentSortMode === 'dateAdded' ? 'Date' : 'ABC';
-            sidebarScrollPosition = 0;
-            renderSidebar();
         });
     
         document.addEventListener('click', (e) => {
@@ -4020,7 +3829,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             sidebarView = isShowingQueue ? 'library' : 'queue';
             if (isMobile && !isShowingQueue) openSidebar();
             else if (isMobile && isShowingQueue) closeSidebar();
-            else renderSidebar();
         });
         
         tabBtns.forEach(btn => {
@@ -4167,7 +3975,6 @@ async function loadSongsAndPlaylists() {
                 document.getElementById('newPlaylistName').value = '';
                 closeModal(playlistModal);
                 Gurasuraisu.showPopup(`Added song to new playlist "${newName}"`);
-                renderSidebar();
             } catch (error) {
                 console.error("Failed to create playlist:", error);
             }
