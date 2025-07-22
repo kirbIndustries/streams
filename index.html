@@ -1444,6 +1444,25 @@
             white-space: normal;
         }
 
+        .item-list {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .album-section-list {
+            border-radius: 12px;
+            cursor: pointer;
+            padding: 10px;
+        }
+        .album-section-list:hover {
+            background-color: var(--search-background);
+        }
+        .album-header-list {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
         /* --- Song Context Menu Styles --- */
         .music-item .song-actions,
         .album-header .song-actions {
@@ -1799,6 +1818,9 @@
         let isPanelVisible = false;
         let panelContent = null; // 'lyrics' or 'queue'
         let isFullscreen = false;
+        let activeAlbumId = null;
+        let activeArtistName = null;
+        let activePlaylistId = null;
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
         const miniplayer = document.getElementById('bottom-miniplayer');
@@ -2777,11 +2799,22 @@ function processAndSortSongs() {
 
 function renderLibraryPage() {
     const libraryGrid = document.getElementById('library-grid');
+    const searchInput = document.getElementById('searchInput');
     if (!libraryGrid) return;
-    
-    libraryGrid.innerHTML = ''; // Clear previous results
 
-    const query = searchInput ? searchInput.value.toLowerCase() : '';
+    // Handle drill-down views first
+    if (activeAlbumId) {
+        renderAlbumSongsView(activeAlbumId);
+        return;
+    }
+    if (activeArtistName) {
+        renderArtistAlbumsView(activeArtistName);
+        return;
+    }
+    // Add activePlaylistId check here later
+
+    // Default view
+    const query = searchInput.value.toLowerCase();
     const searchFilteredSongs = query ? songs.filter(s => 
         s.name.toLowerCase().includes(query) ||
         s.artist.toLowerCase().includes(query) ||
@@ -2792,48 +2825,123 @@ function renderLibraryPage() {
         libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>`;
         return;
     }
-
-    let itemsHtml = '';
     
-    // Based on the active filter, generate the content
+    let itemsHtml = '';
+    libraryGrid.className = (currentViewMode === 'grid') ? 'item-grid' : 'item-list'; // Use a different class for list view
+
     switch (currentFilter) {
         case 'artists':
-            // Artist rendering logic will go here
+            const artistsMap = new Map();
+            searchFilteredSongs.forEach(song => {
+                const artist = song.artist || 'Unknown Artist';
+                if (!artistsMap.has(artist)) {
+                    artistsMap.set(artist, song.albumArt);
+                }
+            });
+            let artistsList = Array.from(artistsMap.entries());
+            if (currentSortMode === 'alpha') artistsList.sort((a, b) => a[0].localeCompare(b[0]));
+            
+            itemsHtml = artistsList.map(([artist, art]) => `
+                <div class="item-card" data-artist-name="${artist}">
+                    <img src="${art || generateRandomGradient()}" alt="${artist}" class="item-card-art" style="border-radius: 50%;">
+                    <div class="item-card-info" style="text-align: center;">
+                        <div class="item-card-title">${artist}</div>
+                    </div>
+                </div>`).join('');
             break;
+        
         case 'songs':
-            // Song rendering logic will go here
-            break;
-        case 'playlists':
-            // Playlist rendering logic will go here
-            break;
-        case 'albums':
-        default:
-            const albums = groupSongsByAlbum(searchFilteredSongs);
-            itemsHtml = albums.map(album => `
-                <div class="item-card" data-album-id="${album.artist}::${album.originalAlbum}">
-                    <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
-                    <div class="item-card-info">
-                        <div class="item-card-title">${album.name}</div>
-                        <div class="item-card-subtitle">${album.artist}</div>
+             if (currentSortMode === 'alpha') searchFilteredSongs.sort((a,b) => a.name.localeCompare(b.name));
+             else searchFilteredSongs.sort((a,b) => b.dateAdded - a.dateAdded);
+
+            itemsHtml = searchFilteredSongs.map(song => `
+                <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                     <div class="song-info">
+                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
+                        <div>
+                            <div class="song-title">${song.name}</div>
+                            <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                        </div>
                     </div>
                 </div>
             `).join('');
             break;
+
+        case 'albums':
+        default:
+            const albums = groupSongsByAlbum(searchFilteredSongs);
+            itemsHtml = albums.map(album => {
+                const albumId = `${album.artist}::${album.originalAlbum}`;
+                if (currentViewMode === 'grid') {
+                    return `
+                    <div class="item-card" data-album-id="${albumId}">
+                        <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+                        <div class="item-card-info">
+                            <div class="item-card-title">${album.name}</div>
+                            <div class="item-card-subtitle">${album.artist}</div>
+                        </div>
+                    </div>`;
+                } else { // List view
+                    return `
+                    <div class="album-section-list" data-album-id="${albumId}">
+                        <div class="album-header-list">
+                            <img src="${album.albumArt}" class="album-thumbnail">
+                            <div class="album-info">
+                                <div class="album-name">${album.name}</div>
+                                <div class="album-artist">${album.artist} • ${album.songs.length} songs</div>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+            }).join('');
+            break;
     }
     
     libraryGrid.innerHTML = itemsHtml;
-
-    // Attach event listeners to the newly created cards
-    libraryGrid.querySelectorAll('.item-card').forEach(card => {
-        card.addEventListener('click', () => {
-            // Find first song of the album and play it
-            const [artist, albumName] = card.dataset.albumId.split('::');
-            const songToPlay = songs.find(s => s.albumArtist === artist && s.album === albumName);
-            if(songToPlay) playSong(songToPlay);
-        });
-    });
 }
 
+function renderAlbumSongsView(albumId) {
+    const libraryGrid = document.getElementById('library-grid');
+    const [artist, albumName] = albumId.split('::');
+    const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName)
+                           .sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+    
+    const backButton = `<button id="back-to-library-btn" class="action-btn" style="margin-bottom: 20px;"><span class="material-symbols-rounded">arrow_back</span> Back to Albums</button>`;
+    
+    const songsHtml = albumSongs.map(song => `
+        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+            <div class="song-info">
+                <span class="track-number">${song.trackNumber || '•'}</span>
+                <div class="song-title">${song.name}</div>
+            </div>
+        </div>
+    `).join('');
+
+    libraryGrid.className = 'item-list';
+    libraryGrid.innerHTML = backButton + songsHtml;
+}
+
+function renderArtistAlbumsView(artistName) {
+    const libraryGrid = document.getElementById('library-grid');
+    const artistSongs = songs.filter(s => s.artist === artistName);
+    const artistAlbums = groupSongsByAlbum(artistSongs);
+
+    const backButton = `<button id="back-to-library-btn" class="action-btn" style="margin-bottom: 20px;"><span class="material-symbols-rounded">arrow_back</span> Back to Artists</button>`;
+    const albumsHtml = artistAlbums.map(album => {
+        const albumId = `${album.artist}::${album.originalAlbum}`;
+        return `
+        <div class="item-card" data-album-id="${albumId}">
+            <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+            <div class="item-card-info">
+                <div class="item-card-title">${album.name}</div>
+            </div>
+        </div>`;
+    }).join('');
+
+    libraryGrid.className = 'item-grid';
+    libraryGrid.innerHTML = backButton + albumsHtml;
+}
+        
 function renderPlaylists() {
     const musicListContainer = document.querySelector('.music-list');
     musicListContainer.innerHTML = ''; 
@@ -4031,14 +4139,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         await initDB();
         searchInput = document.getElementById('searchInput');
         const musicUploadInput = document.getElementById('musicUpload');
+        const libraryGrid = document.getElementById('library-grid');
         
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
+            // Clear drill-down state on new search
+            activeAlbumId = null;
+            activeArtistName = null;
             searchTimeout = setTimeout(() => {
-                if (activeView === 'library') {
-                    renderLibraryPage();
-                }
+                if (activeView === 'library') renderLibraryPage();
             }, 300);
+        });
+
+        libraryGrid.addEventListener('click', (e) => {
+            const songItem = e.target.closest('.music-item[data-id]');
+            const albumCard = e.target.closest('.item-card[data-album-id], .album-section-list[data-album-id]');
+            const artistCard = e.target.closest('.item-card[data-artist-name]');
+            const backButton = e.target.closest('#back-to-library-btn');
+
+            if (songItem) {
+                const songId = parseFloat(songItem.dataset.id);
+                const song = songs.find(s => s.id === songId);
+                if (song) playSong(song);
+            } else if (albumCard) {
+                activeAlbumId = albumCard.dataset.albumId;
+                renderLibraryPage();
+            } else if (artistCard) {
+                activeArtistName = artistCard.dataset.artistName;
+                renderLibraryPage();
+            } else if (backButton) {
+                activeAlbumId = null;
+                activeArtistName = null;
+                renderLibraryPage();
+            }
         });
 
         document.getElementById('uploadBtn').addEventListener('click', async () => {
@@ -4066,13 +4199,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         document.querySelectorAll('.filter-container .filter-btn').forEach(btn => {
             btn.addEventListener('click', () => {
+                // Clear drill-down state when changing filter
+                activeAlbumId = null;
+                activeArtistName = null;
                 document.querySelector('.filter-container .filter-btn.active').classList.remove('active');
                 btn.classList.add('active');
                 currentFilter = btn.dataset.filter;
-                if (activeView === 'library') {
-                    renderLibraryPage();
-                }
+                if (activeView === 'library') renderLibraryPage();
             });
+        });
+
+        const sortBtn = document.getElementById('sortBtn');
+        const sortModeDisplay = document.getElementById('sort-mode-display');
+        const toggleViewBtn = document.getElementById('toggleViewBtn');
+
+        sortBtn.addEventListener('click', () => {
+            // Toggle the sort mode
+            currentSortMode = currentSortMode === 'alpha' ? 'dateAdded' : 'alpha';
+            
+            // Update the button's appearance
+            if (currentSortMode === 'alpha') {
+                sortBtn.innerHTML = `<span class="material-symbols-rounded">sort_by_alpha</span><span id="sort-mode-display"></span>`;
+            } else {
+                sortBtn.innerHTML = `<span class="material-symbols-rounded">history</span><span id="sort-mode-display"></span>`;
+            }
+            
+            // Re-render the library with the new sorting
+            renderLibraryPage();
+        });
+
+        toggleViewBtn.addEventListener('click', () => {
+            // Toggle the view mode
+            currentViewMode = currentViewMode === 'list' ? 'grid' : 'list';
+            
+            // Update the button's icon
+            if (currentViewMode === 'list') {
+                toggleViewBtn.innerHTML = `<span class="material-symbols-rounded">dashboard</span>`;
+            } else {
+                toggleViewBtn.innerHTML = `<span class="material-symbols-rounded">list</span>`;
+            }
+            
+            // Re-render the library with the new view
+            renderLibraryPage();
         });
 
         shardContainer = document.getElementById('distortion-container');
