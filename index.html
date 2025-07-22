@@ -1792,6 +1792,8 @@
         const storedLightMode = localStorage.getItem('theme') || 'dark';
 
         let activeView = 'home'; // 'home', 'library', 'search', 'nowPlaying'
+        let isPanelVisible = false;
+        let panelContent = null; // 'lyrics' or 'queue'
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
         const miniplayer = document.getElementById('bottom-miniplayer');
@@ -4083,8 +4085,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
 
         const lyricsQueuePanel = document.getElementById('lyrics-queue-panel');
-        let isPanelVisible = false;
-        let panelContent = null; // 'lyrics' or 'queue'
+        isPanelVisible = false;
+        panelContent = null; // 'lyrics' or 'queue'
 
         const togglePanel = (newContent) => {
             if (isPanelVisible && panelContent === newContent) {
