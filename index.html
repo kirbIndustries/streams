@@ -3194,6 +3194,11 @@ function addToQueue(songId, position = 'last') {
         currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
     }
     
+    // Ensure currentQueueIndex is valid before splicing
+    if (currentQueueIndex === -1) {
+        currentQueueIndex = playQueue.length - 1;
+    }
+    
     if (position === 'next') {
         playQueue.splice(currentQueueIndex + 1, 0, song);
     } else { 
@@ -3202,7 +3207,11 @@ function addToQueue(songId, position = 'last') {
 
     isQueueUserModified = true; 
     Gurasuraisu.showPopup(`Added "${song.name}" to queue.`);
-    if (sidebarView === 'queue') renderQueue(); 
+    
+    // Corrected check: if the queue panel is visible, re-render it
+    if (isPanelVisible && panelContent === 'queue') {
+        renderQueue();
+    }
 }
 
 function openSongContextMenu(event, songId) {
@@ -3666,7 +3675,10 @@ function toggleRepeat() {
 function updatePlayQueue() {
     if (isQueueUserModified) {
         currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
-        if (sidebarView === 'queue') renderQueue();
+        // Corrected check: if the queue panel is visible, re-render it
+        if (isPanelVisible && panelContent === 'queue') {
+            renderQueue();
+        }
         return;
     }
 
@@ -3693,7 +3705,10 @@ function updatePlayQueue() {
     }
     
     currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
-    if (sidebarView === 'queue') renderQueue();
+    // Corrected check: if the queue panel is visible, re-render it
+    if (isPanelVisible && panelContent === 'queue') {
+        renderQueue();
+    }
 }
         
 function groupSongsByAlbum(songsToRender) {
@@ -4102,14 +4117,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!e.target.closest('#songContextMenu') && !e.target.closest('.song-actions')) {
                 document.getElementById('songContextMenu').classList.remove('visible');
             }
-        });
-
-        document.querySelector('.queue-button').addEventListener('click', () => {
-            const isMobile = window.innerWidth <= 800;
-            const isShowingQueue = sidebarView === 'queue';
-            sidebarView = isShowingQueue ? 'library' : 'queue';
-            if (isMobile && !isShowingQueue) openSidebar();
-            else if (isMobile && isShowingQueue) closeSidebar();
         });
         
         tabBtns.forEach(btn => {
