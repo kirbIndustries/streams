@@ -1339,28 +1339,19 @@
             transition: opacity 0.4s ease, transform 0.4s ease;
             pointer-events: none;
             overflow: auto;
+            position: absolute;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%) translateX(20px);
+            z-index: 5;
+            width: 90%;
+            max-width: 400px;
         }
-
+        
         #lyrics-queue-panel.visible {
             opacity: 1;
-            transform: translateX(0);
+            transform: translateY(-50%) translateX(0);
             pointer-events: auto;
-        }
-
-        /* Responsive adjustment for the sidebar */
-        @media (max-width: 1000px) {
-            #lyrics-queue-panel {
-                position: absolute;
-                top: 50%;
-                right: 20px;
-                transform: translateY(-50%) translateX(20px);
-                z-index: 5;
-                width: 90%;
-                max-width: 400px;
-            }
-            #lyrics-queue-panel.visible {
-                 transform: translateY(-50%) translateX(0);
-            }
         }
 
         /* --- Grid View Styles --- */
