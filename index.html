@@ -1798,6 +1798,7 @@
         let activeView = 'home'; // 'home', 'library', 'search', 'nowPlaying'
         let isPanelVisible = false;
         let panelContent = null; // 'lyrics' or 'queue'
+        let isFullscreen = false;
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
         const miniplayer = document.getElementById('bottom-miniplayer');
@@ -1869,6 +1870,7 @@
 
 function setView(viewName) {
     activeView = viewName;
+    const isNowPlaying = (viewName === 'nowPlaying');
 
     // Update tab buttons state
     tabBtns.forEach(btn => {
@@ -1877,35 +1879,23 @@ function setView(viewName) {
 
     // Toggle visibility of view containers
     viewContainers.forEach(container => {
-        const isVisible = container.id === `${viewName}-view`;
-        container.style.display = isVisible ? 'flex' : 'none';
-        if (isVisible && viewName === 'library') {
-            renderLibraryPage(); // <-- ADD THIS LINE
-        }
+        container.style.display = (container.id === `${viewName}-view`) ? 'flex' : 'none';
     });
 
-    const distortionContainer = document.getElementById('distortion-container');
-    const isNowPlaying = (viewName === 'nowPlaying');
-
-    // Manage visibility of core UI elements
-    toolbar.classList.toggle('hidden', isNowPlaying);
-    miniplayer.classList.toggle('hidden', isNowPlaying || !currentSongId);
-    
-    // Manage performance-intensive distortion effect
-    distortionContainer.style.display = isNowPlaying ? 'block' : 'none';
-    if (isVisualizerInitialized) {
-        if (isNowPlaying) {
-             if (audioContext.state === 'suspended') audioContext.resume();
-        } else {
-            // No need to pause, as the animation only runs when the element is visible
-        }
+    // If we are switching to Now Playing, ensure the UI is populated with the current song
+    if (isNowPlaying && currentSongId) {
+        const song = songs.find(s => s.id === currentSongId);
+        if (song) updatePlayerUI(song);
     }
+    
+    // Manage visibility of core UI elements
+    toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen); // Only hide if both are true
+    updateMiniplayerUI(songs.find(s => s.id === currentSongId), audioPlayer.paused ? 'paused' : 'playing');
 
-    // If switching to a main view, ensure body is scrollable
-    if (!isNowPlaying) {
-        document.body.style.overflow = 'hidden';
-    } else {
-        document.body.style.overflow = 'hidden'; // Now playing view is also self-contained
+    // Manage performance-intensive distortion effect
+    document.getElementById('distortion-container').style.display = isNowPlaying ? 'block' : 'none';
+    if (isVisualizerInitialized && isNowPlaying && audioContext.state === 'suspended') {
+        audioContext.resume();
     }
 }
      
@@ -3293,6 +3283,12 @@ async function playSong(song) {
 }
 
 function updateMiniplayerUI(song, state) {
+    // If we are on the Now Playing screen, the miniplayer should ALWAYS be hidden.
+    if (activeView === 'nowPlaying') {
+        miniplayer.classList.add('hidden');
+        return;
+    }
+
     if (!song || !currentSongId) {
         miniplayer.classList.add('hidden');
         return;
@@ -4115,7 +4111,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelector('.queue-button').addEventListener('click', () => togglePanel('queue'));
         
         document.querySelector('.fullscreen-btn').addEventListener('click', () => {
-            toolbar.classList.toggle('hidden');
+            isFullscreen = !isFullscreen; // Toggle the state
+            toolbar.classList.toggle('hidden', isFullscreen); // Update toolbar based on new state
         });
         
         document.addEventListener('click', (e) => {
