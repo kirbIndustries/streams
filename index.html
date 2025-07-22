@@ -3389,6 +3389,9 @@ async function playSong(song) {
         updateMediaSessionMetadata(song);
 
         await audioPlayer.play();
+
+        playPauseIcon.textContent = 'pause';
+        playPauseBtn.classList.add('playing'); 
         
         updateMiniplayerUI(song, 'playing');
 
@@ -3402,7 +3405,7 @@ async function playSong(song) {
 
 function updateMiniplayerUI(song, state) {
     // If we are on the Now Playing screen, the miniplayer should ALWAYS be hidden.
-    if (activeView === 'nowPlaying') {
+    if (activeView === 'now-playing') {
         miniplayer.classList.add('hidden');
         return;
     }
