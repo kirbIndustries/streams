@@ -3911,7 +3911,7 @@ audioPlayer.addEventListener('timeupdate', async () => {
              playNextSong({ isTransition: true });
         }
 
-        if (song && song.lrcData && sidebarView === 'lyrics') {
+        if (song && song.lrcData && isPanelVisible && panelContent === 'lyrics') {
             const currentTime = audioPlayer.currentTime;
             let newLrcLineIndex = -1;
 
