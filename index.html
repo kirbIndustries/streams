@@ -4407,7 +4407,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => renderSidebar(), 300); // Re-render with search
+            searchTimeout = setTimeout(() => {
+                sidebarScrollPosition = 0; // Reset scroll on new search
+                renderSidebar();
+            }, 300);
         });
 
         shardContainer = document.getElementById('distortion-container');
@@ -4421,6 +4424,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.querySelector('.filter-btn.active').classList.remove('active');
                 btn.classList.add('active');
                 currentFilter = btn.dataset.filter;
+                // --- START: SCROLL FIX ---
+                sidebarScrollPosition = 0; // Reset scroll on filter change
+                // --- END: SCROLL FIX ---
                 renderSidebar();
             });
         });
@@ -4463,6 +4469,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         sortBtn.addEventListener('click', () => {
             currentSortMode = currentSortMode === 'dateAdded' ? 'alpha' : 'dateAdded';
             sortModeDisplay.textContent = currentSortMode === 'dateAdded' ? 'Date' : 'ABC';
+            // --- START: SCROLL FIX ---
+            sidebarScrollPosition = 0; // Reset scroll on sort change
+            // --- END: SCROLL FIX ---
             renderSidebar();
         });
     
