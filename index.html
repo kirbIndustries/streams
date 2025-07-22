@@ -3372,13 +3372,21 @@ async function playSong(song) {
         // Update both the main player and the miniplayer
         updatePlayerUI(song);
         updateMiniplayerUI(song, 'paused'); // Initially show as paused
+        updateMediaSessionMetadata(song);
 
         // Register media session
         Gurasuraisu.registerMediaSession(
             { title: song.name, artist: song.artist, artwork: [{ src: song.albumArt }] },
             ['playPause', 'next', 'prev']
         );
-        updateMediaSessionMetadata(song);
+
+        if (isPanelVisible) {
+            if (panelContent === 'lyrics') {
+                renderLyrics();
+            } else if (panelContent === 'queue') {
+                renderQueue(); // Re-render queue to update the '.active' highlight
+            }
+        }
 
         await audioPlayer.play();
 
