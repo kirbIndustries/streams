@@ -1543,6 +1543,7 @@
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let currentViewMode = 'list'; // 'list', 'grid'
         let activeAlbum = null; // Will store { artist, name } of the selected album
+        let sidebarScrollPosition = 0;
 
         function openModal(modal) {
             if (modal) modal.classList.add('visible');
@@ -2756,6 +2757,11 @@ function processAndSortSongs() {
         
 function renderSidebar() {
     const musicListContainer = document.querySelector('.music-list');
+
+    if (musicListContainer) {
+        sidebarScrollPosition = musicListContainer.scrollTop;
+    }
+    
     const searchContainer = document.querySelector('.search-container');
     const sidebarTitleEl = document.querySelector('.sidebar-title');
     const filterContainer = document.querySelector('.filter-container');
@@ -2914,6 +2920,10 @@ function renderSidebar() {
                     break;
             }
             break;
+    }
+
+    if (musicListContainer) {
+        musicListContainer.scrollTop = sidebarScrollPosition;
     }
 }
 
@@ -3075,6 +3085,26 @@ function renderSongs(filteredSongs = null) {
   `).join("");
   
   attachSongAndAlbumEventListeners();
+}
+
+function renderSongsAsList(songsToRender) {
+    const musicListContainer = document.querySelector('.music-list');
+    musicListContainer.innerHTML = songsToRender.map(song => `
+        <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
+            <div class="song-info">
+                    <span class="track-number">${song.trackNumber ? song.trackNumber + "." : ""}</span>
+                    <span class="song-title">${song.name}</span>
+                </div>
+                <button class="song-actions" data-id="${song.id}">
+                    <span class="material-symbols-rounded" style="font-size: 8px;">circle</span>
+                </button>
+            </div>
+            <button class="song-actions" data-id="${song.id}">
+                <span class="material-symbols-rounded" style="font-size: 8px;">circle</span>
+            </button>
+        </div>
+    `).join('');
+    attachSongAndAlbumEventListeners();
 }
         
 async function renderLyrics() {
