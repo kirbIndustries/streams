@@ -3903,6 +3903,7 @@ function updatePlayQueue() {
 function groupSongsByAlbum(songsToRender) {
   const albums = {};
   
+  // Phase 1: Group all songs by their unique album identifier.
   songsToRender.forEach(song => {
     const albumArtistName = song.albumArtist || song.artist || 'Unknown Artist';
     const albumName = song.album || 'Unknown Album';
@@ -3919,34 +3920,26 @@ function groupSongsByAlbum(songsToRender) {
         originalAlbum: albumName,
         originalAlbumArtist: albumArtistName,
         effectiveDiscNumber: song.effectiveDiscNumber,
-        // Use the newest dateAdded timestamp to represent the album's date
-        dateAdded: song.dateAdded 
+        dateAdded: 0 // Initialize date
       };
-    } else if (song.dateAdded > albums[albumKey].dateAdded) {
-        // If we find a newer song in the same album, update the album's date to match
-        albums[albumKey].dateAdded = song.dateAdded;
     }
     albums[albumKey].songs.push(song);
   });
   
-  for (let albumKey in albums) {
-    albums[albumKey].songs.sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+  // Phase 2: Now that all songs are grouped, find the true "newest" date for each album.
+  for (let key in albums) {
+      albums[key].dateAdded = Math.max(...albums[key].songs.map(s => s.dateAdded));
+      albums[key].songs.sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
   }
   
+  // Phase 3: Sort the finalized list of albums.
   let albumArray = Object.values(albums);
   
   if (currentSortMode === 'dateAdded') {
-      // Primary sort: newest first (descending date). Secondary: alphabetical.
-      albumArray.sort((a, b) => {
-          if (b.dateAdded !== a.dateAdded) {
-              return b.dateAdded - a.dateAdded; // THIS IS THE CORRECTED LINE
-          }
-          const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
-          if (artistCompare !== 0) return artistCompare;
-          return a.originalAlbum.localeCompare(b.originalAlbum);
-      });
+      // Sort by newest first (descending).
+      albumArray.sort((a, b) => b.dateAdded - a.dateAdded);
   } else { // 'alpha'
-      // Primary sort: alphabetical by artist, then album, then disc number.
+      // Sort alphabetically by artist, then album, then disc number.
       albumArray.sort((a, b) => {
          const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
          if (artistCompare !== 0) return artistCompare;
@@ -4583,9 +4576,19 @@ async function loadSongsAndPlaylists() {
             songRequest.onsuccess = () => resolve(songRequest.result);
             songRequest.onerror = () => reject(songRequest.error);
         });
-        songs = Array.isArray(loadedSongs) ? loadedSongs : [];
         
-        // Call the new processing function to calculate effective disc numbers.
+        songs = Array.isArray(loadedSongs) ? loadedSongs : [];
+
+        // --- START: DATA INTEGRITY FIX ---
+        // Ensure every song has a dateAdded property for reliable sorting.
+        // This provides backward compatibility for older libraries.
+        songs.forEach(song => {
+            if (!song.dateAdded) {
+                song.dateAdded = song.id; // Fallback to using the ID as a pseudo-date
+            }
+        });
+        // --- END: DATA INTEGRITY FIX ---
+        
         processAndSortSongs();
 
         const playlistTx = db.transaction('playlists', 'readonly');
@@ -4601,7 +4604,7 @@ async function loadSongsAndPlaylists() {
 
     } catch (error) {
         console.error("Failed to load data from IndexedDB:", error);
-        songs = []; // Ensure arrays are empty on failure
+        songs = []; 
         playlists = [];
     }
 }
