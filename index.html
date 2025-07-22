@@ -160,6 +160,7 @@
             padding: 80px 20px 0 20px;
             overflow-y: auto;
             overflow-x: hidden;
+            min-height: 0;
         }
 
         .view-container::-webkit-scrollbar { width: 8px; }
@@ -3129,21 +3130,59 @@ function attachSongAndAlbumEventListeners() {
 
 function rebuildQueueFromCurrentView() {
     const newQueue = [];
-    // This query is intentionally broad to capture any song/album rendered in the library
-    const currentViewItems = document.querySelectorAll('.music-list .music-item[data-id]');
-    
-    currentViewItems.forEach(item => {
-        const songId = parseFloat(item.dataset.id);
-        const song = songs.find(s => s.id === songId);
-        if (song && !newQueue.some(s => s.id === song.id)) { // Avoid duplicates
-            newQueue.push(song);
-        }
-    });
+    let songItems;
 
-    playQueue = newQueue;
+    // Determine where to source the song list from based on the active view
+    if (activeView === 'library') {
+        songItems = document.querySelectorAll('#library-grid .item-card[data-album-id]');
+    } else if (activeView === 'search') {
+        // We will add search logic later, for now, it can be empty
+        songItems = document.querySelectorAll('#search-view .item-card');
+    } else {
+        // Default or Home view, we can source from the entire song list for now
+        playQueue = [...songs]; // Fallback to all songs
+        console.log(`Queue rebuilt from all songs. ${playQueue.length} songs.`);
+        isQueueUserModified = false;
+        return;
+    }
+
+    if (songItems.length > 0) {
+        // This part needs to be adapted based on what each view renders.
+        // For the library's album view:
+        if (activeView === 'library' && currentFilter === 'albums') {
+            const albumSongs = [];
+            songItems.forEach(card => {
+                const [artist, albumName] = card.dataset.albumId.split('::');
+                const songsFromAlbum = songs.filter(s => s.albumArtist === artist && s.album === albumName);
+                albumSongs.push(...songsFromAlbum);
+            });
+            // Remove duplicates in case albums are shown multiple times
+            const uniqueIds = new Set();
+            playQueue = albumSongs.filter(song => {
+                const isDuplicate = uniqueIds.has(song.id);
+                uniqueIds.add(song.id);
+                return !isDuplicate;
+            });
+
+        } else {
+             // Fallback for other potential views (like song list view later)
+             songItems.forEach(item => {
+                const songId = parseFloat(item.dataset.id);
+                const song = songs.find(s => s.id === songId);
+                if (song && !newQueue.some(s => s.id === song.id)) {
+                    newQueue.push(song);
+                }
+            });
+            playQueue = newQueue;
+        }
+
+    } else {
+        // If the view is empty, just use the full song list
+        playQueue = [...songs];
+    }
+    
+    console.log(`Queue rebuilt from ${activeView} view. ${playQueue.length} songs.`);
     isQueueUserModified = false; 
-    console.log(`Queue rebuilt from current view. ${playQueue.length} songs.`);
-    if (sidebarView === 'queue') renderQueue();
 }
 
 function addToQueue(songId, position = 'last') {
