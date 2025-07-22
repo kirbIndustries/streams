@@ -202,7 +202,7 @@
         #miniplayer-art {
             width: 44px;
             height: 44px;
-            border-radius: 16px;
+            border-radius: 12px;
             flex-shrink: 0;
         }
         .miniplayer-info {
@@ -1991,6 +1991,7 @@ function resetPlayer() {
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
     currentSongId = null;
+    updateMiniplayerUI(null);
     playQueue = [];
     currentQueueIndex = -1;
 
@@ -3986,6 +3987,7 @@ window.addEventListener("load", async () => {
             const song = songs.find(s => s.id === id);
             if (song) {
                 updatePlayerUI(song);
+                updateMiniplayerUI(song, 'paused');
                 playPauseIcon.textContent = 'play_arrow';
                 playPauseBtn.classList.remove('playing');
                 currentSongId = song.id;
