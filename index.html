@@ -1888,7 +1888,7 @@
 
 function setView(viewName) {
     activeView = viewName;
-    const isNowPlaying = (viewName === 'nowPlaying');
+    const isNowPlaying = (viewName === 'now-playing');
 
     // Update tab buttons state
     tabBtns.forEach(btn => {
@@ -1897,7 +1897,20 @@ function setView(viewName) {
 
     // Toggle visibility of view containers
     viewContainers.forEach(container => {
-        container.style.display = (container.id === `${viewName}-view`) ? 'flex' : 'none';
+        const isVisible = container.id === `${viewName}-view`;
+        container.style.display = isVisible ? 'flex' : 'none';
+
+        // --- THIS IS THE CRITICAL FIX FOR INITIAL RENDERING ---
+        if (isVisible) {
+            if (viewName === 'library') {
+                renderLibraryPage();
+            } else if (viewName === 'home') {
+                // We will build renderHomePage() in the next step.
+                // For now, let's add a placeholder.
+                const homeView = document.getElementById('home-view');
+                if (homeView) homeView.innerHTML = `<div class="page-content-wrapper"><h1 class="section-title">Home</h1></div>`;
+            }
+        }
     });
 
     // If we are switching to Now Playing, ensure the UI is populated with the current song
@@ -1907,7 +1920,7 @@ function setView(viewName) {
     }
     
     // Manage visibility of core UI elements
-    toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen); // Only hide if both are true
+    toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
     updateMiniplayerUI(songs.find(s => s.id === currentSongId), audioPlayer.paused ? 'paused' : 'playing');
 
     // Manage performance-intensive distortion effect
@@ -4294,7 +4307,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         miniplayer.addEventListener('click', (e) => {
             // Do nothing if a control button was clicked
             if (e.target.closest('.mini-control-btn')) return;
-            setView('nowPlaying');
+            setView('now-playing');
         });
         
         // Wire up miniplayer controls
