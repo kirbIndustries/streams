@@ -2729,7 +2729,7 @@ function initVisualizer() {
                 const value = Math.min(dataArray[barIndices[i]] * sensitivityMultipliers[i], 255);
                 const barHeight = Math.pow(value / 255, powerCurve) * canvas.height;
                 
-                const pillRadius = barWidth / 2;
+                const pillRadius = Math.max(0, barWidth / 2);
                 if (barHeight < pillRadius * 2) {
                     const dotRadius = barHeight / 2;
                     if (dotRadius < 1) continue;
@@ -3382,47 +3382,6 @@ async function removeFolder(folderName) {
     await saveSongs();
     openManageFoldersModal(); 
 }
-      
-        function attachEventListeners() {
-            const moreButton = document.querySelector('.more-button');
-            const moreOptionsMenu = document.getElementById('moreOptionsMenu');
-
-            document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
-            
-            moreButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (currentSongId) moreOptionsMenu.classList.toggle('visible');
-                else Gurasuraisu.showPopup('No song is currently playing.');
-            });
-
-            document.addEventListener('click', () => moreOptionsMenu.classList.remove('visible'));
-
-            document.getElementById('menuDeleteSong').addEventListener('click', async () => {
-                if (currentSongId && confirm('Delete this song? This is permanent.')) await deleteSong(currentSongId);
-                moreOptionsMenu.classList.remove('visible');
-            });
-            
-            document.getElementById('menuEditMetadata').addEventListener('click', () => { if (currentSongId) openEditModal(currentSongId); moreOptionsMenu.classList.remove('visible'); });
-            document.getElementById('menuCrossfade').addEventListener('click', toggleCrossfade);
-            document.getElementById('menuSleepTimer').addEventListener('click', () => { openModal(sleepTimerModal); moreOptionsMenu.classList.remove('visible'); });
-            document.getElementById('menuAddToPlaylist').addEventListener('click', () => { if (currentSongId) openPlaylistModal(); moreOptionsMenu.classList.remove('visible'); });
-            document.getElementById('menuEqualizer').addEventListener('click', () => { openModal(equalizerModal); moreOptionsMenu.classList.remove('visible'); });
-
-            document.getElementById('scrollToCurrentBtn').addEventListener('click', () => {
-                if (!currentSongId) return;
-                const musicListContainer = document.querySelector('.music-list');
-                const currentSongElement = musicListContainer.querySelector(`.music-item[data-id="${currentSongId}"]`); 
-        
-                if (musicListContainer && currentSongElement) {
-                    const scrollTarget = currentSongElement.closest('.album-section') || currentSongElement;
-                    const containerHeight = musicListContainer.clientHeight;
-                    const targetScrollTop = scrollTarget.offsetTop - (containerHeight / 2) + (scrollTarget.clientHeight / 2);
-                    musicListContainer.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
-                } else {
-                    Gurasuraisu.showPopup('Playing song not found in current view.');
-                }
-            });
-        }
 
         async function deleteSong(songIdToDelete) {
             const songIndex = songs.findIndex(s => s.id === songIdToDelete);
@@ -4073,7 +4032,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         initializeShards(); 
         initVisualizer();
         setupMediaSessionActions();
-        attachEventListeners();
 
         document.getElementById('shuffleBtn').addEventListener('click', toggleShuffle);
         document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
@@ -4139,6 +4097,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         miniplayerPlayBtn.addEventListener('click', () => playPauseBtn.click());
         document.getElementById('miniplayer-next-btn').addEventListener('click', () => nextBtn.click());
         document.getElementById('miniplayer-prev-btn').addEventListener('click', () => prevBtn.click());
+
+        const nowPlayingView = document.getElementById('now-playing-view');
+        const moreButton = nowPlayingView.querySelector('.more-button');
+        const moreOptionsMenu = document.getElementById('moreOptionsMenu');
+
+        moreButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentSongId) moreOptionsMenu.classList.toggle('visible');
+            else Gurasuraisu.showPopup('No song is currently playing.');
+        });
+
+        document.addEventListener('click', (e) => {
+            // Close menu if clicking outside of it or its trigger button
+            if (!e.target.closest('#moreOptionsMenu') && !e.target.closest('.more-button')) {
+                moreOptionsMenu.classList.remove('visible');
+            }
+        });
+
+        document.getElementById('menuDeleteSong').addEventListener('click', async () => {
+            if (currentSongId && confirm('Delete this song? This is permanent.')) await deleteSong(currentSongId);
+            moreOptionsMenu.classList.remove('visible');
+        });
+        
+        document.getElementById('menuEditMetadata').addEventListener('click', () => { if (currentSongId) openEditModal(currentSongId); moreOptionsMenu.classList.remove('visible'); });
+        document.getElementById('menuCrossfade').addEventListener('click', toggleCrossfade);
+        document.getElementById('menuSleepTimer').addEventListener('click', () => { openModal(sleepTimerModal); moreOptionsMenu.classList.remove('visible'); });
+        document.getElementById('menuAddToPlaylist').addEventListener('click', () => { if (currentSongId) openPlaylistModal(); moreOptionsMenu.classList.remove('visible'); });
+        document.getElementById('menuEqualizer').addEventListener('click', () => { openModal(equalizerModal); moreOptionsMenu.classList.remove('visible'); });
+
+        document.getElementById('shuffleBtn').addEventListener('click', toggleShuffle);
+        document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
+
+        document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
 
         // Initialize the first view
         setView('home');
