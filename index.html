@@ -1543,7 +1543,6 @@
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let currentViewMode = 'list'; // 'list', 'grid'
         let activeAlbum = null; // Will store { artist, name } of the selected album
-        let sidebarScrollPosition = 0;
 
         function openModal(modal) {
             if (modal) modal.classList.add('visible');
@@ -2757,11 +2756,6 @@ function processAndSortSongs() {
         
 function renderSidebar() {
     const musicListContainer = document.querySelector('.music-list');
-
-    if (musicListContainer) {
-        sidebarScrollPosition = musicListContainer.scrollTop;
-    }
-    
     const searchContainer = document.querySelector('.search-container');
     const sidebarTitleEl = document.querySelector('.sidebar-title');
     const filterContainer = document.querySelector('.filter-container');
@@ -2840,10 +2834,8 @@ function renderSidebar() {
             if (activeAlbum) {
                 const albumSongs = songs.filter(s => s.albumArtist === activeAlbum.artist && s.album === activeAlbum.name);
                 addBackButton('All Albums', () => { activeAlbum = null; renderSidebar(); });
-                // When inside an album, ALWAYS render as a list, regardless of view mode.
-                musicList.classList.remove('grid-view'); 
-                renderSongsAsList(albumSongs);
-                return; 
+                renderSongs(albumSongs);
+                return; // Stop further processing
             }
             
             const artistName = musicListContainer.dataset.activeArtist;
@@ -2920,10 +2912,6 @@ function renderSidebar() {
                     break;
             }
             break;
-    }
-
-    if (musicListContainer) {
-        musicListContainer.scrollTop = sidebarScrollPosition;
     }
 }
 
@@ -3085,26 +3073,6 @@ function renderSongs(filteredSongs = null) {
   `).join("");
   
   attachSongAndAlbumEventListeners();
-}
-
-function renderSongsAsList(songsToRender) {
-    const musicListContainer = document.querySelector('.music-list');
-    musicListContainer.innerHTML = songsToRender.map(song => `
-        <div class="music-item ${song.id === currentSongId ? "active" : ""}" data-id="${song.id}">
-            <div class="song-info">
-                    <span class="track-number">${song.trackNumber ? song.trackNumber + "." : ""}</span>
-                    <span class="song-title">${song.name}</span>
-                </div>
-                <button class="song-actions" data-id="${song.id}">
-                    <span class="material-symbols-rounded" style="font-size: 8px;">circle</span>
-                </button>
-            </div>
-            <button class="song-actions" data-id="${song.id}">
-                <span class="material-symbols-rounded" style="font-size: 8px;">circle</span>
-            </button>
-        </div>
-    `).join('');
-    attachSongAndAlbumEventListeners();
 }
         
 async function renderLyrics() {
@@ -3935,7 +3903,6 @@ function updatePlayQueue() {
 function groupSongsByAlbum(songsToRender) {
   const albums = {};
   
-  // Phase 1: Group all songs by their unique album identifier.
   songsToRender.forEach(song => {
     const albumArtistName = song.albumArtist || song.artist || 'Unknown Artist';
     const albumName = song.album || 'Unknown Album';
@@ -3952,26 +3919,34 @@ function groupSongsByAlbum(songsToRender) {
         originalAlbum: albumName,
         originalAlbumArtist: albumArtistName,
         effectiveDiscNumber: song.effectiveDiscNumber,
-        dateAdded: 0 // Initialize date
+        // Use the newest dateAdded timestamp to represent the album's date
+        dateAdded: song.dateAdded 
       };
+    } else if (song.dateAdded > albums[albumKey].dateAdded) {
+        // If we find a newer song in the same album, update the album's date to match
+        albums[albumKey].dateAdded = song.dateAdded;
     }
     albums[albumKey].songs.push(song);
   });
   
-  // Phase 2: Now that all songs are grouped, find the true "newest" date for each album.
-  for (let key in albums) {
-      albums[key].dateAdded = Math.max(...albums[key].songs.map(s => s.dateAdded));
-      albums[key].songs.sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+  for (let albumKey in albums) {
+    albums[albumKey].songs.sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
   }
   
-  // Phase 3: Sort the finalized list of albums.
   let albumArray = Object.values(albums);
   
   if (currentSortMode === 'dateAdded') {
-      // Sort by newest first (descending).
-      albumArray.sort((a, b) => b.dateAdded - a.dateAdded);
+      // Primary sort: newest first (descending date). Secondary: alphabetical.
+      albumArray.sort((a, b) => {
+          if (b.dateAdded !== a.dateAdded) {
+              return b.dateAdded - a.dateAdded; // THIS IS THE CORRECTED LINE
+          }
+          const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
+          if (artistCompare !== 0) return artistCompare;
+          return a.originalAlbum.localeCompare(b.originalAlbum);
+      });
   } else { // 'alpha'
-      // Sort alphabetically by artist, then album, then disc number.
+      // Primary sort: alphabetical by artist, then album, then disc number.
       albumArray.sort((a, b) => {
          const artistCompare = a.originalAlbumArtist.localeCompare(b.originalAlbumArtist);
          if (artistCompare !== 0) return artistCompare;
@@ -4407,10 +4382,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                sidebarScrollPosition = 0; // Reset scroll on new search
-                renderSidebar();
-            }, 300);
+            searchTimeout = setTimeout(() => renderSidebar(), 300); // Re-render with search
         });
 
         shardContainer = document.getElementById('distortion-container');
@@ -4424,9 +4396,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.querySelector('.filter-btn.active').classList.remove('active');
                 btn.classList.add('active');
                 currentFilter = btn.dataset.filter;
-                // --- START: SCROLL FIX ---
-                sidebarScrollPosition = 0; // Reset scroll on filter change
-                // --- END: SCROLL FIX ---
                 renderSidebar();
             });
         });
@@ -4469,9 +4438,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         sortBtn.addEventListener('click', () => {
             currentSortMode = currentSortMode === 'dateAdded' ? 'alpha' : 'dateAdded';
             sortModeDisplay.textContent = currentSortMode === 'dateAdded' ? 'Date' : 'ABC';
-            // --- START: SCROLL FIX ---
-            sidebarScrollPosition = 0; // Reset scroll on sort change
-            // --- END: SCROLL FIX ---
             renderSidebar();
         });
     
@@ -4617,19 +4583,9 @@ async function loadSongsAndPlaylists() {
             songRequest.onsuccess = () => resolve(songRequest.result);
             songRequest.onerror = () => reject(songRequest.error);
         });
-        
         songs = Array.isArray(loadedSongs) ? loadedSongs : [];
-
-        // --- START: DATA INTEGRITY FIX ---
-        // Ensure every song has a dateAdded property for reliable sorting.
-        // This provides backward compatibility for older libraries.
-        songs.forEach(song => {
-            if (!song.dateAdded) {
-                song.dateAdded = song.id; // Fallback to using the ID as a pseudo-date
-            }
-        });
-        // --- END: DATA INTEGRITY FIX ---
         
+        // Call the new processing function to calculate effective disc numbers.
         processAndSortSongs();
 
         const playlistTx = db.transaction('playlists', 'readonly');
@@ -4645,7 +4601,7 @@ async function loadSongsAndPlaylists() {
 
     } catch (error) {
         console.error("Failed to load data from IndexedDB:", error);
-        songs = []; 
+        songs = []; // Ensure arrays are empty on failure
         playlists = [];
     }
 }
