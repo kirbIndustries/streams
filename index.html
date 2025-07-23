@@ -188,7 +188,7 @@
             background-color: var(--search-background);
             border: 1px solid var(--glass-border);
             border-radius: 20px;
-            backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter);
+            backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
             display: flex;
             align-items: center;
             padding: 8px;
@@ -1563,10 +1563,6 @@
     <div id="library-view" class="view-container" style="display: none;">
         <div class="page-content-wrapper">
             <div class="library-controls">
-                <div class="search-container">
-                    <span class="material-symbols-rounded search-icon">search</span>
-                    <input type="text" id="searchInput" placeholder="Search your library" class="library-search-input">
-                </div>
                 <div class="filter-container">
                     <button class="filter-btn active" data-filter="albums"><span class="material-symbols-rounded">album</span></button>
                     <button class="filter-btn" data-filter="artists"><span class="material-symbols-rounded">artist</span></button>
@@ -1575,7 +1571,6 @@
                 </div>
                 <div class="view-controls">
                     <button id="sortBtn" class="action-btn"><span class="material-symbols-rounded">sort_by_alpha</span><span id="sort-mode-display"></span></button>
-                    <button id="toggleViewBtn" class="action-btn"><span class="material-symbols-rounded">dashboard</span></button>
                 </div>
                  <div class="library-actions">
                     <button class="action-btn" id="uploadBtn"><span class="material-symbols-rounded">add</span> Add Music</button>
@@ -1589,7 +1584,15 @@
         </div>
     </div>
     <div id="search-view" class="view-container" style="display: none;">
-        <!-- Search page content will be built here in a later step -->
+        <div class="page-content-wrapper">
+            <div class="search-container" style="margin-bottom: 30px;">
+                <span class="material-symbols-rounded search-icon">search</span>
+                <input type="text" id="searchInput" placeholder="Search for songs, artists, or albums" class="library-search-input">
+            </div>
+            <div id="search-results-grid" class="item-grid">
+                <!-- Search results will appear here -->
+            </div>
+        </div>
     </div>
     <div id="now-playing-view" class="view-container" style="display: none;">
         <div id="distortion-container">
@@ -1876,7 +1879,6 @@
         let playlists = [];
         let playlistModal, sleepTimerModal;
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
-        let currentViewMode = 'list'; // 'list', 'grid'
         let activeAlbum = null; // Will store { artist, name } of the selected album
 
         function openModal(modal) {
@@ -1887,56 +1889,74 @@
             if (modal) modal.classList.remove('visible');
         }
 
-        function showPopupMessage(message) {
-            const popup = document.createElement('div');
-            popup.className = 'popup-message';
-            popup.textContent = message;
-            document.body.appendChild(popup);
-            
-            // The animation is 3s long, remove the element after it's finished
-            setTimeout(() => {
-                popup.remove();
-            }, 3000);
-        }
+function renderSearchResults() {
+    const searchGrid = document.getElementById('search-results-grid');
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    if (!query) {
+        searchGrid.innerHTML = '';
+        return;
+    }
+
+    const results = songs.filter(s => 
+        s.name.toLowerCase().includes(query) ||
+        s.artist.toLowerCase().includes(query) ||
+        s.album.toLowerCase().includes(query)
+    );
+
+    if (results.length === 0) {
+        searchGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No results found for "${query}"</p></div>`;
+        return;
+    }
+    
+    // For now, just show a list of matching songs
+    const resultsHtml = results.map(song => `
+        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+             <div class="song-info">
+                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
+                <div>
+                    <div class="song-title">${song.name}</div>
+                    <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    searchGrid.className = 'item-list'; // Search results are a list
+    searchGrid.innerHTML = resultsHtml;
+}
 
 function setView(viewName) {
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
 
-    // Update tab buttons state
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
     });
 
-    // Toggle visibility of view containers
     viewContainers.forEach(container => {
         const isVisible = container.id === `${viewName}-view`;
         container.style.display = isVisible ? 'flex' : 'none';
 
-        // --- THIS IS THE CRITICAL FIX FOR INITIAL RENDERING ---
         if (isVisible) {
+            container.scrollTop = 0; // <-- THIS IS THE SCROLL RESET
             if (viewName === 'library') {
                 renderLibraryPage();
             } else if (viewName === 'home') {
-                // We will build renderHomePage() in the next step.
-                // For now, let's add a placeholder.
-                const homeView = document.getElementById('home-view');
-                if (homeView) homeView.innerHTML = `<div class="page-content-wrapper"><h1 class="section-title">Home</h1></div>`;
+                renderHomePage(); // We will create this next
+            } else if (viewName === 'search') {
+                // Clear previous search results when switching to the tab
+                document.getElementById('search-results-grid').innerHTML = '';
             }
         }
     });
 
-    // If we are switching to Now Playing, ensure the UI is populated with the current song
     if (isNowPlaying && currentSongId) {
         const song = songs.find(s => s.id === currentSongId);
         if (song) updatePlayerUI(song);
     }
     
-    // Manage visibility of core UI elements
     toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
     updateMiniplayerUI(songs.find(s => s.id === currentSongId), audioPlayer.paused ? 'paused' : 'playing');
 
-    // Manage performance-intensive distortion effect
     document.getElementById('distortion-container').style.display = isNowPlaying ? 'block' : 'none';
     if (isVisualizerInitialized && isNowPlaying && audioContext.state === 'suspended') {
         audioContext.resume();
@@ -2829,24 +2849,24 @@ function renderLibraryPage() {
     // Handle drill-down views first
     if (activeAlbumId) {
         renderAlbumSongsView(activeAlbumId);
-        libraryView.scrollTop = 0; // Always scroll to top of song list
+        libraryView.scrollTop = 0;
         return;
     }
     if (activeArtistName) {
         renderArtistAlbumsView(activeArtistName);
-        libraryView.scrollTop = 0; // Always scroll to top of artist's albums
+        libraryView.scrollTop = 0;
+        return;
+    }
+    if (activePlaylistId) {
+        renderPlaylistSongsView(activePlaylistId);
+        libraryView.scrollTop = 0;
         return;
     }
 
     // Add activePlaylistId check here later
 
-    // --- RENDER MAIN LIBRARY VIEW (Complete Logic) ---
-    const query = searchInput.value.toLowerCase();
-    const searchFilteredSongs = query ? songs.filter(s => 
-        s.name.toLowerCase().includes(query) ||
-        s.artist.toLowerCase().includes(query) ||
-        s.album.toLowerCase().includes(query)
-    ) : songs;
+    // --- RENDER MAIN LIBRARY VIEW ---
+    const searchFilteredSongs = songs; // No search bar here anymore
 
     if (searchFilteredSongs.length === 0) {
         libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>`;
@@ -2854,10 +2874,10 @@ function renderLibraryPage() {
     }
     
     let itemsHtml = ''; // Declare itemsHtml here
-    libraryGrid.className = (currentViewMode === 'grid') ? 'item-grid' : 'item-list'; // Set the view class
 
     switch (currentFilter) {
         case 'artists':
+            libraryGrid.className = 'item-grid';
             const artistsMap = new Map();
             searchFilteredSongs.forEach(song => {
                 const artist = song.artist || 'Unknown Artist';
@@ -2878,6 +2898,7 @@ function renderLibraryPage() {
             break;
         
         case 'songs':
+            libraryGrid.className = 'item-list'; // Enforce list view
              if (currentSortMode === 'alpha') searchFilteredSongs.sort((a,b) => a.name.localeCompare(b.name));
              else searchFilteredSongs.sort((a,b) => b.dateAdded - a.dateAdded);
 
@@ -2894,32 +2915,36 @@ function renderLibraryPage() {
             `).join('');
             break;
 
+        case 'playlists':
+            libraryGrid.className = 'item-grid'; // Enforce grid view
+            itemsHtml = playlists.map(p => {
+                const playlistSongs = p.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+                const art = playlistSongs.length > 0 ? playlistSongs[0].albumArt : generateRandomGradient();
+                return `
+                <div class="item-card" data-playlist-id="${p.id}">
+                    <img src="${art}" alt="${p.name}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${p.name}</div>
+                        <div class="item-card-subtitle">${playlistSongs.length} songs</div>
+                    </div>
+                </div>`;
+            }).join('');
+            break;
+
         case 'albums':
         default:
+            libraryGrid.className = 'item-grid'; // Enforce grid view
             const albums = groupSongsByAlbum(searchFilteredSongs);
             itemsHtml = albums.map(album => {
                 const albumId = `${album.artist}::${album.originalAlbum}`;
-                if (currentViewMode === 'grid') {
-                    return `
-                    <div class="item-card" data-album-id="${albumId}">
-                        <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
-                        <div class="item-card-info">
-                            <div class="item-card-title">${album.name}</div>
-                            <div class="item-card-subtitle">${album.artist}</div>
-                        </div>
-                    </div>`;
-                } else { // List view
-                    return `
-                    <div class="album-section-list" data-album-id="${albumId}">
-                        <div class="album-header-list">
-                            <img src="${album.albumArt}" class="album-thumbnail">
-                            <div class="album-info">
-                                <div class="album-name">${album.name}</div>
-                                <div class="album-artist">${album.artist} • ${album.songs.length} songs</div>
-                            </div>
-                        </div>
-                    </div>`;
-                }
+                return `
+                <div class="item-card" data-album-id="${albumId}">
+                    <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${album.name}</div>
+                        <div class="item-card-subtitle">${album.artist}</div>
+                    </div>
+                </div>`;
             }).join('');
             break;
     }
@@ -3021,6 +3046,29 @@ function renderPlaylists() {
 
         musicListContainer.appendChild(item);
     });
+}
+
+function renderPlaylistSongsView(playlistId) {
+    const libraryGrid = document.getElementById('library-grid');
+    const playlist = playlists.find(p => p.id === playlistId);
+    if (!playlist) return;
+
+    const playlistSongs = playlist.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+
+    const songsHtml = playlistSongs.map(song => `
+        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+             <div class="song-info">
+                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
+                <div>
+                    <div class="song-title">${song.name}</div>
+                    <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    libraryGrid.className = 'item-list';
+    libraryGrid.innerHTML = songsHtml;
 }
 
 function renderPlaylistSongs(playlistId) {
@@ -4199,12 +4247,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
-            // Clear drill-down state on new search
-            activeAlbumId = null;
-            activeArtistName = null;
             searchTimeout = setTimeout(() => {
-                if (activeView === 'library') renderLibraryPage();
+                if (activeView === 'search') {
+                    renderSearchResults();
+                }
             }, 300);
+        });
+
+        document.getElementById('search-results-grid').addEventListener('click', (e) => {
+            const songItem = e.target.closest('.music-item[data-id]');
+            if (songItem) {
+                const songId = parseFloat(songItem.dataset.id);
+                const song = songs.find(s => s.id === songId);
+                if (song) playSong(song);
+            }
         });
 
         libraryGrid.addEventListener('click', (e) => {
@@ -4212,19 +4268,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             const songItem = e.target.closest('.music-item[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id], .album-section-list[data-album-id]');
             const artistCard = e.target.closest('.item-card[data-artist-name]');
-
+            const playlistCard = e.target.closest('.item-card[data-playlist-id]');
+        
             if (songItem) {
                 const songId = parseFloat(songItem.dataset.id);
                 const song = songs.find(s => s.id === songId);
                 if (song) playSong(song);
             } else if (albumCard) {
-                // This now correctly treats all albums the same, including singles.
-                libraryScrollPosition = libraryView.scrollTop; // Store scroll position
+                libraryScrollPosition = libraryView.scrollTop;
                 activeAlbumId = albumCard.dataset.albumId;
                 renderLibraryPage();
             } else if (artistCard) {
-                libraryScrollPosition = libraryView.scrollTop; // Store scroll position
+                libraryScrollPosition = libraryView.scrollTop;
                 activeArtistName = artistCard.dataset.artistName;
+                renderLibraryPage();
+            } else if (playlistCard) {
+                libraryScrollPosition = libraryView.scrollTop;
+                activePlaylistId = parseInt(playlistCard.dataset.playlistId, 10);
                 renderLibraryPage();
             }
         });
@@ -4266,7 +4326,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const sortBtn = document.getElementById('sortBtn');
         const sortModeDisplay = document.getElementById('sort-mode-display');
-        const toggleViewBtn = document.getElementById('toggleViewBtn');
 
         sortBtn.addEventListener('click', () => {
             // Toggle the sort mode
@@ -4280,21 +4339,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             
             // Re-render the library with the new sorting
-            renderLibraryPage();
-        });
-
-        toggleViewBtn.addEventListener('click', () => {
-            // Toggle the view mode
-            currentViewMode = currentViewMode === 'list' ? 'grid' : 'list';
-            
-            // Update the button's icon
-            if (currentViewMode === 'list') {
-                toggleViewBtn.innerHTML = `<span class="material-symbols-rounded">dashboard</span>`;
-            } else {
-                toggleViewBtn.innerHTML = `<span class="material-symbols-rounded">list</span>`;
-            }
-            
-            // Re-render the library with the new view
             renderLibraryPage();
         });
 
@@ -4351,6 +4395,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (activeView === viewName && (activeAlbumId || activeArtistName)) {
                     activeAlbumId = null;
                     activeArtistName = null;
+                    activePlaylistId = null;
                     renderLibraryPage();
                 } else {
                     // Otherwise, just switch the view.
