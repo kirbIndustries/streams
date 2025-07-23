@@ -3100,16 +3100,28 @@ async function renderHomePage() { // Note: now async
     
     // --- Asynchronously populate content and gradients ---
     if (lastPlayed) {
-        const card = document.getElementById('highlight-1');
-        const gradient = await getArtColors(lastPlayed.albumArt);
-        card.style.background = gradient;
-        card.innerHTML = `...`; // Existing inner HTML for highlight card
+        highlightsHtml += `
+        <div class="highlight-card" data-id="${lastPlayed.id}">
+            <img src="${lastPlayed.albumArt}">
+            <div class="highlight-card-info">
+                <div class="highlight-card-label">Listen Again</div>
+                <div class="highlight-card-title">${lastPlayed.name}</div>
+                <div class="highlight-card-subtitle">${lastPlayed.artist}</div>
+            </div>
+            <span class="material-symbols-rounded highlight-card-play">play_circle</span>
+        </div>`;
     }
     if (randomSong) {
-        const card = document.getElementById('highlight-2');
-        const gradient = await getArtColors(randomSong.albumArt);
-        card.style.background = gradient;
-        card.innerHTML = `...`; // Existing inner HTML for highlight card
+         highlightsHtml += `
+        <div class="highlight-card" data-id="${randomSong.id}">
+            <img src="${randomSong.albumArt}">
+            <div class="highlight-card-info">
+                <div class="highlight-card-label">Recommended</div>
+                <div class="highlight-card-title">${randomSong.name}</div>
+                <div class="highlight-card-subtitle">${randomSong.artist}</div>
+            </div>
+            <span class="material-symbols-rounded highlight-card-play">play_circle</span>
+        </div>`;
     }
 
     // --- Recently Played Section (using recently added for now) ---
