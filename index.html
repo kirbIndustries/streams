@@ -2965,35 +2965,14 @@ function processAndSortSongs() {
 }
 
 function renderLibraryPage() {
-    const libraryView = document.getElementById('library-view');
     const libraryGrid = document.getElementById('library-grid');
-    const searchInput = document.getElementById('searchInput');
     if (!libraryGrid) return;
-
-    // Handle drill-down views first
-    if (activeAlbumId) {
-        renderAlbumSongsView(activeAlbumId);
-        libraryView.scrollTop = 0;
-        return;
-    }
-    if (activeArtistName) {
-        renderArtistAlbumsView(activeArtistName);
-        libraryView.scrollTop = 0;
-        return;
-    }
-    if (activePlaylistId) {
-        renderPlaylistSongsView(activePlaylistId);
-        libraryView.scrollTop = 0;
-        return;
-    }
-
-    // Add activePlaylistId check here later
 
     // --- RENDER MAIN LIBRARY VIEW ---
     const searchFilteredSongs = songs; // No search bar here anymore
 
     if (searchFilteredSongs.length === 0) {
-        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>`;
+        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">library_music</span><p>Your library is empty.</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Click "Add Music" to get started.</p></div>`;
         return;
     }
     
@@ -3023,6 +3002,7 @@ function renderLibraryPage() {
         
         case 'songs':
             libraryGrid.className = 'item-list'; // Enforce list view
+            const sortedSongs = [...searchFilteredSongs]; // Create a copy to sort
              if (currentSortMode === 'alpha') searchFilteredSongs.sort((a,b) => a.name.localeCompare(b.name));
              else searchFilteredSongs.sort((a,b) => b.dateAdded - a.dateAdded);
 
@@ -4414,9 +4394,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         document.querySelectorAll('.filter-container .filter-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                // Clear drill-down state when changing filter
-                activeAlbumId = null;
-                activeArtistName = null;
                 document.querySelector('.filter-container .filter-btn.active').classList.remove('active');
                 btn.classList.add('active');
                 currentFilter = btn.dataset.filter;
