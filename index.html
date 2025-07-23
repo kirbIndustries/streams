@@ -3244,7 +3244,7 @@ async function renderHomePage() {
             recentAlbumIds.add(albumId);
             recentAlbums.push(song); // Use the song object as a representative for the album
         }
-        if (recentAlbums.length >= 8) break; // Limit to 8 albums
+        if (recentAlbums.length >= 32) break; // Limit to 32 albums
     }
     const recentlyPlayedHtml = recentAlbums.map(song => `
          <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
