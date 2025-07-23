@@ -923,6 +923,22 @@
             opacity: 1;
         }
 
+       /* This pseudo-element is the overlay that we will fade */
+        #distortion-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 1; /* Sit on top of the distortion shards */
+            background-color: var(--background-color); /* Match the page background */
+            opacity: 1; /* Start fully opaque (hiding the effect) */
+            transition: opacity 0.5s ease;
+        }
+
+        /* When the container is active, fade out the overlay to reveal the effect */
+        #distortion-container.active::before {
+            opacity: 0;
+        }
+
         body.light-theme #distortion-container {
             opacity: 0.6; /* 60% opacity for light theme */
             filter: blur(30px) brightness(0.8);
@@ -2185,7 +2201,7 @@ function setView(viewName) {
     toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
     updateMiniplayerUI(songs.find(s => s.id === currentSongId), audioPlayer.paused ? 'paused' : 'playing');
 
-    document.getElementById('distortion-container').style.display = isNowPlaying ? 'block' : 'none';
+    document.getElementById('distortion-container').classList.toggle('active', isNowPlaying);
     if (isVisualizerInitialized && isNowPlaying && audioContext.state === 'suspended') {
         audioContext.resume();
     }
