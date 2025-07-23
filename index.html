@@ -196,7 +196,7 @@
             z-index: 1001;
             cursor: pointer;
             overflow: hidden;
-            transition: bottom 0.3s ease, opacity 0.3s ease;
+            transition: all 0.3s cubic-bezier(.3,1.2,.64,1) !IMPORTANT;
         }
         #bottom-miniplayer.hidden {
             bottom: -100px;
@@ -1348,7 +1348,7 @@
             gap: 15px;
             opacity: 0;
             transform: translateX(20px);
-            transition: opacity 0.4s ease, transform 0.4s ease;
+            transition: all 0.3s cubic-bezier(.3,1.2,.64,1) !IMPORTANT;
             pointer-events: none;
             overflow: auto;
             position: absolute;
