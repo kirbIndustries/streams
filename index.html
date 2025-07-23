@@ -3525,7 +3525,6 @@ function renderQueue() {
     const queueHtml = playQueue.map((song, index) => `
         <div class="music-item queue-item ${song.id === currentSongId ? "active" : ""}" data-queue-index="${index}" data-id="${song.id}">
             <div class="song-info">
-                <span class="track-number">${index + 1}.</span>
                 <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 6px; margin: 0 5px;">
                 <div class="song-title">${sanitize(song.name)}</div>
                 <span class="song-artist-queue">${song.artist}</span>
@@ -3544,6 +3543,19 @@ function renderQueue() {
     // Make sure to re-attach event listeners for the new elements
     makeQueueItemsDraggable();
     addQueueItemEventListeners();
+}
+
+function scrollToCurrentSongInQueue() {
+    // Use a small timeout to ensure the DOM has updated
+    setTimeout(() => {
+        const activeSongEl = document.querySelector('#lyrics-queue-panel .queue-item.active');
+        if (activeSongEl) {
+            activeSongEl.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+        }
+    }, 100);
 }
 
 function attachSongAndAlbumEventListeners() {
@@ -3695,21 +3707,18 @@ async function playSong(song, playContext = null) {
 
     // --- NEW QUEUE LOGIC ---
     if (playContext && Array.isArray(playContext)) {
-        // A new context (playlist, album) was provided. Overwrite the queue.
+        // PRIORITY 1: A new context was explicitly provided. This ALWAYS overwrites the old queue.
         playQueue = [...playContext];
-        isQueueUserModified = false; // This is now an "automatic" queue
-    } else {
-        // No context provided. Check if the user has a custom queue.
-        if (isQueueUserModified) {
-            // User has a custom queue. Do NOT overwrite it.
-            // If the song isn't in the queue, add it to play next.
-            if (!playQueue.some(s => s.id === song.id)) {
-                playQueue.splice(currentQueueIndex + 1, 0, song);
-            }
-        } else {
-            // No custom queue and no context. Rebuild from the current view as a fallback.
-            rebuildQueueFromCurrentView();
+        isQueueUserModified = false; // This is a new, app-generated queue.
+    } else if (isQueueUserModified) {
+        // PRIORITY 2: No new context was given, and the user has a custom queue. We must protect it.
+        if (!playQueue.some(s => s.id === song.id)) {
+            // The song isn't in the custom queue, so add it to play next.
+            playQueue.splice(currentQueueIndex + 1, 0, song);
         }
+    } else {
+        // PRIORITY 3 (FALLBACK): No context and no custom queue. Rebuild from the current view.
+        rebuildQueueFromCurrentView();
     }
     
     isPlayerLoading = true;
@@ -3723,12 +3732,6 @@ async function playSong(song, playContext = null) {
             isPlayerLoading = false;
             playNextSong();
             return;
-        }
-        
-        // This logic is now simplified. We rebuild the queue if it's empty or shuffled.
-        const songIndexInQueue = playQueue.findIndex(s => s.id === song.id);
-        if (songIndexInQueue === -1 || !isQueueUserModified) {
-            rebuildQueueFromCurrentView();
         }
         
         currentSongId = song.id;
@@ -3756,6 +3759,7 @@ async function playSong(song, playContext = null) {
                 renderLyrics();
             } else if (panelContent === 'queue') {
                 renderQueue(); // Re-render queue to update the '.active' highlight
+                scrollToCurrentSongInQueue(); // Scroll to new song
             }
         }
 
@@ -4786,6 +4790,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     renderLyrics();
                 } else {
                     renderQueue();
+                    scrollToCurrentSongInQueue();
                 }
                 lyricsQueuePanel.classList.add('visible');
             }
