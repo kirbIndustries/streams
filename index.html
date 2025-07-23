@@ -1544,6 +1544,67 @@
         .drawer-content::-webkit-scrollbar { width: 4px; }
         .drawer-content::-webkit-scrollbar-track { background: transparent; }
         .drawer-content::-webkit-scrollbar-thumb { background: var(--modal-transparent); border-radius: 4px; }
+        
+        .drawer-header {
+            padding: 40px 20px 10px 20px;
+            text-align: center;
+        }
+        #drawer-title { font-size: 1.5rem; }
+        #drawer-subtitle { color: var(--secondary-text-color); }
+        /* Adjust content padding */
+        .drawer-content {
+            padding: 0 20px 20px 20px;
+        }
+
+        .highlight-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .highlight-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0));
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .highlight-card:hover {
+            background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.1));
+        }
+        .highlight-card img {
+            width: 80px;
+            height: 80px;
+            border-radius: 12px;
+            flex-shrink: 0;
+        }
+        .highlight-card-info {
+            flex-grow: 1;
+            min-width: 0;
+        }
+        .highlight-card-label {
+            font-size: 12px;
+            color: var(--secondary-text-color);
+            margin-bottom: 4px;
+        }
+        .highlight-card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .highlight-card-subtitle {
+            color: var(--secondary-text-color);
+        }
+        .highlight-card-play {
+            margin-left: auto;
+            font-size: 36px;
+        }
     </style>
 </head>
 <body data-app-name="Music">
@@ -1859,6 +1920,10 @@
 
     <div id="drawer" class="drawer">
         <div class="drawer-handle"></div>
+        <div class="drawer-header">
+            <h2 id="drawer-title"></h2>
+            <p id="drawer-subtitle"></p>
+        </div>
         <div class="drawer-content" id="drawer-content">
             <!-- Content will be injected here -->
         </div>
@@ -1889,6 +1954,7 @@
         let activeView = 'home'; // 'home', 'library', 'search', 'nowPlaying'
         let isPanelVisible = false;
         let panelContent = null; // 'lyrics' or 'queue'
+        let libraryScrollPosition = 0;
         let isFullscreen = false;
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
@@ -1950,7 +2016,9 @@
             if (modal) modal.classList.remove('visible');
         }
 
-function openDrawer(contentHtml) {
+function openDrawer(title, subtitle, contentHtml) {
+    document.getElementById('drawer-title').textContent = title;
+    document.getElementById('drawer-subtitle').textContent = subtitle;
     drawerContent.innerHTML = contentHtml;
     drawer.classList.add('open');
     drawerOverlay.classList.add('visible');
@@ -1961,63 +2029,61 @@ function closeDrawer() {
     drawer.classList.remove('open');
     drawerOverlay.classList.remove('visible');
     isDrawerOpen = false;
-    // Clear content after animation to prevent stale data
     setTimeout(() => {
+        drawer.style.transform = '';
         drawerContent.innerHTML = '';
     }, 400);
 }
-
+        
 function setupDrawerInteractions() {
     let startY = 0;
     let currentY = 0;
     let isDragging = false;
     const handle = document.querySelector('.drawer-handle');
+    const drawer = document.getElementById('drawer');
 
     const startDrag = (y) => {
         if (!isDrawerOpen) return;
         isDragging = true;
         startY = y;
-        drawer.style.transition = 'none'; // Allow direct manipulation
+        drawer.style.transition = 'none';
     };
 
     const moveDrag = (y) => {
         if (!isDragging) return;
         currentY = y;
         const deltaY = currentY - startY;
-        // Only allow dragging down
-        if (deltaY > 0) {
-            drawer.style.bottom = `-${deltaY}px`;
+        if (deltaY > 0) { // Only allow dragging down
+            drawer.style.transform = `translateY(${deltaY}px)`;
         }
     };
 
     const endDrag = () => {
         if (!isDragging) return;
         isDragging = false;
-        drawer.style.transition = 'bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+        drawer.style.transition = 'bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+        drawer.style.transform = ''; // Reset transform to allow CSS transition
+        
         const deltaY = currentY - startY;
-        // If dragged more than 100px or a significant portion of the screen, close it
-        if (deltaY > 100 || deltaY > window.innerHeight * 0.2) {
+        if (deltaY > 100) { // Close threshold
             closeDrawer();
         } else {
-            // Otherwise, snap back to open
             drawer.style.bottom = '0';
         }
     };
 
-    // Mouse Events
     handle.addEventListener('mousedown', (e) => startDrag(e.clientY));
     document.addEventListener('mousemove', (e) => moveDrag(e.clientY));
     document.addEventListener('mouseup', endDrag);
+    document.addEventListener('mouseleave', endDrag);
 
-    // Touch Events
     handle.addEventListener('touchstart', (e) => startDrag(e.touches[0].clientY), { passive: true });
     document.addEventListener('touchmove', (e) => moveDrag(e.touches[0].clientY), { passive: true });
     document.addEventListener('touchend', endDrag);
 
-    // Close when clicking the background overlay
-    drawerOverlay.addEventListener('click', closeDrawer);
+    document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
 }
-
+        
 function renderSearchResults() {
     const searchGrid = document.getElementById('search-results-grid');
     const query = document.getElementById('searchInput').value.toLowerCase();
@@ -2054,6 +2120,7 @@ function renderSearchResults() {
 }
 
 function setView(viewName) {
+    const previousView = activeView;
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
 
@@ -2066,13 +2133,16 @@ function setView(viewName) {
         container.style.display = isVisible ? 'flex' : 'none';
 
         if (isVisible) {
-            container.scrollTop = 0; // <-- THIS IS THE SCROLL RESET
+            // Only reset scroll if NOT coming from the player view
+            if (previousView !== 'now-playing') {
+                container.scrollTop = 0;
+            }
+
             if (viewName === 'library') {
                 renderLibraryPage();
             } else if (viewName === 'home') {
                 renderHomePage(); // We will create this next
             } else if (viewName === 'search') {
-                // Clear previous search results when switching to the tab
                 document.getElementById('search-results-grid').innerHTML = '';
             }
         }
@@ -2967,6 +3037,61 @@ function processAndSortSongs() {
             lastTrack = song.trackNumber || 0;
         });
     }
+}
+
+function renderHomePage() {
+    const homeView = document.getElementById('home-view');
+    if (!homeView) return;
+
+    // --- Highlight Section ---
+    const lastPlayed = songs.length > 0 ? songs[songs.length - 1] : null;
+    const randomSong = songs.length > 1 ? songs[Math.floor(Math.random() * songs.length)] : null;
+    let highlightsHtml = '';
+    if (lastPlayed) {
+        highlightsHtml += `
+        <div class="highlight-card" data-id="${lastPlayed.id}">
+            <img src="${lastPlayed.albumArt}">
+            <div class="highlight-card-info">
+                <div class="highlight-card-label">Listen Again</div>
+                <div class="highlight-card-title">${lastPlayed.name}</div>
+                <div class="highlight-card-subtitle">${lastPlayed.artist}</div>
+            </div>
+            <span class="material-symbols-rounded highlight-card-play">play_circle</span>
+        </div>`;
+    }
+    if (randomSong) {
+         highlightsHtml += `
+        <div class="highlight-card" data-id="${randomSong.id}">
+            <img src="${randomSong.albumArt}">
+            <div class="highlight-card-info">
+                <div class="highlight-card-label">[genre]</div>
+                <div class="highlight-card-title">${randomSong.name}</div>
+                <div class="highlight-card-subtitle">${randomSong.artist}</div>
+            </div>
+            <span class="material-symbols-rounded highlight-card-play">play_circle</span>
+        </div>`;
+    }
+
+    // --- Recently Played Section (using recently added for now) ---
+    const recentlyAdded = [...songs].sort((a,b) => b.dateAdded - a.dateAdded).slice(0, 8);
+    const recentlyPlayedHtml = recentlyAdded.map(song => `
+         <div class="item-card" data-album-id="${song.albumArtist}::${song.album}">
+            <img src="${song.albumArt}" class="item-card-art">
+            <div class="item-card-info">
+                <div class="item-card-title">${song.album}</div>
+                <div class="item-card-subtitle">${song.albumArtist}</div>
+            </div>
+        </div>
+    `).join('');
+
+    homeView.innerHTML = `
+    <div class="page-content-wrapper">
+        <div class="highlight-grid">${highlightsHtml}</div>
+        <div>
+            <h2 class="section-title">Recently played</h2>
+            <div class="item-grid">${recentlyPlayedHtml}</div>
+        </div>
+    </div>`;
 }
 
 function renderLibraryPage() {
@@ -4295,10 +4420,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (song) playSong(song);
             }
         });
+        
+        document.getElementById('home-view').addEventListener('click', (e) => {
+            const highlightCard = e.target.closest('.highlight-card[data-id]');
+            const albumCard = e.target.closest('.item-card[data-album-id]');
+        
+            if (highlightCard) {
+                const songId = parseFloat(highlightCard.dataset.id);
+                const song = songs.find(s => s.id === songId);
+                if (song) playSong(song);
+            } else if (albumCard) {
+                const albumId = albumCard.dataset.albumId;
+                const [artist, albumName] = albumId.split('::');
+                const songToPlay = songs.find(s => s.albumArtist === artist && s.album === albumName);
+                if(songToPlay) playSong(songToPlay);
+            }
+        });
 
         libraryGrid.addEventListener('click', (e) => {
             const songItem = e.target.closest('.music-item[data-id]');
-            const albumCard = e.target.closest('.item-card[data-album-id], .album-section-list[data-album-id]');
+            const albumCard = e.target.closest('.item-card[data-album-id]');
             const artistCard = e.target.closest('.item-card[data-artist-name]');
             const playlistCard = e.target.closest('.item-card[data-playlist-id]');
 
@@ -4317,7 +4458,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <div class="song-title">${song.name}</div>
                         </div>
                     </div>`).join('')}</div>`;
-                openDrawer(contentHtml);
+                openDrawer(albumName, artist, contentHtml);
             } else if (artistCard) {
                 const artistName = artistCard.dataset.artistName;
                 const artistAlbums = groupSongsByAlbum(songs.filter(s => s.artist === artistName));
@@ -4328,7 +4469,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <div class="item-card-title">${album.name}</div>
                         </div>
                     </div>`).join('')}</div>`;
-                openDrawer(contentHtml);
+                openDrawer(artistName, `${artistAlbums.length} albums`, contentHtml); // Pass details
             } else if (playlistCard) {
                  const playlistId = parseInt(playlistCard.dataset.playlistId, 10);
                  const playlist = playlists.find(p => p.id === playlistId);
@@ -4343,7 +4484,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             </div>
                         </div>
                     </div>`).join('')}</div>`;
-                openDrawer(contentHtml);
+                openDrawer(playlist.name, `${playlistSongs.length} songs`, contentHtml); // Pass details
             }
         });
 
