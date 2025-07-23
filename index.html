@@ -469,7 +469,7 @@
         }
         
         .album-art {
-            border-radius: 20px;
+            border-radius: 12px;
             background-color: var(--modal-transparent);
             display: flex;
             align-items: center;
@@ -481,6 +481,7 @@
             aspect-ratio: 1 / 1;
             box-shadow: 0 0 50px rgba(0, 0, 0, 0.2);
             margin-top: 80px;
+            outline: 1px solid var(--glass-border);
         }
 
         .album-art.fade-out {
@@ -492,8 +493,7 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            border-radius: 20px;
-            box-shadow: inset 0 0 0 1px var(--glass-border);
+            border-radius: 12px;
         }
 
         /* Generic Modal Styling */
