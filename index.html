@@ -2197,6 +2197,8 @@ function setView(viewName) {
     const previousView = activeView;
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
+    const distortionContainer = document.getElementById('distortion-container');
+    const nowPlayingWrapper = document.querySelector('.now-playing-wrapper');
 
     // If navigating to a main view, store it as the last one visited.
     if (!isNowPlaying) {
