@@ -2923,6 +2923,26 @@ function renderLibraryPage() {
         libraryView.scrollTop = libraryScrollPosition;
     });
 }
+        
+function renderAlbumSongsView(albumId) {
+    const libraryGrid = document.getElementById('library-grid');
+    const [artist, albumName] = albumId.split('::');
+    const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName)
+                           .sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+    
+    const songsHtml = albumSongs.map(song => `
+        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+            <div class="song-info">
+                <span class="track-number">${song.trackNumber || '•'}</span>
+                <div class="song-title">${song.name}</div>
+            </div>
+        </div>
+    `).join('');
+
+    libraryGrid.className = 'item-list';
+    libraryGrid.innerHTML = songsHtml;
+}
+
 function renderArtistAlbumsView(artistName) {
     const libraryGrid = document.getElementById('library-grid');
     const artistSongs = songs.filter(s => s.artist === artistName);
