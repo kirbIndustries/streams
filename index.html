@@ -2167,7 +2167,7 @@ function renderSearchResults() {
     const resultsHtml = results.map(song => `
         <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
              <div class="song-info">
-                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
+                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                 <div>
                     <div class="song-title">${sanitize(song.name)}</div>
                     <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
@@ -3323,7 +3323,7 @@ function renderLibraryPage() {
             itemsHtml = searchFilteredSongs.map(song => `
                 <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
                      <div class="song-info">
-                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
+                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                         <div>
                             <div class="song-title">${sanitize(song.name)}</div>
                             <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
@@ -4755,7 +4755,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                  const contentHtml = `<div class="item-list">${playlistSongs.map(song => `
                     <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
                          <div class="song-info">
-                            <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
+                            <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
                                 <div class="song-title">${sanitize(song.name)}</div>
                                 <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
