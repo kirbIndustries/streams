@@ -3162,23 +3162,21 @@ async function renderHomePage() {
     });
 
     const [topSongs, history] = await Promise.all([topSongsPromise, historyPromise]);
-
     // --- 2. Select 4 unique songs for the highlights ---
+    
     const highlightSongs = new Set();
     const listenAgainSongs = [];
     if (topSongs.length > 0) {
-        // Rotate through the top 10 most played songs
         listenAgainIndex = (listenAgainIndex + 1) % Math.min(topSongs.length, 10);
         localStorage.setItem('listenAgainIndex', listenAgainIndex);
         listenAgainSongs.push(topSongs[listenAgainIndex]);
         if (topSongs.length > 1) {
-            // Add a second, different top played song
             listenAgainSongs.push(topSongs[(listenAgainIndex + 1) % topSongs.length]);
         }
     }
     listenAgainSongs.forEach(s => highlightSongs.add(s));
 
-    const recommendations = [...songs].filter(s => !highlightSongs.has(s.id));
+    const recommendations = songs.filter(s => !listenAgainSongs.some(ls => ls.id === s.id));
     for (let i = 0; i < 2 && recommendations.length > 0; i++) {
         const randomIndex = Math.floor(Math.random() * recommendations.length);
         highlightSongs.add(recommendations.splice(randomIndex, 1)[0]);
@@ -3200,9 +3198,19 @@ async function renderHomePage() {
         </div>`;
     }).join('');
 
-    const recentSongIds = [...new Set(history.map(h => h.songId))].slice(0, 40);
-    const recentlyPlayed = recentSongIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
-    const recentlyPlayedHtml = recentlyPlayed.map(song => `
+    const recentSongIds = [...new Set(history.map(h => h.songId))];
+    const recentlyPlayedSongs = recentSongIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+    const recentAlbums = [];
+    const recentAlbumIds = new Set();
+    for (const song of recentlyPlayedSongs) {
+        const albumId = `${song.albumArtist}::${song.album}`;
+        if (!recentAlbumIds.has(albumId)) {
+            recentAlbumIds.add(albumId);
+            recentAlbums.push(song); // Use the song object as a representative for the album
+        }
+        if (recentAlbums.length >= 8) break; // Limit to 8 albums
+    }
+    const recentlyPlayedHtml = recentAlbums.map(song => `
          <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
             <img src="${song.albumArt}" class="item-card-art">
             <div class="item-card-info">
