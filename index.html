@@ -179,7 +179,7 @@
 
         #bottom-miniplayer {
             position: fixed;
-            bottom: 20px;
+            bottom: 24px;
             left: 50%;
             transform: translateX(-50%);
             width: 95%;
@@ -305,9 +305,10 @@
         .library-controls {
             display: flex;
             flex-wrap: wrap;
-            gap: 15px;
-            align-items: center;
-            margin-bottom: 30px;
+            gap: 10px;
+            flex-direction: row;
+            justify-content: center;
+            align-content: center;
         }
 
         .search-container {
@@ -318,7 +319,7 @@
 
         .library-search-input {
             width: 100%;
-            padding: 10px 15px 10px 45px;
+            padding: 10px 15px 10px 40px;
             border-radius: 25px;
             border: 1px solid var(--glass-border);
             background: var(--search-background);
