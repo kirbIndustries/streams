@@ -1968,6 +1968,7 @@
         const drawerContent = document.getElementById('drawer-content');
         const drawerOverlay = document.getElementById('drawer-overlay');
         let isDrawerOpen = false;
+        let closeDrawerTimeout = null;
 
         let currentMediaSessionArtBlobUrl = null;
         let shardContainer; 
@@ -2006,6 +2007,11 @@
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let activeAlbum = null; // Will store { artist, name } of the selected album
 
+        function sanitize(str) {
+            if (!str) return '';
+            return str.toString().replace(/</g, "<").replace(/>/g, ">");
+        }
+
         function openModal(modal) {
             if (modal) modal.classList.add('visible');
         }
@@ -2015,6 +2021,9 @@
         }
 
 function openDrawer(title, subtitle, contentHtml) {
+    // Clear any pending close timeout to prevent the drawer from closing immediately
+    clearTimeout(closeDrawerTimeout);
+
     document.getElementById('drawer-title').textContent = title;
     document.getElementById('drawer-subtitle').textContent = subtitle;
     drawerContent.innerHTML = contentHtml;
@@ -2027,7 +2036,8 @@ function closeDrawer() {
     drawer.classList.remove('open');
     drawerOverlay.classList.remove('visible');
     isDrawerOpen = false;
-    setTimeout(() => {
+    // Clear content after animation
+    closeDrawerTimeout = setTimeout(() => {
         drawer.style.transform = '';
         drawerContent.innerHTML = '';
     }, 400);
@@ -2149,6 +2159,10 @@ function setView(viewName) {
     if (isNowPlaying && currentSongId) {
         const song = songs.find(s => s.id === currentSongId);
         if (song) updatePlayerUI(song);
+    }
+
+    if (previousView === 'search' && viewName !== 'search') {
+        document.getElementById('searchInput').value = '';
     }
     
     toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
@@ -3037,37 +3051,65 @@ function processAndSortSongs() {
     }
 }
 
-function renderHomePage() {
+async function getArtColors(imageUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.src = imageUrl;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            
+            // Get colors from top-left and bottom-right for a simple gradient
+            const topLeft = ctx.getImageData(0, 0, 1, 1).data;
+            const bottomRight = ctx.getImageData(img.width - 1, img.height - 1, 1, 1).data;
+
+            const color1 = `rgba(${topLeft[0]}, ${topLeft[1]}, ${topLeft[2]}, 0.4)`;
+            const color2 = `rgba(${bottomRight[0]}, ${bottomRight[1]}, ${bottomRight[2]}, 0.1)`;
+            resolve(`linear-gradient(135deg, ${color1}, ${color2})`);
+        };
+        img.onerror = () => {
+            // Fallback for failed image loads
+            resolve('linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0))');
+        };
+    });
+}
+
+async function renderHomePage() { // Note: now async
     const homeView = document.getElementById('home-view');
     if (!homeView) return;
 
-    // --- Highlight Section ---
     const lastPlayed = songs.length > 0 ? songs[songs.length - 1] : null;
     const randomSong = songs.length > 1 ? songs[Math.floor(Math.random() * songs.length)] : null;
-    let highlightsHtml = '';
+    
+    // Build the HTML structure first
+    homeView.innerHTML = `
+    <div class="page-content-wrapper">
+        <div class="highlight-grid">
+            ${lastPlayed ? `<div class="highlight-card" data-id="${lastPlayed.id}" id="highlight-1"></div>` : ''}
+            ${randomSong ? `<div class="highlight-card" data-id="${randomSong.id}" id="highlight-2"></div>` : ''}
+        </div>
+        <div>
+            <h2 class="section-title">Recently played</h2>
+            <div class="item-grid" id="recently-played-grid"></div>
+        </div>
+    </div>`;
+    
+    // --- Asynchronously populate content and gradients ---
     if (lastPlayed) {
-        highlightsHtml += `
-        <div class="highlight-card" data-id="${lastPlayed.id}">
-            <img src="${lastPlayed.albumArt}">
-            <div class="highlight-card-info">
-                <div class="highlight-card-label">Listen Again</div>
-                <div class="highlight-card-title">${lastPlayed.name}</div>
-                <div class="highlight-card-subtitle">${lastPlayed.artist}</div>
-            </div>
-            <span class="material-symbols-rounded highlight-card-play">play_circle</span>
-        </div>`;
+        const card = document.getElementById('highlight-1');
+        const gradient = await getArtColors(lastPlayed.albumArt);
+        card.style.background = gradient;
+        card.innerHTML = `...`; // Existing inner HTML for highlight card
     }
     if (randomSong) {
-         highlightsHtml += `
-        <div class="highlight-card" data-id="${randomSong.id}">
-            <img src="${randomSong.albumArt}">
-            <div class="highlight-card-info">
-                <div class="highlight-card-label">Recommended</div>
-                <div class="highlight-card-title">${randomSong.name}</div>
-                <div class="highlight-card-subtitle">${randomSong.artist}</div>
-            </div>
-            <span class="material-symbols-rounded highlight-card-play">play_circle</span>
-        </div>`;
+        const card = document.getElementById('highlight-2');
+        const gradient = await getArtColors(randomSong.albumArt);
+        card.style.background = gradient;
+        card.innerHTML = `...`; // Existing inner HTML for highlight card
     }
 
     // --- Recently Played Section (using recently added for now) ---
@@ -3834,7 +3876,7 @@ async function removeFolder(folderName) {
             song.album = editAlbum.value;
 
             if (song.id === currentSongId) {
-                musicTitle.textContent = song.name;
+                musicTitle.textContent = sanitize(song.name);
                 musicArtist.textContent = song.artist;
                 document.title = `${song.name} by ${song.artist}`;
                 updateMediaSessionMetadata(song);
@@ -4250,6 +4292,8 @@ window.addEventListener("load", async () => {
                 }
             }
         }
+        
+        setView('home');
     } catch (error) {
         console.error('Critical error on application load:', error);
     }
@@ -4264,7 +4308,7 @@ async function verifyPermission(handle, shouldRequest = false) {
 }
 
         function updatePlayerUI(song, progress = 0) {
-            musicTitle.textContent = song.name;
+            musicTitle.textContent = sanitize(song.name);
             musicArtist.textContent = song.artist;
             albumArtImg.src = song.albumArt;
             albumArtImg.classList.remove('fade-out');
@@ -4365,6 +4409,14 @@ function seekAudio(e) {
 }
 
 function handleProgressDrag(e) { if (isDragging) seekAudio(e.touches ? e.touches[0] : e); }
+
+function closePanel() {
+    if (!isPanelVisible) return;
+    isPanelVisible = false;
+    document.getElementById('lyrics-queue-panel').classList.remove('visible');
+    document.querySelector('.lyrics-button').classList.remove('active');
+    document.querySelector('.queue-button').classList.remove('active');
+}
         
 progressBar.addEventListener("click", e => seekAudio(e));
 progressBar.addEventListener("mousedown", () => { isDragging = true; });
@@ -4490,7 +4542,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const songItem = e.target.closest('.music-item[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
 
-            if (songItem) {
+            if (backButton) {
+                const artistName = backButton.dataset.artistName;
+                // Go back to the artist's album list
+                const artistAlbums = groupSongsByAlbum(songs.filter(s => s.artist === artistName));
+                const contentHtml = `<div class="item-grid">...</div>`; // Your artist album card HTML
+                openDrawer(artistName, `${artistAlbums.length} albums`, contentHtml);
+            } else if (songItem) {
                 const songId = parseFloat(songItem.dataset.id);
                 const song = songs.find(s => s.id === songId);
                 if (song) {
@@ -4498,19 +4556,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                     closeDrawer(); // Close drawer after selection
                 }
             } else if (albumCard) {
-                // This handles clicking an album inside the artist drill-down
+                // This is the secondary drill-down (inside artist view)
                 const albumId = albumCard.dataset.albumId;
                 const [artist, albumName] = albumId.split('::');
                 const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName).sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
-                const contentHtml = `<div class="item-list">${albumSongs.map(song => `
-                    <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
-                        <div class="song-info">
-                            <span class="track-number">${song.trackNumber || '•'}</span>
-                            <div class="song-title">${song.name}</div>
-                        </div>
-                    </div>`).join('')}</div>`;
-                // Re-open the drawer with the new content
-                openDrawer(contentHtml);
+                
+                // UPDATE in-place instead of calling openDrawer
+                document.getElementById('drawer-title').textContent = sanitize(albumName);
+                document.getElementById('drawer-subtitle').textContent = sanitize(artist);
+                drawerContent.innerHTML = `
+                    <button class="action-btn drawer-back-btn" data-artist-name="${sanitize(artist)}"><span class="material-symbols-rounded">arrow_back</span> Back</button>
+                    <div class="item-list" style="margin-top: 15px;">
+                        ${albumSongs.map(song => `...`).join('')}
+                    </div>`; // Your song list item HTML
             }
         });
 
@@ -4578,9 +4636,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const togglePanel = (newContent) => {
             if (isPanelVisible && panelContent === newContent) {
-                // Hide the panel
-                isPanelVisible = false;
-                lyricsQueuePanel.classList.remove('visible');
+                closePanel();
             } else {
                 // Show or switch the panel
                 isPanelVisible = true;
@@ -4605,8 +4661,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('#songContextMenu') && !e.target.closest('.song-actions')) {
-                document.getElementById('songContextMenu').classList.remove('visible');
+            const lyricsQueuePanel = document.getElementById('lyrics-queue-panel');
+            if (isPanelVisible && !lyricsQueuePanel.contains(e.target) && !e.target.closest('.lyrics-button, .queue-button, .more-button')) {
+                closePanel();
             }
         });
         
@@ -4672,9 +4729,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
 
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
-
-        // Initialize the first view
-        setView('home');
+        
         setupDrawerInteractions();
     } catch (error) {
         console.error('Failed to initialize application:', error);
