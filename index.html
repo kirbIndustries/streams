@@ -1368,6 +1368,10 @@
             padding: 5px;
         }
 
+        .now-playing-wrapper.hidden {
+            display: none;
+        }
+
         .player-column {
             display: flex;
             flex-direction: column;
@@ -2198,6 +2202,11 @@ function setView(viewName) {
     if (!isNowPlaying) {
         lastMainView = viewName;
     }
+
+    // Instantly hide/show the player content wrapper
+    nowPlayingWrapper.classList.toggle('hidden', !isNowPlaying);
+    // Animate the background
+    distortionContainer.classList.toggle('active', isNowPlaying);
     
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
