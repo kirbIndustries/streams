@@ -1492,6 +1492,53 @@
             transition: opacity 0.2s, background-color 0.2s;
             z-index: 5;
         }
+
+        /* App Drawer Styles */
+        .drawer {
+            position: fixed;
+            bottom: -100%; /* Initially hidden */
+            left: 0;
+            width: 100%;
+            height: calc(100% - 80px); /* Full height minus top toolbar */
+            background-color: var(--search-background); 
+            z-index: 1002;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter);
+            border-top: 1px solid var(--glass-border);
+            border-radius: 25px 25px 0 0;
+            transform-origin: bottom;
+            will-change: transform, opacity, bottom;
+            transition: bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .drawer.open {
+            bottom: 0;
+        }
+
+        .drawer-handle {
+            width: 50px;
+            height: 5px;
+            background-color: var(--secondary-text-color);
+            border-radius: 3px;
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            cursor: grab;
+        }
+
+        .drawer-content {
+            height: 100%;
+            overflow-y: auto;
+            user-select: none;
+            padding: 40px 20px 20px 20px;
+        }
+        
+        .drawer-content::-webkit-scrollbar { width: 4px; }
+        .drawer-content::-webkit-scrollbar-track { background: transparent; }
+        .drawer-content::-webkit-scrollbar-thumb { background: var(--modal-transparent); border-radius: 4px; }
     </style>
 </head>
 <body data-app-name="Music">
@@ -1805,6 +1852,14 @@
         </div>
     </div>
 
+    <div id="drawer" class="drawer">
+        <div class="drawer-handle"></div>
+        <div class="drawer-content" id="drawer-content">
+            <!-- Content will be injected here -->
+        </div>
+    </div>
+    <div id="drawer-overlay" class="modal-overlay"></div>
+
     <script>
         const musicList = document.querySelector('.music-list');
         const musicUpload = document.getElementById('musicUpload');
@@ -1830,8 +1885,6 @@
         let isPanelVisible = false;
         let panelContent = null; // 'lyrics' or 'queue'
         let isFullscreen = false;
-        let activeAlbumId = null;
-        let activeArtistName = null;
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
         const miniplayer = document.getElementById('bottom-miniplayer');
@@ -1841,9 +1894,12 @@
         const miniplayerPlayBtn = document.getElementById('miniplayer-play-btn');
         const miniplayerProgress = document.querySelector('.miniplayer-progress');
         const toolbar = document.querySelector('.toolbar');
+        
+        const drawer = document.getElementById('drawer');
+        const drawerContent = document.getElementById('drawer-content');
+        const drawerOverlay = document.getElementById('drawer-overlay');
+        let isDrawerOpen = false;
 
-        let activePlaylistId = null;
-        let libraryScrollPosition = 0;
         let currentMediaSessionArtBlobUrl = null;
         let shardContainer; 
         let shards = [];
@@ -1888,6 +1944,74 @@
         function closeModal(modal) {
             if (modal) modal.classList.remove('visible');
         }
+
+function openDrawer(contentHtml) {
+    drawerContent.innerHTML = contentHtml;
+    drawer.classList.add('open');
+    drawerOverlay.classList.add('visible');
+    isDrawerOpen = true;
+}
+
+function closeDrawer() {
+    drawer.classList.remove('open');
+    drawerOverlay.classList.remove('visible');
+    isDrawerOpen = false;
+    // Clear content after animation to prevent stale data
+    setTimeout(() => {
+        drawerContent.innerHTML = '';
+    }, 400);
+}
+
+function setupDrawerInteractions() {
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+    const handle = document.querySelector('.drawer-handle');
+
+    const startDrag = (y) => {
+        if (!isDrawerOpen) return;
+        isDragging = true;
+        startY = y;
+        drawer.style.transition = 'none'; // Allow direct manipulation
+    };
+
+    const moveDrag = (y) => {
+        if (!isDragging) return;
+        currentY = y;
+        const deltaY = currentY - startY;
+        // Only allow dragging down
+        if (deltaY > 0) {
+            drawer.style.bottom = `-${deltaY}px`;
+        }
+    };
+
+    const endDrag = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        drawer.style.transition = 'bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+        const deltaY = currentY - startY;
+        // If dragged more than 100px or a significant portion of the screen, close it
+        if (deltaY > 100 || deltaY > window.innerHeight * 0.2) {
+            closeDrawer();
+        } else {
+            // Otherwise, snap back to open
+            drawer.style.bottom = '0';
+        }
+    };
+
+    // Mouse Events
+    handle.addEventListener('mousedown', (e) => startDrag(e.clientY));
+    document.addEventListener('mousemove', (e) => moveDrag(e.clientY));
+    document.addEventListener('mouseup', endDrag);
+
+    // Touch Events
+    handle.addEventListener('touchstart', (e) => startDrag(e.touches[0].clientY), { passive: true });
+    document.addEventListener('touchmove', (e) => moveDrag(e.touches[0].clientY), { passive: true });
+    document.addEventListener('touchend', endDrag);
+
+    // Close when clicking the background overlay
+    drawerOverlay.addEventListener('click', closeDrawer);
+}
 
 function renderSearchResults() {
     const searchGrid = document.getElementById('search-results-grid');
@@ -2957,60 +3081,6 @@ function renderLibraryPage() {
     });
 }
         
-function renderAlbumSongsView(albumId) {
-    const libraryGrid = document.getElementById('library-grid');
-    const [artist, albumName] = albumId.split('::');
-
-    const albumSongs = songs
-        .filter(s => s.albumArtist === artist && s.album === albumName)
-        .sort((a, b) => {
-            // --- NEW ROBUST SORTING LOGIC ---
-            const trackA = a.trackNumber || 0;
-            const trackB = b.trackNumber || 0;
-
-            // First, try to sort by track number if they are different.
-            if (trackA !== trackB) {
-                return trackA - trackB;
-            }
-            
-            // If track numbers are the same (or both missing), fall back to sorting alphabetically by song name.
-            // This ensures a stable and predictable order for all albums.
-            return a.name.localeCompare(b.name);
-        });
-    
-    const songsHtml = albumSongs.map(song => `
-        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
-            <div class="song-info">
-                <span class="track-number">${song.trackNumber || '•'}</span>
-                <div class="song-title">${song.name}</div>
-            </div>
-        </div>
-    `).join('');
-
-    libraryGrid.className = 'item-list';
-    libraryGrid.innerHTML = songsHtml;
-}
-        
-function renderArtistAlbumsView(artistName) {
-    const libraryGrid = document.getElementById('library-grid');
-    const artistSongs = songs.filter(s => s.artist === artistName);
-    const artistAlbums = groupSongsByAlbum(artistSongs);
-
-    const albumsHtml = artistAlbums.map(album => {
-        const albumId = `${album.artist}::${album.originalAlbum}`;
-        return `
-        <div class="item-card" data-album-id="${albumId}">
-            <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
-            <div class="item-card-info">
-                <div class="item-card-title">${album.name}</div>
-            </div>
-        </div>`;
-    }).join('');
-
-    libraryGrid.className = 'item-grid';
-    libraryGrid.innerHTML = albumsHtml;
-}
-        
 function renderPlaylists() {
     const musicListContainer = document.querySelector('.music-list');
     musicListContainer.innerHTML = ''; 
@@ -3046,29 +3116,6 @@ function renderPlaylists() {
 
         musicListContainer.appendChild(item);
     });
-}
-
-function renderPlaylistSongsView(playlistId) {
-    const libraryGrid = document.getElementById('library-grid');
-    const playlist = playlists.find(p => p.id === playlistId);
-    if (!playlist) return;
-
-    const playlistSongs = playlist.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
-
-    const songsHtml = playlistSongs.map(song => `
-        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
-             <div class="song-info">
-                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
-                <div>
-                    <div class="song-title">${song.name}</div>
-                    <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
-                </div>
-            </div>
-        </div>
-    `).join('');
-
-    libraryGrid.className = 'item-list';
-    libraryGrid.innerHTML = songsHtml;
 }
 
 function renderPlaylistSongs(playlistId) {
@@ -4264,28 +4311,81 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         libraryGrid.addEventListener('click', (e) => {
-            const libraryView = document.getElementById('library-view');
             const songItem = e.target.closest('.music-item[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id], .album-section-list[data-album-id]');
             const artistCard = e.target.closest('.item-card[data-artist-name]');
             const playlistCard = e.target.closest('.item-card[data-playlist-id]');
-        
+
             if (songItem) {
                 const songId = parseFloat(songItem.dataset.id);
                 const song = songs.find(s => s.id === songId);
                 if (song) playSong(song);
             } else if (albumCard) {
-                libraryScrollPosition = libraryView.scrollTop;
-                activeAlbumId = albumCard.dataset.albumId;
-                renderLibraryPage();
+                const albumId = albumCard.dataset.albumId;
+                const [artist, albumName] = albumId.split('::');
+                const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName).sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+                const contentHtml = `<div class="item-list">${albumSongs.map(song => `
+                    <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                        <div class="song-info">
+                            <span class="track-number">${song.trackNumber || '•'}</span>
+                            <div class="song-title">${song.name}</div>
+                        </div>
+                    </div>`).join('')}</div>`;
+                openDrawer(contentHtml);
             } else if (artistCard) {
-                libraryScrollPosition = libraryView.scrollTop;
-                activeArtistName = artistCard.dataset.artistName;
-                renderLibraryPage();
+                const artistName = artistCard.dataset.artistName;
+                const artistAlbums = groupSongsByAlbum(songs.filter(s => s.artist === artistName));
+                const contentHtml = `<div class="item-grid">${artistAlbums.map(album => `
+                    <div class="item-card" data-album-id="${album.artist}::${album.originalAlbum}">
+                        <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+                        <div class="item-card-info">
+                            <div class="item-card-title">${album.name}</div>
+                        </div>
+                    </div>`).join('')}</div>`;
+                openDrawer(contentHtml);
             } else if (playlistCard) {
-                libraryScrollPosition = libraryView.scrollTop;
-                activePlaylistId = parseInt(playlistCard.dataset.playlistId, 10);
-                renderLibraryPage();
+                 const playlistId = parseInt(playlistCard.dataset.playlistId, 10);
+                 const playlist = playlists.find(p => p.id === playlistId);
+                 const playlistSongs = playlist.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+                 const contentHtml = `<div class="item-list">${playlistSongs.map(song => `
+                    <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                         <div class="song-info">
+                            <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
+                            <div>
+                                <div class="song-title">${song.name}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                            </div>
+                        </div>
+                    </div>`).join('')}</div>`;
+                openDrawer(contentHtml);
+            }
+        });
+
+        drawerContent.addEventListener('click', (e) => {
+            const songItem = e.target.closest('.music-item[data-id]');
+            const albumCard = e.target.closest('.item-card[data-album-id]');
+
+            if (songItem) {
+                const songId = parseFloat(songItem.dataset.id);
+                const song = songs.find(s => s.id === songId);
+                if (song) {
+                    playSong(song);
+                    closeDrawer(); // Close drawer after selection
+                }
+            } else if (albumCard) {
+                // This handles clicking an album inside the artist drill-down
+                const albumId = albumCard.dataset.albumId;
+                const [artist, albumName] = albumId.split('::');
+                const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName).sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+                const contentHtml = `<div class="item-list">${albumSongs.map(song => `
+                    <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                        <div class="song-info">
+                            <span class="track-number">${song.trackNumber || '•'}</span>
+                            <div class="song-title">${song.name}</div>
+                        </div>
+                    </div>`).join('')}</div>`;
+                // Re-open the drawer with the new content
+                openDrawer(contentHtml);
             }
         });
 
@@ -4391,16 +4491,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         tabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const viewName = btn.dataset.view;
-                // If clicking the active tab AND in a drill-down view, go back.
-                if (activeView === viewName && (activeAlbumId || activeArtistName)) {
-                    activeAlbumId = null;
-                    activeArtistName = null;
-                    activePlaylistId = null;
-                    renderLibraryPage();
-                } else {
-                    // Otherwise, just switch the view.
-                    setView(viewName);
+                if (isDrawerOpen) {
+                    closeDrawer();
                 }
+                setView(viewName);
             });
         });
 
@@ -4459,6 +4553,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Initialize the first view
         setView('home');
+        setupDrawerInteractions();
     } catch (error) {
         console.error('Failed to initialize application:', error);
     }
