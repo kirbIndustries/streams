@@ -2165,18 +2165,7 @@ function setView(viewName) {
     const previousView = activeView;
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
-    const distortionContainer = document.getElementById('distortion-container');
-
-    // --- Animation Logic ---
-    // Start fade-out immediately if leaving Now Playing
-    if (previousView === 'now-playing' && !isNowPlaying) {
-        distortionContainer.classList.remove('active');
-    }
-    // Start fade-in immediately if entering Now Playing
-    if (isNowPlaying) {
-        distortionContainer.classList.add('active');
-    }
-
+    
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
     });
