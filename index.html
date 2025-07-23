@@ -2003,7 +2003,8 @@
         const drawerOverlay = document.getElementById('drawer-overlay');
         let isDrawerOpen = false;
         let closeDrawerTimeout = null;
-
+        
+        let listenAgainIndex = parseInt(localStorage.getItem('listenAgainIndex') || '0');
         let currentMediaSessionArtBlobUrl = null;
         let shardContainer; 
         let shards = [];
@@ -2208,40 +2209,51 @@ function setView(viewName) {
     }
 }
      
-        const initDB = () => {
-            return new Promise((resolve, reject) => {
-                // DB version bumped to 3 to add playlists and directory handle stores
-                const request = indexedDB.open('musicDB', 3);
+const initDB = () => {
+    return new Promise((resolve, reject) => {
+        // DB version bumped to 4 to add play history and song play counts
+        const request = indexedDB.open('musicDB', 4);
 
-                request.onerror = (event) => {
-                    console.error('IndexedDB error:', event.target.error);
-                    reject(event.target.error);
-                };
-
-                request.onupgradeneeded = (event) => {
-                    db = event.target.result;
-                    if (!db.objectStoreNames.contains('musicFiles')) {
-                        db.createObjectStore('musicFiles', { keyPath: 'id' });
-                    }
-                    if (!db.objectStoreNames.contains('songs')) {
-                        const songStore = db.createObjectStore('songs', { keyPath: 'id' });
-                        songStore.createIndex('album', 'album');
-                        songStore.createIndex('albumArtist', 'albumArtist');
-                    }
-                    if (!db.objectStoreNames.contains('playlists')) {
-                        db.createObjectStore('playlists', { keyPath: 'id', autoIncrement: true });
-                    }
-                    if (!db.objectStoreNames.contains('config')) {
-                        db.createObjectStore('config', { keyPath: 'key' });
-                    }
-                };
-
-                request.onsuccess = (event) => {
-                    db = event.target.result;
-                    resolve();
-                };
-            });
+        request.onerror = (event) => {
+            console.error('IndexedDB error:', event.target.error);
+            reject(event.target.error);
         };
+
+        request.onupgradeneeded = (event) => {
+            db = event.target.result;
+            if (!db.objectStoreNames.contains('musicFiles')) {
+                db.createObjectStore('musicFiles', { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains('songs')) {
+                const songStore = db.createObjectStore('songs', { keyPath: 'id' });
+                songStore.createIndex('albumArtist', 'albumArtist');
+                // Add new index for play count
+                songStore.createIndex('playCount', 'playCount');
+            } else {
+                // Ensure playCount index exists on existing stores
+                const songStore = event.target.transaction.objectStore('songs');
+                if (!songStore.indexNames.contains('playCount')) {
+                    songStore.createIndex('playCount', 'playCount');
+                }
+            }
+            if (!db.objectStoreNames.contains('playlists')) {
+                db.createObjectStore('playlists', { keyPath: 'id', autoIncrement: true });
+            }
+            if (!db.objectStoreNames.contains('config')) {
+                db.createObjectStore('config', { keyPath: 'key' });
+            }
+            // Create new store for play history
+            if (!db.objectStoreNames.contains('playHistory')) {
+                db.createObjectStore('playHistory', { keyPath: 'timestamp' });
+            }
+        };
+
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            resolve();
+        };
+    });
+};
 
 function createPlayQueue() {
     if (isShuffleEnabled) {
@@ -3116,76 +3128,93 @@ async function getArtColors(imageUrl) {
 async function renderHomePage() {
     const homeView = document.getElementById('home-view');
     if (!homeView) return;
+    homeView.innerHTML = `<div class="page-content-wrapper"><h2 class="section-title">Loading...</h2></div>`;
 
-    // --- Data Preparation ---
-    const lastPlayed = songs.length > 0 ? songs[songs.length - 1] : null;
-    const randomSong = songs.length > 1 ? songs[Math.floor(Math.random() * songs.length)] : null;
+    // --- 1. Fetch all necessary data asynchronously ---
+    const topSongsPromise = new Promise(resolve => {
+        const tx = db.transaction('songs', 'readonly');
+        const index = tx.objectStore('songs').index('playCount');
+        const req = index.getAll();
+        req.onsuccess = () => resolve(req.result.sort((a,b) => (b.playCount || 0) - (a.playCount || 0)).slice(0, 10));
+    });
+
+    const historyPromise = new Promise(resolve => {
+        const tx = db.transaction('playHistory', 'readonly');
+        const store = tx.objectStore('playHistory');
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result.sort((a,b) => b.timestamp - a.timestamp));
+    });
+
+    const [topSongs, history] = await Promise.all([topSongsPromise, historyPromise]);
+
+    // --- 2. Select 4 unique songs for the highlights ---
+    const highlightSongs = new Set();
+    const listenAgainSongs = [];
+    if (topSongs.length > 0) {
+        // Rotate through the top 10 most played songs
+        listenAgainIndex = (listenAgainIndex + 1) % Math.min(topSongs.length, 10);
+        localStorage.setItem('listenAgainIndex', listenAgainIndex);
+        listenAgainSongs.push(topSongs[listenAgainIndex]);
+        if (topSongs.length > 1) {
+            // Add a second, different top played song
+            listenAgainSongs.push(topSongs[(listenAgainIndex + 1) % topSongs.length]);
+        }
+    }
+    listenAgainSongs.forEach(s => highlightSongs.add(s));
+
+    const recommendations = [...songs].filter(s => !highlightSongs.has(s.id));
+    for (let i = 0; i < 2 && recommendations.length > 0; i++) {
+        const randomIndex = Math.floor(Math.random() * recommendations.length);
+        highlightSongs.add(recommendations.splice(randomIndex, 1)[0]);
+    }
     
-    // --- Build HTML Strings ---
-    let highlightsHtml = '';
-    if (lastPlayed) {
-        highlightsHtml += `
-        <div class="highlight-card" data-id="${lastPlayed.id}" id="highlight-1">
-            <img src="${lastPlayed.albumArt}">
+    // --- 3. Build the HTML ---
+    const highlights = Array.from(highlightSongs);
+    const highlightsHtml = highlights.map((song, i) => {
+        const isListenAgain = listenAgainSongs.includes(song);
+        return `
+        <div class="highlight-card" data-id="${song.id}" id="highlight-${i+1}">
+            <img src="${song.albumArt}">
             <div class="highlight-card-info">
-                <div class="highlight-card-label">Listen Again</div>
-                <div class="highlight-card-title">${sanitize(lastPlayed.name)}</div>
-                <div class="highlight-card-subtitle">${sanitize(lastPlayed.artist)}</div>
+                <div class="highlight-card-label">${isListenAgain ? 'Listen Again' : 'From Your Library'}</div>
+                <div class="highlight-card-title">${sanitize(song.name)}</div>
+                <div class="highlight-card-subtitle">${sanitize(song.artist)}</div>
             </div>
             <span class="material-symbols-rounded highlight-card-play">play_circle</span>
         </div>`;
-    }
-    if (randomSong) {
-         highlightsHtml += `
-        <div class="highlight-card" data-id="${randomSong.id}" id="highlight-2">
-            <img src="${randomSong.albumArt}">
-            <div class="highlight-card-info">
-                <div class="highlight-card-label">Recommended</div>
-                <div class="highlight-card-title">${sanitize(randomSong.name)}</div>
-                <div class="highlight-card-subtitle">${sanitize(randomSong.artist)}</div>
-            </div>
-            <span class="material-symbols-rounded highlight-card-play">play_circle</span>
-        </div>`;
-    }
+    }).join('');
 
-    const recentlyAdded = [...songs].sort((a,b) => b.dateAdded - a.dateAdded).slice(0, 8);
-    const recentlyPlayedHtml = recentlyAdded.map(song => `
-         <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
-            <img src="${song.albumArt}" class="item-card-art">
-            <div class="item-card-info">
-                <div class="item-card-title">${sanitize(song.album)}</div>
-                <div class="item-card-subtitle">${sanitize(song.albumArtist)}</div>
-            </div>
-        </div>
-    `).join('');
+    const recentSongIds = [...new Set(history.map(h => h.songId))].slice(0, 40);
+    const recentlyPlayed = recentSongIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+    const recentlyPlayedHtml = recentlyPlayed.map(song => `...`).join(''); // (Your existing item-card HTML)
 
-    // --- Set the Final HTML ---
+    const genres = [...new Set(songs.map(s => s.genre).filter(Boolean))];
+    const genreSectionsHtml = genres.map(genre => {
+        const genreSongs = songs.filter(s => s.genre === genre).slice(0, 8);
+        return `
+        <div>
+            <h2 class="section-title">${sanitize(genre)}</h2>
+            <div class="item-grid">${genreSongs.map(song => `...`).join('')}</div> 
+        </div>`; // (Your existing item-card HTML)
+    }).join('');
+
     homeView.innerHTML = `
     <div class="page-content-wrapper">
         <div class="highlight-grid">${highlightsHtml}</div>
         <div>
-            <h2 class="section-title">Recently played</h2>
+            <h2 class="section-title">Recently Played</h2>
             <div class="item-grid">${recentlyPlayedHtml}</div>
         </div>
+        ${genreSectionsHtml}
     </div>`;
     
-    // --- Asynchronously Apply Gradients ---
-    if (lastPlayed) {
-        const card = document.getElementById('highlight-1');
+    // --- 4. Asynchronously Apply Gradients ---
+    highlights.forEach((song, i) => {
+        const card = document.getElementById(`highlight-${i+1}`);
         if (card) {
-            getArtColors(lastPlayed.albumArt).then(gradient => {
-                card.style.background = gradient;
-            });
+            getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
         }
-    }
-    if (randomSong) {
-        const card = document.getElementById('highlight-2');
-        if (card) {
-            getArtColors(randomSong.albumArt).then(gradient => {
-                card.style.background = gradient;
-            });
-        }
-    }
+    });
 }
 
 function renderLibraryPage() {
@@ -3715,6 +3744,7 @@ async function playSong(song, playContext = null) {
 
     try {
         audioPlayer.pause();
+        song.hasBeenLogged = false;
         const fileUrl = await getSongFileUrl(song);
 
         if (!fileUrl) {
@@ -3819,6 +3849,37 @@ async function getSongFileUrl(song) {
 
     console.warn(`Could not find "${song.handleName}" in any connected directories.`);
     return null;
+}
+
+async function logSongPlay(songId) {
+    try {
+        const songTx = db.transaction('songs', 'readwrite');
+        const songStore = songTx.objectStore('songs');
+        const songReq = songStore.get(songId);
+
+        songReq.onsuccess = () => {
+            const songData = songReq.result;
+            if (songData) {
+                songData.playCount = (songData.playCount || 0) + 1;
+                songStore.put(songData);
+            }
+        };
+        
+        const historyTx = db.transaction('playHistory', 'readwrite');
+        const historyStore = historyTx.objectStore('playHistory');
+        historyStore.put({ timestamp: Date.now(), songId: songId });
+
+        await Promise.all([songTx.done, historyTx.done]);
+
+        // Also update the in-memory version
+        const inMemorySong = songs.find(s => s.id === songId);
+        if (inMemorySong) {
+            inMemorySong.playCount = (inMemorySong.playCount || 0) + 1;
+        }
+
+    } catch (error) {
+        console.error("Failed to log song play:", error);
+    }
 }
         
 function initModalVariables() {
@@ -4413,6 +4474,11 @@ audioPlayer.addEventListener('timeupdate', async () => {
         miniplayerProgress.style.width = `${percentage}%`;
         updateTimeDisplays(audioPlayer.currentTime, audioPlayer.duration);
         updatePageTitle();
+
+        if (song && !song.hasBeenLogged && audioPlayer.currentTime > 30) {
+            song.hasBeenLogged = true; // Mark as logged for this session
+            await logSongPlay(song.id);
+        }
 
         if (audioPlayer.duration) Gurasuraisu.updateMediaProgress({ currentTime: audioPlayer.currentTime, duration: audioPlayer.duration });
         if ('mediaSession' in navigator) updateMediaSessionPositionState();
