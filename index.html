@@ -2927,8 +2927,23 @@ function renderLibraryPage() {
 function renderAlbumSongsView(albumId) {
     const libraryGrid = document.getElementById('library-grid');
     const [artist, albumName] = albumId.split('::');
-    const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName)
-                           .sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+
+    const albumSongs = songs
+        .filter(s => s.albumArtist === artist && s.album === albumName)
+        .sort((a, b) => {
+            // --- NEW ROBUST SORTING LOGIC ---
+            const trackA = a.trackNumber || 0;
+            const trackB = b.trackNumber || 0;
+
+            // First, try to sort by track number if they are different.
+            if (trackA !== trackB) {
+                return trackA - trackB;
+            }
+            
+            // If track numbers are the same (or both missing), fall back to sorting alphabetically by song name.
+            // This ensures a stable and predictable order for all albums.
+            return a.name.localeCompare(b.name);
+        });
     
     const songsHtml = albumSongs.map(song => `
         <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
@@ -2942,7 +2957,7 @@ function renderAlbumSongsView(albumId) {
     libraryGrid.className = 'item-list';
     libraryGrid.innerHTML = songsHtml;
 }
-
+        
 function renderArtistAlbumsView(artistName) {
     const libraryGrid = document.getElementById('library-grid');
     const artistSongs = songs.filter(s => s.artist === artistName);
@@ -4195,19 +4210,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const song = songs.find(s => s.id === songId);
                 if (song) playSong(song);
             } else if (albumCard) {
-                // Check if this album is just a single song
-                const [artist, albumName] = albumCard.dataset.albumId.split('::');
-                const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName);
-
-                if (albumSongs.length === 1) {
-                    // If it's a single, just play it directly.
-                    playSong(albumSongs[0]);
-                } else {
-                    // Otherwise, drill down.
-                    libraryScrollPosition = libraryView.scrollTop; // Store scroll position
-                    activeAlbumId = albumCard.dataset.albumId;
-                    renderLibraryPage();
-                }
+                // This now correctly treats all albums the same, including singles.
+                libraryScrollPosition = libraryView.scrollTop; // Store scroll position
+                activeAlbumId = albumCard.dataset.albumId;
+                renderLibraryPage();
             } else if (artistCard) {
                 libraryScrollPosition = libraryView.scrollTop; // Store scroll position
                 activeArtistName = artistCard.dataset.artistName;
