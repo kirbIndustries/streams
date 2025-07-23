@@ -2205,8 +2205,14 @@ function setView(viewName) {
 
     viewContainers.forEach(container => {
         const isVisible = container.id === `${viewName}-view`;
-        container.style.display = isVisible ? 'flex' : 'none';
-
+        
+        // Delay hiding the Now Playing view to allow fade-out
+        if (container.id === 'now-playing-view' && !isVisible) {
+            setTimeout(() => { container.style.display = 'none'; }, 300);
+        } else {
+            container.style.display = isVisible ? 'flex' : 'none';
+        }
+        
         if (isVisible) {
             // If returning from the player, restore scroll position. Otherwise, scroll to top.
             if (previousView === 'now-playing') {
