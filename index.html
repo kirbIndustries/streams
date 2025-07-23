@@ -2024,8 +2024,8 @@ function openDrawer(title, subtitle, contentHtml) {
     // Clear any pending close timeout to prevent the drawer from closing immediately
     clearTimeout(closeDrawerTimeout);
 
-    document.getElementById('drawer-title').textContent = title;
-    document.getElementById('drawer-subtitle').textContent = subtitle;
+    document.getElementById('drawer-title').textContent = sanitize(title);
+    document.getElementById('drawer-subtitle').textContent = sanitize(subtitle);
     drawerContent.innerHTML = contentHtml;
     drawer.classList.add('open');
     drawerOverlay.classList.add('visible');
@@ -2117,8 +2117,8 @@ function renderSearchResults() {
              <div class="song-info">
                 <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
                 <div>
-                    <div class="song-title">${song.name}</div>
-                    <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                    <div class="song-title">${sanitize(song.name)}</div>
+                    <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
                 </div>
             </div>
         </div>
@@ -2316,7 +2316,7 @@ function updatePageTitle() {
         const song = songs.find(s => s.id === currentSongId);
         if (song) {
             const currentTime = formatTime(audioPlayer.currentTime);
-            document.title = `${currentTime} | ${song.name} • ${song.artist}`;
+            document.title = `${currentTime} | ${sanitize(song.name)} • ${sanitize(song.artist)}`;
         }
     } else {
         document.title = 'Music'; // Default title when no song is playing
@@ -3078,64 +3078,53 @@ async function getArtColors(imageUrl) {
     });
 }
 
-async function renderHomePage() { // Note: now async
+async function renderHomePage() {
     const homeView = document.getElementById('home-view');
     if (!homeView) return;
 
+    // --- Data Preparation ---
     const lastPlayed = songs.length > 0 ? songs[songs.length - 1] : null;
     const randomSong = songs.length > 1 ? songs[Math.floor(Math.random() * songs.length)] : null;
     
-    // Build the HTML structure first
-    homeView.innerHTML = `
-    <div class="page-content-wrapper">
-        <div class="highlight-grid">
-            ${lastPlayed ? `<div class="highlight-card" data-id="${lastPlayed.id}" id="highlight-1"></div>` : ''}
-            ${randomSong ? `<div class="highlight-card" data-id="${randomSong.id}" id="highlight-2"></div>` : ''}
-        </div>
-        <div>
-            <h2 class="section-title">Recently played</h2>
-            <div class="item-grid" id="recently-played-grid"></div>
-        </div>
-    </div>`;
-    
-    // --- Asynchronously populate content and gradients ---
+    // --- Build HTML Strings ---
+    let highlightsHtml = '';
     if (lastPlayed) {
         highlightsHtml += `
-        <div class="highlight-card" data-id="${lastPlayed.id}">
+        <div class="highlight-card" data-id="${lastPlayed.id}" id="highlight-1">
             <img src="${lastPlayed.albumArt}">
             <div class="highlight-card-info">
                 <div class="highlight-card-label">Listen Again</div>
-                <div class="highlight-card-title">${lastPlayed.name}</div>
-                <div class="highlight-card-subtitle">${lastPlayed.artist}</div>
+                <div class="highlight-card-title">${sanitize(lastPlayed.name)}</div>
+                <div class="highlight-card-subtitle">${sanitize(lastPlayed.artist)}</div>
             </div>
             <span class="material-symbols-rounded highlight-card-play">play_circle</span>
         </div>`;
     }
     if (randomSong) {
          highlightsHtml += `
-        <div class="highlight-card" data-id="${randomSong.id}">
+        <div class="highlight-card" data-id="${randomSong.id}" id="highlight-2">
             <img src="${randomSong.albumArt}">
             <div class="highlight-card-info">
-                <div class="highlight-card-label">Recommended</div>
-                <div class="highlight-card-title">${randomSong.name}</div>
-                <div class="highlight-card-subtitle">${randomSong.artist}</div>
+                <div class="highlight-card-label">[genre]</div>
+                <div class="highlight-card-title">${sanitize(randomSong.name)}</div>
+                <div class="highlight-card-subtitle">${sanitize(randomSong.artist)}</div>
             </div>
             <span class="material-symbols-rounded highlight-card-play">play_circle</span>
         </div>`;
     }
 
-    // --- Recently Played Section (using recently added for now) ---
     const recentlyAdded = [...songs].sort((a,b) => b.dateAdded - a.dateAdded).slice(0, 8);
     const recentlyPlayedHtml = recentlyAdded.map(song => `
-         <div class="item-card" data-album-id="${song.albumArtist}::${song.album}">
+         <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
             <img src="${song.albumArt}" class="item-card-art">
             <div class="item-card-info">
-                <div class="item-card-title">${song.album}</div>
-                <div class="item-card-subtitle">${song.albumArtist}</div>
+                <div class="item-card-title">${sanitize(song.album)}</div>
+                <div class="item-card-subtitle">${sanitize(song.albumArtist)}</div>
             </div>
         </div>
     `).join('');
 
+    // --- Set the Final HTML ---
     homeView.innerHTML = `
     <div class="page-content-wrapper">
         <div class="highlight-grid">${highlightsHtml}</div>
@@ -3144,6 +3133,24 @@ async function renderHomePage() { // Note: now async
             <div class="item-grid">${recentlyPlayedHtml}</div>
         </div>
     </div>`;
+    
+    // --- Asynchronously Apply Gradients ---
+    if (lastPlayed) {
+        const card = document.getElementById('highlight-1');
+        if (card) {
+            getArtColors(lastPlayed.albumArt).then(gradient => {
+                card.style.background = gradient;
+            });
+        }
+    }
+    if (randomSong) {
+        const card = document.getElementById('highlight-2');
+        if (card) {
+            getArtColors(randomSong.albumArt).then(gradient => {
+                card.style.background = gradient;
+            });
+        }
+    }
 }
 
 function renderLibraryPage() {
@@ -3178,7 +3185,7 @@ function renderLibraryPage() {
                 <div class="item-card" data-artist-name="${artist}">
                     <img src="${art || generateRandomGradient()}" alt="${artist}" class="item-card-art" style="border-radius: 50%;">
                     <div class="item-card-info" style="text-align: center;">
-                        <div class="item-card-title">${artist}</div>
+                        <div class="item-card-title">${sanitize(artist)}</div>
                     </div>
                 </div>`).join('');
             break;
@@ -3194,8 +3201,8 @@ function renderLibraryPage() {
                      <div class="song-info">
                         <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
                         <div>
-                            <div class="song-title">${song.name}</div>
-                            <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                            <div class="song-title">${sanitize(song.name)}</div>
+                            <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
                         </div>
                     </div>
                 </div>
@@ -3211,7 +3218,7 @@ function renderLibraryPage() {
                 <div class="item-card" data-playlist-id="${p.id}">
                     <img src="${art}" alt="${p.name}" class="item-card-art">
                     <div class="item-card-info">
-                        <div class="item-card-title">${p.name}</div>
+                        <div class="item-card-title">${sanitize(p.name)}</div>
                         <div class="item-card-subtitle">${playlistSongs.length} songs</div>
                     </div>
                 </div>`;
@@ -3228,8 +3235,8 @@ function renderLibraryPage() {
                 <div class="item-card" data-album-id="${albumId}">
                     <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
                     <div class="item-card-info">
-                        <div class="item-card-title">${album.name}</div>
-                        <div class="item-card-subtitle">${album.artist}</div>
+                        <div class="item-card-title">${sanitize(album.name)}</div>
+                        <div class="item-card-subtitle">${sanitize(album.artist)}</div>
                     </div>
                 </div>`;
             }).join('');
@@ -3302,7 +3309,7 @@ function renderPlaylistSongs(playlistId) {
                 <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
                 <div>
                     <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
-                    <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                    <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
                 </div>
                 <button class="remove-from-queue-btn" onclick="removeSongFromPlaylist(${song.id}, ${playlist.id}, event)" style="margin-left: auto;">
                     <span class="material-symbols-rounded" style="font-size: 14px;">cancel</span>
@@ -3403,7 +3410,7 @@ function renderSongsAsList(songsToRender) {
                 <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
                 <div>
                     <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
-                    <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                    <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
                 </div>
             </div>
             <button class="song-actions" data-id="${song.id}">
@@ -3474,7 +3481,7 @@ function renderQueue() {
             <div class="song-info">
                 <span class="track-number">${index + 1}.</span>
                 <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 6px; margin: 0 5px;">
-                <div class="song-title">${song.name}</div>
+                <div class="song-title">${sanitize(song.name)}</div>
                 <span class="song-artist-queue">${song.artist}</span>
                 <button class="remove-from-queue-btn" data-queue-index="${index}">
                     <span class="material-symbols-rounded" style="font-size: 14px;">cancel</span>
@@ -3612,7 +3619,7 @@ function addToQueue(songId, position = 'last') {
     }
 
     isQueueUserModified = true; 
-    Gurasuraisu.showPopup(`Added "${song.name}" to queue.`);
+    Gurasuraisu.showPopup(`Added "${sanitize(song.name)}" to queue.`);
     
     // Corrected check: if the queue panel is visible, re-render it
     if (isPanelVisible && panelContent === 'queue') {
@@ -3717,8 +3724,8 @@ function updateMiniplayerUI(song, state) {
 
     miniplayer.classList.remove('hidden');
     miniplayerArt.src = song.albumArt;
-    miniplayerTitle.textContent = song.name;
-    miniplayerArtist.textContent = song.artist;
+    miniplayerTitle.textContent = sanitize(song.name);
+    miniplayerArtist.textContent = sanitize(song.artist);
     miniplayerPlayBtn.innerHTML = `<span class="material-symbols-rounded">${state === 'playing' ? 'pause' : 'play_arrow'}</span>`;
 }
         
@@ -4517,7 +4524,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
                         <div class="song-info">
                             <span class="track-number">${song.trackNumber || '•'}</span>
-                            <div class="song-title">${song.name}</div>
+                            <div class="song-title">${sanitize(song.name)}</div>
                         </div>
                     </div>`).join('')}</div>`;
                 openDrawer(albumName, artist, contentHtml);
@@ -4528,7 +4535,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="item-card" data-album-id="${album.artist}::${album.originalAlbum}">
                         <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
                         <div class="item-card-info">
-                            <div class="item-card-title">${album.name}</div>
+                            <div class="item-card-title">${sanitize(album.name)}</div>
                         </div>
                     </div>`).join('')}</div>`;
                 openDrawer(artistName, `${artistAlbums.length} albums`, contentHtml); // Pass details
@@ -4541,8 +4548,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                          <div class="song-info">
                             <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
                             <div>
-                                <div class="song-title">${song.name}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                                <div class="song-title">${sanitize(song.name)}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
                             </div>
                         </div>
                     </div>`).join('')}</div>`;
