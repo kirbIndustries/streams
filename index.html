@@ -2930,7 +2930,7 @@ async function updateAllBackgrounds(imageUrl) {
     }
 
     try {
-        const resizedUrl = await createResizedImageURL(imageUrl, 250, 250);
+        const resizedUrl = await createResizedImageURL(imageUrl, 64, 64);
         lastOriginalImageUrl = imageUrl;
         lastResizedImageUrl = resizedUrl;
         setDistortionBackgrounds(resizedUrl);
