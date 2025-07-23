@@ -706,7 +706,7 @@
             vertical-align: middle;
         }
 
-        .lyrics-button, .queue-button, .fullscreen-btn, .more-button {
+        .lyrics-button, .queue-button, .more-button {
             background: var(--search-background);
             border: 1px solid var(--glass-border);
             cursor: pointer;
@@ -1816,9 +1816,6 @@
                 <button class="queue-button">
                     <span class="material-symbols-rounded" style="font-size: 18px;">format_list_bulleted</span>
                 </button>
-                <button class="fullscreen-btn">
-                    <span class="material-symbols-rounded" style="font-size: 18px;">fullscreen</span>
-                </button>
                 <button class="more-button">
                     <span class="material-symbols-rounded" style="font-size: 18px;">more_horiz</span>
                 </button>
@@ -1828,6 +1825,11 @@
                 </div>
             </div>
             <div id="moreOptionsMenu" class="more-options-menu" style="right: 30px; bottom: 90px;">
+                <button class="menu-item" id="fullscreenBtn">
+                    <span class="material-symbols-rounded">fullscreen</span>
+                    <span>Fullscreen Info</span>
+                </button>
+                <div class="menu-separator"></div>
                 <div class="menu-item" id="menuEditMetadata">
                     <span class="material-symbols-rounded">edit</span>
                     <span>Edit Info</span>
@@ -4937,7 +4939,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelector('.lyrics-button').addEventListener('click', () => togglePanel('lyrics'));
         document.querySelector('.queue-button').addEventListener('click', () => togglePanel('queue'));
         
-        document.querySelector('.fullscreen-btn').addEventListener('click', () => {
+        document.getElementById('fullscreenBtn').addEventListener('click', () => {
             isFullscreen = !isFullscreen; // Toggle the state
             toolbar.classList.toggle('hidden', isFullscreen); // Update toolbar based on new state
         });
