@@ -2830,38 +2830,99 @@ function renderLibraryPage() {
         return;
     }
 
-    // --- RENDER MAIN LIBRARY VIEW ---
+    // Add activePlaylistId check here later
+
+    // --- RENDER MAIN LIBRARY VIEW (Complete Logic) ---
     const query = searchInput.value.toLowerCase();
-    // ... (the rest of the function's switch statement and rendering logic remains exactly the same) ...
+    const searchFilteredSongs = query ? songs.filter(s => 
+        s.name.toLowerCase().includes(query) ||
+        s.artist.toLowerCase().includes(query) ||
+        s.album.toLowerCase().includes(query)
+    ) : songs;
+
+    if (searchFilteredSongs.length === 0) {
+        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">search_off</span><p>No songs found</p></div>`;
+        return;
+    }
+    
+    let itemsHtml = ''; // Declare itemsHtml here
+    libraryGrid.className = (currentViewMode === 'grid') ? 'item-grid' : 'item-list'; // Set the view class
+
+    switch (currentFilter) {
+        case 'artists':
+            const artistsMap = new Map();
+            searchFilteredSongs.forEach(song => {
+                const artist = song.artist || 'Unknown Artist';
+                if (!artistsMap.has(artist)) {
+                    artistsMap.set(artist, song.albumArt);
+                }
+            });
+            let artistsList = Array.from(artistsMap.entries());
+            if (currentSortMode === 'alpha') artistsList.sort((a, b) => a[0].localeCompare(b[0]));
+            
+            itemsHtml = artistsList.map(([artist, art]) => `
+                <div class="item-card" data-artist-name="${artist}">
+                    <img src="${art || generateRandomGradient()}" alt="${artist}" class="item-card-art" style="border-radius: 50%;">
+                    <div class="item-card-info" style="text-align: center;">
+                        <div class="item-card-title">${artist}</div>
+                    </div>
+                </div>`).join('');
+            break;
+        
+        case 'songs':
+             if (currentSortMode === 'alpha') searchFilteredSongs.sort((a,b) => a.name.localeCompare(b.name));
+             else searchFilteredSongs.sort((a,b) => b.dateAdded - a.dateAdded);
+
+            itemsHtml = searchFilteredSongs.map(song => `
+                <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                     <div class="song-info">
+                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 10px;">
+                        <div>
+                            <div class="song-title">${song.name}</div>
+                            <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            break;
+
+        case 'albums':
+        default:
+            const albums = groupSongsByAlbum(searchFilteredSongs);
+            itemsHtml = albums.map(album => {
+                const albumId = `${album.artist}::${album.originalAlbum}`;
+                if (currentViewMode === 'grid') {
+                    return `
+                    <div class="item-card" data-album-id="${albumId}">
+                        <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+                        <div class="item-card-info">
+                            <div class="item-card-title">${album.name}</div>
+                            <div class="item-card-subtitle">${album.artist}</div>
+                        </div>
+                    </div>`;
+                } else { // List view
+                    return `
+                    <div class="album-section-list" data-album-id="${albumId}">
+                        <div class="album-header-list">
+                            <img src="${album.albumArt}" class="album-thumbnail">
+                            <div class="album-info">
+                                <div class="album-name">${album.name}</div>
+                                <div class="album-artist">${album.artist} • ${album.songs.length} songs</div>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+            }).join('');
+            break;
+    }
     
     libraryGrid.innerHTML = itemsHtml;
 
     // --- SCROLL RESTORATION LOGIC ---
-    // Use requestAnimationFrame to wait for the DOM to update before scrolling
     requestAnimationFrame(() => {
         libraryView.scrollTop = libraryScrollPosition;
     });
 }
-
-function renderAlbumSongsView(albumId) {
-    const libraryGrid = document.getElementById('library-grid');
-    const [artist, albumName] = albumId.split('::');
-    const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName)
-                           .sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
-    
-    const songsHtml = albumSongs.map(song => `
-        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
-            <div class="song-info">
-                <span class="track-number">${song.trackNumber || '•'}</span>
-                <div class="song-title">${song.name}</div>
-            </div>
-        </div>
-    `).join('');
-
-    libraryGrid.className = 'item-list';
-    libraryGrid.innerHTML = songsHtml;
-}
-
 function renderArtistAlbumsView(artistName) {
     const libraryGrid = document.getElementById('library-grid');
     const artistSongs = songs.filter(s => s.artist === artistName);
