@@ -2194,19 +2194,6 @@ function setView(viewName) {
     const previousView = activeView;
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
-    const distortionContainer = document.getElementById('distortion-container');
-    const nowPlayingWrapper = document.querySelector('.now-playing-wrapper');
-
-    // --- Animation Logic ---
-    if (isNowPlaying) {
-        // If entering Now Playing, ensure wrapper is visible and start fade-in.
-        if (nowPlayingWrapper) nowPlayingWrapper.style.display = 'flex';
-        distortionContainer.classList.add('active');
-    } else if (previousView === 'now-playing') {
-        // If leaving Now Playing, hide content instantly and start fade-out.
-        if (nowPlayingWrapper) nowPlayingWrapper.style.display = 'none';
-        distortionContainer.classList.remove('active');
-    }
 
     // If navigating to a main view, store it as the last one visited.
     if (!isNowPlaying) {
@@ -2219,14 +2206,8 @@ function setView(viewName) {
 
     viewContainers.forEach(container => {
         const isVisible = container.id === `${viewName}-view`;
-        
-        // Delay hiding the Now Playing view to allow fade-out
-        if (container.id === 'now-playing-view' && !isVisible) {
-            setTimeout(() => { container.style.display = 'none'; }, 500);
-        } else {
-            container.style.display = isVisible ? 'flex' : 'none';
-        }
-        
+        container.style.display = isVisible ? 'flex' : 'none';
+
         if (isVisible) {
             // If returning from the player, restore scroll position. Otherwise, scroll to top.
             if (previousView === 'now-playing') {
