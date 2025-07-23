@@ -2196,28 +2196,8 @@ function setView(viewName) {
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
 
-    // If navigating to a main view, store it as the last one visited.
-    if (!isNowPlaying) {
-        lastMainView = viewName;
-    }
-    
     tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const viewName = btn.dataset.view;
-            
-            // If the drawer is open, just close it and don't navigate.
-            if (isDrawerOpen) {
-                closeDrawer();
-                return; 
-            }
-
-            // Reset scroll position when navigating BETWEEN main tabs.
-            if (activeView !== viewName && viewName === 'library') {
-                libraryScrollPosition = 0;
-            }
-
-            setView(viewName);
-        });
+        btn.classList.toggle('active', btn.dataset.view === viewName);
     });
 
     viewContainers.forEach(container => {
