@@ -2164,6 +2164,17 @@ function setView(viewName) {
     const previousView = activeView;
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
+    const distortionContainer = document.getElementById('distortion-container');
+
+    // --- Animation Logic ---
+    // Start fade-out immediately if leaving Now Playing
+    if (previousView === 'now-playing' && !isNowPlaying) {
+        distortionContainer.classList.remove('active');
+    }
+    // Start fade-in immediately if entering Now Playing
+    if (isNowPlaying) {
+        distortionContainer.classList.add('active');
+    }
 
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
@@ -3634,6 +3645,7 @@ function rebuildQueueFromCurrentView() {
 }
 
 function addToQueue(songId, position = 'last') {
+    isQueueUserModified = true; // Flag that the user is now manually curating the queue
     const song = songs.find(s => s.id === songId);
     if (!song) return;
 
@@ -3642,7 +3654,6 @@ function addToQueue(songId, position = 'last') {
         currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
     }
     
-    // Ensure currentQueueIndex is valid before splicing
     if (currentQueueIndex === -1) {
         currentQueueIndex = playQueue.length - 1;
     }
@@ -3653,10 +3664,8 @@ function addToQueue(songId, position = 'last') {
         playQueue.push(song);
     }
 
-    isQueueUserModified = true; 
     Gurasuraisu.showPopup(`Added "${sanitize(song.name)}" to queue.`);
     
-    // Corrected check: if the queue panel is visible, re-render it
     if (isPanelVisible && panelContent === 'queue') {
         renderQueue();
     }
@@ -3681,8 +3690,28 @@ function openSongContextMenu(event, songId) {
     contextMenu.classList.add('visible');
 }
 
-async function playSong(song) {
+async function playSong(song, playContext = null) {
     if (isPlayerLoading || !song) return;
+
+    // --- NEW QUEUE LOGIC ---
+    if (playContext && Array.isArray(playContext)) {
+        // A new context (playlist, album) was provided. Overwrite the queue.
+        playQueue = [...playContext];
+        isQueueUserModified = false; // This is now an "automatic" queue
+    } else {
+        // No context provided. Check if the user has a custom queue.
+        if (isQueueUserModified) {
+            // User has a custom queue. Do NOT overwrite it.
+            // If the song isn't in the queue, add it to play next.
+            if (!playQueue.some(s => s.id === song.id)) {
+                playQueue.splice(currentQueueIndex + 1, 0, song);
+            }
+        } else {
+            // No custom queue and no context. Rebuild from the current view as a fallback.
+            rebuildQueueFromCurrentView();
+        }
+    }
+    
     isPlayerLoading = true;
 
     try {
@@ -3970,7 +3999,6 @@ function addQueueItemEventListeners() {
             const song = playQueue.find(s => s.id === songId);
             if (song) {
                 playSong(song);
-                if (window.innerWidth <= 800) closeSidebar();
             }
         });
     });
@@ -3978,6 +4006,7 @@ function addQueueItemEventListeners() {
     document.querySelectorAll('.remove-from-queue-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
+            isQueueUserModified = true; // Flag that the user has manually edited the queue
             const indexToRemove = parseInt(e.currentTarget.dataset.queueIndex, 10);
             
             if (playQueue[indexToRemove].id === currentSongId) {
@@ -4043,6 +4072,7 @@ function getDragAfterElement(container, y) {
 }
 
 function updateQueueFromDOM() {
+    isQueueUserModified = true; // Flag that the user has manually reordered the queue
     const newQueueOrder = [];
     document.querySelectorAll('.queue-item').forEach(item => {
         const songId = parseFloat(item.dataset.id);
@@ -4052,7 +4082,6 @@ function updateQueueFromDOM() {
 
     playQueue = newQueueOrder;
     currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
-    isQueueUserModified = true;
     renderQueue();
 }
         
@@ -4522,7 +4551,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (songItem) {
                 const songId = parseFloat(songItem.dataset.id);
                 const song = songs.find(s => s.id === songId);
-                if (song) playSong(song);
+                if (song) {
+                    // Get context from the search results
+                    const contextSongs = Array.from(document.querySelectorAll('#search-results-grid .music-item[data-id]'))
+                        .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
+                        .filter(Boolean);
+                    playSong(song, contextSongs);
+                }
             }
         });
         
@@ -4538,7 +4573,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const albumId = albumCard.dataset.albumId;
                 const [artist, albumName] = albumId.split('::');
                 const songToPlay = songs.find(s => s.albumArtist === artist && s.album === albumName);
-                if(songToPlay) playSong(songToPlay);
+                if (songToPlay) {
+                    // Get all songs from the album as the context
+                    const albumContext = songs.filter(s => s.albumArtist === artist && s.album === albumName);
+                    playSong(songToPlay, albumContext);
+                }
             }
         });
 
@@ -4551,7 +4590,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (songItem) {
                 const songId = parseFloat(songItem.dataset.id);
                 const song = songs.find(s => s.id === songId);
-                if (song) playSong(song);
+                if (song) {
+                    // Get the context from the currently displayed list
+                    const contextSongs = Array.from(libraryGrid.querySelectorAll('.music-item[data-id]'))
+                        .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
+                        .filter(Boolean);
+                    playSong(song, contextSongs);
+                }
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
                 const [artist, albumName] = albumId.split('::');
@@ -4617,7 +4662,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const songId = parseFloat(songItem.dataset.id);
                 const song = songs.find(s => s.id === songId);
                 if (song) {
-                    playSong(song);
+                    // Get context from the items currently in the drawer
+                    const contextSongs = Array.from(drawerContent.querySelectorAll('.music-item[data-id]'))
+                        .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
+                        .filter(Boolean);
+                    playSong(song, contextSongs);
                     closeDrawer();
                 }
             } else if (albumCard) {
