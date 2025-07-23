@@ -289,6 +289,7 @@
         .item-card-art {
             width: 100%;
             aspect-ratio: 1 / 1;
+            box-shadow: 0 0 0 1px var(--glass-border);
             border-radius: 12px;
             object-fit: cover;
         }
@@ -1602,16 +1603,20 @@
             width: 80px;
             height: 80px;
             border-radius: 10px;
+            box-shadow: 0 0 0 1px var(--glass-border);
             flex-shrink: 0;
         }
         .highlight-card-info {
             flex-grow: 1;
             min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 4px;
         }
         .highlight-card-label {
             font-size: 12px;
             color: var(--secondary-text-color);
-            margin-bottom: 4px;
         }
         .highlight-card-title {
             font-size: 1.2rem;
