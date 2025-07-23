@@ -197,6 +197,7 @@
             cursor: pointer;
             overflow: hidden;
             transition: all 0.3s cubic-bezier(.3,1.2,.64,1) !IMPORTANT;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.2);
         }
         #bottom-miniplayer:active {
             transform: translateX(-50%) scale(1.05);
@@ -1833,7 +1834,7 @@
 
     <!-- Manage Folders Modal -->
     <div id="manageFoldersModal" class="modal-overlay">
-        <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 450px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 40px; width: 90%; max-width: 450px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Connected Folders</h2>
             <div id="folderList" style="max-height: 250px; overflow-y: auto; margin-bottom: 15px;">
                 <!-- Folder list will be populated here -->
@@ -1846,7 +1847,7 @@
 
     <!-- Edit Song Modal -->
     <div id="editModal" class="modal-overlay">
-        <div id="editModalContent" style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
+        <div id="editModalContent" style="background: var(--modal-background); padding: 25px; border-radius: 40px; width: 90%; max-width: 400px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Edit Song Info</h2>
             <input type="hidden" id="editSongId">
             <div style="display: flex; flex-direction: column; gap: 15px;">
@@ -1863,7 +1864,7 @@
 
     <!-- Sleep Timer Modal -->
     <div id="sleepTimerModal" class="modal-overlay">
-        <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 300px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 40px; width: 90%; max-width: 300px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Sleep Timer</h2>
             <p style="margin-bottom: 15px; color: var(--secondary-text-color);">Playback will stop after:</p>
             <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -1878,7 +1879,7 @@
 
     <!-- Playlist Modal -->
     <div id="playlistModal" class="modal-overlay">
-         <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
+         <div style="background: var(--modal-background); padding: 25px; border-radius: 40px; width: 90%; max-width: 400px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Add to playlist</h2>
             <div id="playlistList" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
             <div class="menu-separator"></div>
@@ -1892,7 +1893,7 @@
     
     <!-- Equalizer Modal -->
     <div id="equalizerModal" class="modal-overlay">
-        <div style="background: var(--modal-background); padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 40px; width: 90%; max-width: 400px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Equalizer</h2>
             
             <div id="eq-bands-container" style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 25px;">
