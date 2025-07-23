@@ -1825,10 +1825,10 @@
                 </div>
             </div>
             <div id="moreOptionsMenu" class="more-options-menu" style="right: 30px; bottom: 90px;">
-                <button class="menu-item" id="fullscreenBtn">
+                <div class="menu-item" id="menuFullscreenBtn">
                     <span class="material-symbols-rounded">fullscreen</span>
-                    <span>Fullscreen Info</span>
-                </button>
+                    <span>Fullscreen</span>
+                </div>
                 <div class="menu-separator"></div>
                 <div class="menu-item" id="menuEditMetadata">
                     <span class="material-symbols-rounded">edit</span>
@@ -4939,11 +4939,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelector('.lyrics-button').addEventListener('click', () => togglePanel('lyrics'));
         document.querySelector('.queue-button').addEventListener('click', () => togglePanel('queue'));
         
-        document.getElementById('fullscreenBtn').addEventListener('click', () => {
-            isFullscreen = !isFullscreen; // Toggle the state
-            toolbar.classList.toggle('hidden', isFullscreen); // Update toolbar based on new state
-        });
-        
         document.addEventListener('click', (e) => {
             const lyricsQueuePanel = document.getElementById('lyrics-queue-panel');
             if (isPanelVisible && !lyricsQueuePanel.contains(e.target) && !e.target.closest('.lyrics-button, .queue-button, .more-button')) {
@@ -5006,6 +5001,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('menuDeleteSong').addEventListener('click', async () => {
             if (currentSongId && confirm('Delete this song? This is permanent.')) await deleteSong(currentSongId);
             moreOptionsMenu.classList.remove('visible');
+        });
+
+        document.getElementById('menuFullscreenBtn').addEventListener('click', () => {
+            isFullscreen = !isFullscreen; // Toggle the state
+            toolbar.classList.toggle('hidden', isFullscreen); // Update toolbar based on new state
         });
         
         document.getElementById('menuEditMetadata').addEventListener('click', () => { if (currentSongId) openEditModal(currentSongId); moreOptionsMenu.classList.remove('visible'); });
