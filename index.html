@@ -3994,7 +3994,10 @@ async function fetchLyrics(songId) {
 
 function addQueueItemEventListeners() {
     document.querySelectorAll('.queue-item').forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (e) => {
+            // Prevent click from propagating to the remove button
+            if (e.target.closest('.remove-from-queue-btn')) return;
+
             const songId = parseFloat(item.dataset.id);
             const song = playQueue.find(s => s.id === songId);
             if (song) {
@@ -4006,7 +4009,7 @@ function addQueueItemEventListeners() {
     document.querySelectorAll('.remove-from-queue-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            isQueueUserModified = true; // Flag that the user has manually edited the queue
+            isQueueUserModified = true; // <-- ADD THIS LINE: Removing a song is a manual edit.
             const indexToRemove = parseInt(e.currentTarget.dataset.queueIndex, 10);
             
             if (playQueue[indexToRemove].id === currentSongId) {
@@ -4564,17 +4567,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('home-view').addEventListener('click', (e) => {
             const highlightCard = e.target.closest('.highlight-card[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
-        
+    
             if (highlightCard) {
                 const songId = parseFloat(highlightCard.dataset.id);
                 const song = songs.find(s => s.id === songId);
-                if (song) playSong(song);
+                if (song) {
+                    // Play this single song as its own context
+                    playSong(song, [song]);
+                }
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
                 const [artist, albumName] = albumId.split('::');
+                // When playing from a "Recently Played" album card, play the first song of that album
                 const songToPlay = songs.find(s => s.albumArtist === artist && s.album === albumName);
-                if (songToPlay) {
-                    // Get all songs from the album as the context
+                if(songToPlay) {
+                    // The context is all songs from that album
                     const albumContext = songs.filter(s => s.albumArtist === artist && s.album === albumName);
                     playSong(songToPlay, albumContext);
                 }
