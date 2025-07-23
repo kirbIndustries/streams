@@ -3209,11 +3209,17 @@ async function renderHomePage() {
         if (topSongs.length > 1) {
             listenAgainSongs.push(topSongs[(listenAgainIndex + 1) % topSongs.length]);
         }
+        if (topSongs.length > 2) {
+            listenAgainSongs.push(topSongs[(listenAgainIndex + 2) % topSongs.length]);
+        }
+        if (topSongs.length > 3) {
+            listenAgainSongs.push(topSongs[(listenAgainIndex + 3) % topSongs.length]);
+        }
     }
     listenAgainSongs.forEach(s => highlightSongs.add(s));
 
     const recommendations = songs.filter(s => !listenAgainSongs.some(ls => ls.id === s.id));
-    for (let i = 0; i < 2 && recommendations.length > 0; i++) {
+    for (let i = 0; i < 4 && recommendations.length > 0; i++) {
         const randomIndex = Math.floor(Math.random() * recommendations.length);
         highlightSongs.add(recommendations.splice(randomIndex, 1)[0]);
     }
@@ -3244,7 +3250,7 @@ async function renderHomePage() {
             recentAlbumIds.add(albumId);
             recentAlbums.push(song); // Use the song object as a representative for the album
         }
-        if (recentAlbums.length >= 32) break; // Limit to 32 albums
+        if (recentAlbums.length >= 40) break; // Limit to 40 albums
     }
     const recentlyPlayedHtml = recentAlbums.map(song => `
          <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
