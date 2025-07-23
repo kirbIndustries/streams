@@ -2202,7 +2202,22 @@ function setView(viewName) {
     }
     
     tabBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.view === viewName);
+        btn.addEventListener('click', () => {
+            const viewName = btn.dataset.view;
+            
+            // If the drawer is open, just close it and don't navigate.
+            if (isDrawerOpen) {
+                closeDrawer();
+                return; 
+            }
+
+            // Reset scroll position when navigating BETWEEN main tabs.
+            if (activeView !== viewName && viewName === 'library') {
+                libraryScrollPosition = 0;
+            }
+
+            setView(viewName);
+        });
     });
 
     viewContainers.forEach(container => {
@@ -4957,8 +4972,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     
         miniplayer.addEventListener('click', (e) => {
             if (e.target.closest('.mini-control-btn')) return;
-    
-            const currentViewElement = document.getElementById(`${activeView}-view`);
+        
+            const currentViewElement = document.querySelector('.view-container[style*="display: flex"]');
             if (currentViewElement) {
                 lastScrollPosition = currentViewElement.scrollTop;
             }
