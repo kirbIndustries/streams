@@ -2193,7 +2193,18 @@ function setView(viewName) {
     const previousView = activeView;
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
+    const distortionContainer = document.getElementById('distortion-container');
+    const nowPlayingView = document.getElementById('now-playing-view');
+    const nowPlayingWrapper = nowPlayingView.querySelector('.now-playing-wrapper');
 
+    if (isNowPlaying) {
+        distortionContainer.classList.add('active');
+        nowPlayingWrapper.classList.remove('content-hidden'); // Instantly show content
+    } else {
+        distortionContainer.classList.remove('active');
+        nowPlayingWrapper.classList.add('content-hidden'); // Instantly hide content
+    }
+    
     // If navigating to a main view, store it as the last one visited.
     if (!isNowPlaying) {
         lastMainView = viewName;
@@ -2208,7 +2219,8 @@ function setView(viewName) {
         
         // Delay hiding the Now Playing view to allow fade-out
         if (container.id === 'now-playing-view' && !isVisible) {
-            setTimeout(() => { container.style.display = 'none'; }, 300);
+            // It's already flex, just needs to be visible for the transition
+            setTimeout(() => { container.style.display = 'none'; }, 500); 
         } else {
             container.style.display = isVisible ? 'flex' : 'none';
         }
