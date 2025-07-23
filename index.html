@@ -1603,6 +1603,16 @@
             margin-left: auto;
             font-size: 36px;
         }
+        
+        .song-item-actions {
+            background: none;
+            border: none;
+            color: var(--secondary-text-color);
+            margin-left: auto;
+            padding: 5px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body data-app-name="Music">
@@ -2119,6 +2129,7 @@ function renderSearchResults() {
                 <div>
                     <div class="song-title">${sanitize(song.name)}</div>
                     <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
+                    <button class="song-item-actions" data-id="${song.id}"><span class="material-symbols-rounded" style="font-size: 10px;">circle</span></button>
                 </div>
             </div>
         </div>
@@ -2238,7 +2249,7 @@ function resetPlayer() {
     playQueue = [];
     currentQueueIndex = -1;
 
-    const defaultImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAH0CAYAAADL1t+KAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAPgSURBVHhe7cEBAQAAAIIg/69uSEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACcqAFFFQAB8Dl/nAAAAABJRU5ErkJggg==";
+    const defaultImage = "/music/favicon.png";
     albumArtImg.src = defaultImage;
 
     updateAllBackgrounds('');
@@ -2250,6 +2261,7 @@ function resetPlayer() {
     updateTimeDisplays();
     playPauseIcon.textContent = 'play_arrow';
     playPauseBtn.classList.remove('playing');
+    Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
     document.title = 'Music';
     updateFavicon(defaultImage);
 
@@ -3203,6 +3215,7 @@ function renderLibraryPage() {
                         <div>
                             <div class="song-title">${sanitize(song.name)}</div>
                             <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
+                            <button class="song-item-actions" data-id="${song.id}"><span class="material-symbols-rounded" style="font-size: 10px;">circle</span></button>
                         </div>
                     </div>
                 </div>
@@ -3310,6 +3323,7 @@ function renderPlaylistSongs(playlistId) {
                 <div>
                     <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
                     <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
+                    <button class="song-item-actions" data-id="${song.id}"><span class="material-symbols-rounded" style="font-size: 10px;">circle</span></button>
                 </div>
                 <button class="remove-from-queue-btn" onclick="removeSongFromPlaylist(${song.id}, ${playlist.id}, event)" style="margin-left: auto;">
                     <span class="material-symbols-rounded" style="font-size: 14px;">cancel</span>
@@ -3698,12 +3712,13 @@ async function playSong(song) {
         await audioPlayer.play();
 
         playPauseIcon.textContent = 'pause';
-        playPauseBtn.classList.add('playing'); 
-        
+        playPauseBtn.classList.add('playing');
+        Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
         updateMiniplayerUI(song, 'playing');
 
     } catch (error) {
         if (error.name !== 'AbortError') console.error("Failed to play song:", song.name, error);
+        Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
         updateMiniplayerUI(song, 'paused');
     } finally {
         isPlayerLoading = false;
@@ -4525,6 +4540,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="song-info">
                             <span class="track-number">${song.trackNumber || '•'}</span>
                             <div class="song-title">${sanitize(song.name)}</div>
+                            <button class="song-item-actions" data-id="${song.id}"><span class="material-symbols-rounded" style="font-size: 10px;">circle</span></button>
                         </div>
                     </div>`).join('')}</div>`;
                 openDrawer(albumName, artist, contentHtml);
@@ -4560,34 +4576,50 @@ document.addEventListener('DOMContentLoaded', async () => {
         drawerContent.addEventListener('click', (e) => {
             const songItem = e.target.closest('.music-item[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
+            const backButton = e.target.closest('.drawer-back-btn'); // Correctly find the button
 
             if (backButton) {
                 const artistName = backButton.dataset.artistName;
-                // Go back to the artist's album list
                 const artistAlbums = groupSongsByAlbum(songs.filter(s => s.artist === artistName));
-                const contentHtml = `<div class="item-grid">...</div>`; // Your artist album card HTML
-                openDrawer(artistName, `${artistAlbums.length} albums`, contentHtml);
+                const contentHtml = `<div class="item-grid">${artistAlbums.map(album => {
+                    const albumId = `${album.artist}::${album.originalAlbum}`;
+                    return `
+                    <div class="item-card" data-album-id="${sanitize(albumId)}">
+                        <img src="${album.albumArt}" alt="${sanitize(album.name)}" class="item-card-art">
+                        <div class="item-card-info">
+                            <div class="item-card-title">${sanitize(album.name)}</div>
+                        </div>
+                    </div>`;
+                }).join('')}</div>`;
+                openDrawer(sanitize(artistName), `${artistAlbums.length} albums`, contentHtml);
             } else if (songItem) {
                 const songId = parseFloat(songItem.dataset.id);
                 const song = songs.find(s => s.id === songId);
                 if (song) {
                     playSong(song);
-                    closeDrawer(); // Close drawer after selection
+                    closeDrawer();
                 }
             } else if (albumCard) {
-                // This is the secondary drill-down (inside artist view)
                 const albumId = albumCard.dataset.albumId;
                 const [artist, albumName] = albumId.split('::');
                 const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName).sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
                 
-                // UPDATE in-place instead of calling openDrawer
-                document.getElementById('drawer-title').textContent = sanitize(albumName);
-                document.getElementById('drawer-subtitle').textContent = sanitize(artist);
-                drawerContent.innerHTML = `
+                // This now includes the back button in the generated HTML
+                const contentHtml = `
                     <button class="action-btn drawer-back-btn" data-artist-name="${sanitize(artist)}"><span class="material-symbols-rounded">arrow_back</span> Back</button>
                     <div class="item-list" style="margin-top: 15px;">
-                        ${albumSongs.map(song => `...`).join('')}
-                    </div>`; // Your song list item HTML
+                        ${albumSongs.map(song => `
+                        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                            <div class="song-info">
+                                <span class="track-number">${song.trackNumber || '•'}</span>
+                                <div class="song-title">${sanitize(song.name)}</div>
+                            </div>
+                        </div>`).join('')}
+                    </div>`;
+                
+                document.getElementById('drawer-title').textContent = sanitize(albumName);
+                document.getElementById('drawer-subtitle').textContent = sanitize(artist);
+                drawerContent.innerHTML = contentHtml;
             }
         });
 
@@ -4640,6 +4672,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Re-render the library with the new sorting
             renderLibraryPage();
         });
+        
+        const handleSongActionsClick = (e) => {
+            const actionButton = e.target.closest('.song-item-actions');
+            if (actionButton) {
+                e.stopPropagation(); // Prevent the song from playing
+                const songId = parseFloat(actionButton.dataset.id);
+                openSongContextMenu(e, songId);
+            }
+        };
+        
+        document.getElementById('library-grid').addEventListener('click', handleSongActionsClick);
+        document.getElementById('search-results-grid').addEventListener('click', handleSongActionsClick);
+        drawerContent.addEventListener('click', handleSongActionsClick);
 
         shardContainer = document.getElementById('distortion-container');
         initializeShards(); 
