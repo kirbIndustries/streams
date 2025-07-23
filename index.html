@@ -3202,7 +3202,7 @@ async function renderHomePage() {
 
     const recentSongIds = [...new Set(history.map(h => h.songId))].slice(0, 40);
     const recentlyPlayed = recentSongIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
-    const recentlyPlayedHtml = recentlyAdded.map(song => `
+    const recentlyPlayedHtml = recentlyPlayed.map(song => `
          <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
             <img src="${song.albumArt}" class="item-card-art">
             <div class="item-card-info">
