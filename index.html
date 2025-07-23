@@ -2013,6 +2013,8 @@
         let panelContent = null; // 'lyrics' or 'queue'
         let libraryScrollPosition = 0;
         let isFullscreen = false;
+        let lastMainView = 'home'; // To remember where to return after playback ends
+        let lastScrollPosition = 0; // To remember scroll position when entering Now Playing
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
         const miniplayer = document.getElementById('bottom-miniplayer');
@@ -2191,6 +2193,11 @@ function setView(viewName) {
     const previousView = activeView;
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
+
+    // If navigating to a main view, store it as the last one visited.
+    if (!isNowPlaying) {
+        lastMainView = viewName;
+    }
     
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
@@ -2201,18 +2208,18 @@ function setView(viewName) {
         container.style.display = isVisible ? 'flex' : 'none';
 
         if (isVisible) {
-            // Only reset scroll if NOT coming from the player view
-            if (previousView !== 'now-playing') {
+            // If returning from the player, restore scroll position. Otherwise, scroll to top.
+            if (previousView === 'now-playing') {
+                requestAnimationFrame(() => {
+                    container.scrollTop = lastScrollPosition;
+                });
+            } else {
                 container.scrollTop = 0;
             }
 
-            if (viewName === 'library') {
-                renderLibraryPage();
-            } else if (viewName === 'home') {
-                renderHomePage(); // We will create this next
-            } else if (viewName === 'search') {
-                document.getElementById('search-results-grid').innerHTML = '';
-            }
+            if (viewName === 'library') { renderLibraryPage(); } 
+            else if (viewName === 'home') { renderHomePage(); } 
+            else if (viewName === 'search') { document.getElementById('search-results-grid').innerHTML = ''; }
         }
     });
 
@@ -2333,6 +2340,10 @@ function resetPlayer() {
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = null;
         navigator.mediaSession.playbackState = 'none';
+    }
+    
+    if (activeView === 'now-playing') {
+        setView(lastMainView);
     }
 }
     
@@ -4946,10 +4957,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 setView(viewName);
             });
         });
-
+    
         miniplayer.addEventListener('click', (e) => {
-            // Do nothing if a control button was clicked
             if (e.target.closest('.mini-control-btn')) return;
+    
+            const currentViewElement = document.getElementById(`${activeView}-view`);
+            if (currentViewElement) {
+                lastScrollPosition = currentViewElement.scrollTop;
+            }
+    
             setView('now-playing');
         });
         
