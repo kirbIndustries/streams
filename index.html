@@ -2985,7 +2985,7 @@ function renderPlaylists() {
                 </div>
             </div>
             <button class="remove-from-queue-btn" onclick="deletePlaylist(${playlist.id}, event)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%);">
-                <span class="material-symbols-rounded" style="font-size: 10px;">circle</span>
+                <span class="material-symbols-rounded" style="font-size: 10px;">cancel</span>
             </button>`;
         
         item.addEventListener('click', (e) => {
@@ -3021,7 +3021,7 @@ function renderPlaylistSongs(playlistId) {
                     <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
                 </div>
                 <button class="remove-from-queue-btn" onclick="removeSongFromPlaylist(${song.id}, ${playlist.id}, event)" style="margin-left: auto;">
-                    <span class="material-symbols-rounded" style="font-size: 10px;">circle</span>
+                    <span class="material-symbols-rounded" style="font-size: 10px;">cancel</span>
                 </button>
             </div>
         </div>
@@ -3193,7 +3193,7 @@ function renderQueue() {
                 <div class="song-title">${song.name}</div>
                 <span class="song-artist-queue">${song.artist}</span>
                 <button class="remove-from-queue-btn" data-queue-index="${index}">
-                    <span class="material-symbols-rounded" style="font-size: 10px;">circle</span>
+                    <span class="material-symbols-rounded" style="font-size: 10px;">cancel</span>
                 </button>
             </div>
         </div>
