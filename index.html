@@ -1577,7 +1577,7 @@
 
         .highlight-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
             margin-bottom: 40px;
         }
@@ -4005,7 +4005,7 @@ function addQueueItemEventListeners() {
             const songId = parseFloat(item.dataset.id);
             const song = playQueue.find(s => s.id === songId);
             if (song) {
-                playSong(song);
+                playSong(song, playQueue);
             }
         });
     });
