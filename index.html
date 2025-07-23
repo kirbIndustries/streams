@@ -227,8 +227,8 @@
             background: none;
             border: none;
             color: var(--text-color);
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -1121,6 +1121,17 @@
            .menu-btn {
                display: none;
            }
+        }
+
+        @media (max-width: 640px) {
+            .toolbar {
+                justify-content: flex-start;
+            }
+
+            .tab-btn {
+                font-size: 0;
+                padding-left: 30px;
+            }
         }
         
         /* When animations are disabled */
