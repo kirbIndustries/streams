@@ -1573,8 +1573,10 @@
             cursor: pointer;
             transition: background 0.2s ease;
         }
-        .highlight-card:hover {
-            background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.1));
+        .highlight-card:active .highlight-card-play {
+            transform: scale(0.96);
+            transition: all 0.1s cubic-bezier(0.2, 0, 0.38, 0.9);
+            filter: brightness(1.5);
         }
         .highlight-card img {
             width: 80px;
