@@ -1249,12 +1249,13 @@
             border: none;
             color: var(--secondary-text-color);
             cursor: pointer;
-            padding: 5px;
+            padding: 10px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            opacity: 0.5;
         }
         
         .queue-list-container {
@@ -2983,7 +2984,7 @@ function renderPlaylists() {
                 </div>
             </div>
             <button class="remove-from-queue-btn" onclick="deletePlaylist(${playlist.id}, event)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%);">
-                <span class="material-symbols-rounded">delete</span>
+                <span class="material-symbols-rounded" style="font-size: 10px;">circle</span>
             </button>`;
         
         item.addEventListener('click', (e) => {
@@ -3019,7 +3020,7 @@ function renderPlaylistSongs(playlistId) {
                     <div class="album-artist" style="font-size: 0.8em;">${song.artist}</div>
                 </div>
                 <button class="remove-from-queue-btn" onclick="removeSongFromPlaylist(${song.id}, ${playlist.id}, event)" style="margin-left: auto;">
-                    <span class="material-symbols-rounded">playlist_remove</span>
+                    <span class="material-symbols-rounded" style="font-size: 10px;">circle</span>
                 </button>
             </div>
         </div>
