@@ -3847,6 +3847,8 @@ async function playSong(song, playContext = null) {
         // PRIORITY 1: A new context was explicitly provided. This ALWAYS overwrites the old queue.
         playQueue = [...playContext];
         isQueueUserModified = false; // This is a new, app-generated queue.
+        isShuffleEnabled = false;
+        updateShuffleButtonState();
     } else if (isQueueUserModified) {
         // PRIORITY 2: No new context was given, and the user has a custom queue. We must protect it.
         if (!playQueue.some(s => s.id === song.id)) {
@@ -4258,6 +4260,10 @@ function updateQueueFromDOM() {
 
     playQueue = newQueueOrder;
     currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
+
+    isShuffleEnabled = false;
+    updateShuffleButtonState();
+    
     renderQueue();
 }
         
@@ -4321,6 +4327,10 @@ function toggleShuffle() {
     document.getElementById("shuffleBtn").classList.toggle("active", isShuffleEnabled);
     isQueueUserModified = false;
     updatePlayQueue();
+}
+
+function updateShuffleButtonState() {
+    document.getElementById("shuffleBtn").classList.toggle("active", isShuffleEnabled);
 }
         
 function toggleRepeat() {
