@@ -1054,6 +1054,13 @@
             background: var(--secondary-text-color);
             color: var(--background-color);
         }
+
+        .filter-separator {
+            width: 3px;
+            background: var(--search-background);
+            border-radius: 5px;
+            margin: 10px 5px;
+        }
         
         #shuffleBtn, #repeatBtn {
             background: transparent;
@@ -1757,6 +1764,7 @@
                     <button class="filter-btn" data-filter="songs"><span class="material-symbols-rounded">music_note</span></button>
                     <button class="filter-btn" data-filter="playlists"><span class="material-symbols-rounded">queue_music</span></button>
                 </div>
+                <div class="filter-separator"></div>
                 <div class="view-controls">
                     <button id="sortBtn" class="action-btn"><span class="material-symbols-rounded">history</span><span id="sort-mode-display"></span></button>
                 </div>
