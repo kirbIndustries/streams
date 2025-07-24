@@ -251,7 +251,7 @@
             height: 2px;
             background-color: var(--secondary-text-color);
             width: 0%; /* JS will control this */
-            transition: width 0.25s linear;
+            transition: width 0.25s ease;
             border-radius: 5px;
         }
 
@@ -259,11 +259,6 @@
         #miniplayer-prev-btn, #miniplayer-next-btn { display: none; }
         @media (min-width: 500px) {
             #miniplayer-prev-btn, #miniplayer-next-btn { display: flex; }
-        }
-
-        #miniplayer-prev-btn:active, #miniplayer-play-btn:active, #miniplayer-next-btn:active {
-            transform: scale(1.1);
-            filter: brightness(1.5);
         }
 
         /* Generic Grid for Home/Library/Search */
