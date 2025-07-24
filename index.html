@@ -3850,8 +3850,6 @@ async function playSong(song, playContext = null) {
         // PRIORITY 1: A new context was explicitly provided. This ALWAYS overwrites the old queue.
         playQueue = [...playContext];
         isQueueUserModified = false; // This is a new, app-generated queue.
-        isShuffleEnabled = false;
-        updateShuffleButtonState();
     } else if (isQueueUserModified) {
         // PRIORITY 2: No new context was given, and the user has a custom queue. We must protect it.
         if (!playQueue.some(s => s.id === song.id)) {
@@ -4767,6 +4765,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const contextSongs = Array.from(document.querySelectorAll('#search-results-grid .music-item[data-id]'))
                         .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
                         .filter(Boolean);
+
+                    isShuffleEnabled = false; 
+                    updateShuffleButtonState();
+                    
                     playSong(song, contextSongs);
                 }
             }
@@ -4810,6 +4812,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const contextSongs = Array.from(libraryGrid.querySelectorAll('.music-item[data-id]'))
                         .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
                         .filter(Boolean);
+                    isShuffleEnabled = false; 
+                    updateShuffleButtonState();
                     playSong(song, contextSongs);
                 }
             } else if (albumCard) {
@@ -4881,6 +4885,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const contextSongs = Array.from(drawerContent.querySelectorAll('.music-item[data-id]'))
                         .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
                         .filter(Boolean);
+
+                    isShuffleEnabled = false; 
+                    updateShuffleButtonState();
+                    
                     playSong(song, contextSongs);
                     closeDrawer();
                 }
