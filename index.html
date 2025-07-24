@@ -2212,7 +2212,7 @@ function renderSearchResults() {
              <div class="song-info">
                 <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                 <div>
-                    <div class="song-title">${sanitize(song.name)}</div>
+                    <div class="song-title" style="white-space: normal;">${sanitize(song.name)}</div>
                     <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
                 </div>
             </div>
@@ -3382,7 +3382,7 @@ function renderLibraryPage() {
                      <div class="song-info">
                         <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                         <div>
-                            <div class="song-title">${sanitize(song.name)}</div>
+                            <div class="song-title" style="white-space: normal;">${sanitize(song.name)}</div>
                             <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
                         </div>
                     </div>
@@ -3452,7 +3452,7 @@ function renderPlaylists() {
             <div class="song-info">
                 <img src="${albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
                 <div>
-                    <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${playlist.name}</div>
+                    <div class="song-title" style="font-size: 1em; margin-bottom: 2px; white-space: normal;">${playlist.name}</div>
                     <div class="album-artist" style="font-size: 0.8em;">${playlistSongs.length} songs</div>
                 </div>
             </div>
@@ -3489,7 +3489,7 @@ function renderPlaylistSongs(playlistId) {
             <div class="song-info">
                 <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 5px;">
                 <div>
-                    <div class="song-title" style="font-size: 1em; margin-bottom: 2px;">${song.name}</div>
+                    <div class="song-title" style="font-size: 1em; margin-bottom: 2px; white-space: normal;">${song.name}</div>
                     <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
                     <button class="song-item-actions" data-id="${song.id}"><span class="material-symbols-rounded" style="font-size: 10px;">circle</span></button>
                 </div>
