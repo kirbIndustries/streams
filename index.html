@@ -5012,14 +5012,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         document.querySelector('.lyrics-button').addEventListener('click', () => togglePanel('lyrics'));
         document.querySelector('.queue-button').addEventListener('click', () => togglePanel('queue'));
-        
-        document.addEventListener('click', (e) => {
-            const lyricsQueuePanel = document.getElementById('lyrics-queue-panel');
-            if (isPanelVisible && !lyricsQueuePanel.contains(e.target) && !e.target.closest('.lyrics-button, .queue-button, .more-button')) {
-                closePanel();
-            }
-        });
-        
+                
         tabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const viewName = btn.dataset.view;
