@@ -184,10 +184,10 @@
             transform: translateX(-50%);
             width: 95%;
             max-width: 500px;
-            height: 60px;
+            height: 64px;
             background-color: var(--search-background);
             border: 1px solid var(--glass-border);
-            border-radius: 20px;
+            border-radius: 22px;
             backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
             display: flex;
             align-items: center;
@@ -210,15 +210,16 @@
             pointer-events: none;
         }
         #miniplayer-art {
-            width: 44px;
-            height: 44px;
-            border-radius: 10px;
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
             box-shadow: 0 0 0 1px var(--glass-border);
             flex-shrink: 0;
         }
         .miniplayer-info {
             display: flex;
             flex-direction: column;
+            gap: 2px;
             flex-grow: 1;
             min-width: 0;
             color: var(--text-color);
@@ -228,8 +229,8 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        #miniplayer-title { font-weight: bold; font-size: 15px; }
-        #miniplayer-artist { font-size: 15px; color: var(--secondary-text-color); }
+        #miniplayer-title { font-weight: bold; font-size: 16px; }
+        #miniplayer-artist { font-size: 16px; color: var(--secondary-text-color); }
 
         .miniplayer-controls { display: flex; align-items: center; gap: 4px; padding-right: 8px; }
         .mini-control-btn {
