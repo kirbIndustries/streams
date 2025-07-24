@@ -4647,6 +4647,17 @@ playPauseBtn.addEventListener('click', () => {
     if (!isVisualizerInitialized) initVisualizer();
 
     if (audioPlayer.paused) {
+        if ('mediaSession' in navigator && navigator.mediaSession.metadata === null) {
+            const song = songs.find(s => s.id === currentSongId);
+            if (song) {
+                updateMediaSessionMetadata(song);
+                Gurasuraisu.registerMediaSession(
+                    { title: song.name, artist: song.artist, album: song.album, artwork: [{ src: song.albumArt }] },
+                    ['playPause', 'next', 'prev']
+                );
+            }
+        }
+        
         audioPlayer.play().then(() => {
             playPauseIcon.textContent = 'pause';
             playPauseBtn.classList.add('playing');
