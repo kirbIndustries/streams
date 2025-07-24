@@ -3304,7 +3304,7 @@ async function renderHomePage() {
         return `
         <div>
             <h2 class="section-title">${sanitize(genre)}</h2>
-            <div class="item-grid style="padding-bottom: 40px;">${genreSongs.map(song => `
+            <div class="item-grid" style="padding-bottom: 40px !important;">${genreSongs.map(song => `
                 <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
                     <img src="${song.albumArt}" class="item-card-art">
                     <div class="item-card-info">
@@ -3321,7 +3321,7 @@ async function renderHomePage() {
         <div class="highlight-grid">${highlightsHtml}</div>
         <div>
             <h2 class="section-title">Recently Played</h2>
-            <div class="item-grid style="padding-bottom: 40px;">${recentlyPlayedHtml}</div>
+            <div class="item-grid" style="padding-bottom: 40px !important;">${recentlyPlayedHtml}</div>
         </div>
         ${genreSectionsHtml}
     </div>`;
