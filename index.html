@@ -4662,7 +4662,9 @@ playPauseBtn.addEventListener('click', () => {
             playPauseIcon.textContent = 'pause';
             playPauseBtn.classList.add('playing');
             updateMiniplayerUI(songs.find(s => s.id === currentSongId), 'playing');
-            if (!document.body.classList.contains('reduce-animations')) document.querySelector('.background-blur').classList.add('rotating');
+            if (!document.body.classList.contains('reduce-animations')) {
+                document.querySelector('.background-blur').classList.add('rotating');
+            }
             updateMediaSessionPlaybackState('playing');
             Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
         }).catch(error => console.error("Play failed:", error));
@@ -4719,7 +4721,7 @@ audioPlayer.addEventListener('play', () => {
         document.querySelector('.background-blur').classList.add('rotating');
     }
 });
-        
+
 audioPlayer.addEventListener('ended', () => {
     audioPlayer.isFading = false;
     playNextSong(); 
