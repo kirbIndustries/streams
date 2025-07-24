@@ -244,10 +244,6 @@
             align-items: center;
             justify-content: center;
         }
-        .mini-control-btn:active {
-            scale: 1.05;
-            filter: brightness(1.5);
-        }
         .miniplayer-progress {
             position: absolute;
             bottom: 0;
@@ -263,6 +259,11 @@
         #miniplayer-prev-btn, #miniplayer-next-btn { display: none; }
         @media (min-width: 500px) {
             #miniplayer-prev-btn, #miniplayer-next-btn { display: flex; }
+        }
+
+        #miniplayer-prev-btn, #miniplayer-play-btn, #miniplayer-next-btn:active {
+            transform: scale(0.95);
+            filter: brightness(1.5);
         }
 
         /* Generic Grid for Home/Library/Search */
