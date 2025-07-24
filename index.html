@@ -983,6 +983,10 @@
             scale: 0.75;
             opacity: 0.5;
         }
+
+        body.is-mobile .distortion-shard {
+            display: none !important;
+        }
         
         /* Define the unique organic shapes for each shard */
         .shape-1 {
@@ -2035,6 +2039,7 @@
         const body = document.body;
         const menuBtn = document.createElement('button');
         const storedLightMode = localStorage.getItem('theme') || 'dark';
+        const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
         let activeView = 'home'; // 'home', 'library', 'search', 'nowPlaying'
         let isPanelVisible = false;
@@ -3066,7 +3071,10 @@ function initVisualizer() {
         const baselineDistortion = 80;
         const peakDistortion = 150;
 
-        const beatDetector = new BeatDetector([[0, 10], [20, 50], [80, 120]]);
+        let beatDetector;
+        if (!isMobile) {
+            beatDetector = new BeatDetector([[0, 10], [20, 50], [80, 120]]);
+        }
         
         const canvas = document.getElementById('visualizerCanvas');
         const canvasCtx = canvas.getContext('2d');
@@ -3082,27 +3090,29 @@ function initVisualizer() {
             requestAnimationFrame(draw);
             analyser.getByteFrequencyData(dataArray);
 
-            const beatPulseTarget = beatDetector.update(dataArray);
-            smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
-
-            const distortionRange = peakDistortion - baselineDistortion;
-            const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
-            displacementFilter.setAttribute('scale', currentDistortion);
-
-            const maxShift = 40; 
-            const outwardShift = smoothedPulse * maxShift;
-            const shardTime = Date.now() * 0.00005;
-
-            shards.forEach((shard) => {
-                shard.rotation += shard.rotationSpeed;
-                const baseX = shard.homeX + Math.sin(shardTime * shard.xDrift * 10) * 15;
-                const baseY = shard.homeY + Math.cos(shardTime * shard.yDrift * 10) * 15;
-                const totalX = baseX + (shard.dirX * outwardShift);
-                const totalY = baseY + (shard.dirY * outwardShift);
-                shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
-            });
-
-            turbulenceFilter.setAttribute('seed', Date.now() / 30);
+            if (!isMobile) {
+                const beatPulseTarget = beatDetector.update(dataArray);
+                smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
+    
+                const distortionRange = peakDistortion - baselineDistortion;
+                const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
+                displacementFilter.setAttribute('scale', currentDistortion);
+    
+                const maxShift = 40; 
+                const outwardShift = smoothedPulse * maxShift;
+                const shardTime = Date.now() * 0.00005;
+    
+                shards.forEach((shard) => {
+                    shard.rotation += shard.rotationSpeed;
+                    const baseX = shard.homeX + Math.sin(shardTime * shard.xDrift * 10) * 15;
+                    const baseY = shard.homeY + Math.cos(shardTime * shard.yDrift * 10) * 15;
+                    const totalX = baseX + (shard.dirX * outwardShift);
+                    const totalY = baseY + (shard.dirY * outwardShift);
+                    shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
+                });
+    
+                turbulenceFilter.setAttribute('seed', Date.now() / 30);
+            }
             
             if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
             if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
@@ -4493,6 +4503,10 @@ window.addEventListener("beforeunload", () => {
 
 window.addEventListener("load", async () => {
     try {
+        if (isMobile) {
+            document.body.classList.add('is-mobile');
+        }
+        
         await initDB();
         initModalVariables();
 
