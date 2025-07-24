@@ -1565,6 +1565,7 @@
             transform-origin: bottom;
             will-change: transform, opacity, bottom;
             transition: all 0.3s cubic-bezier(.3,1.2,.64,1);
+            max-height: calc(100% - 80px);
         }
 
         .drawer.open {
@@ -1584,7 +1585,7 @@
         }
 
         .drawer-content {
-            height: 100%;
+            height: calc(100vh - 80px);
             overflow-y: auto;
             user-select: none;
             padding: 20px 20px 0 20px;
