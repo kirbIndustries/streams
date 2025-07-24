@@ -4283,7 +4283,7 @@ function playNextSong({ userInitiated = false, isTransition = false } = {}) {
     }
 
     const nextSong = playQueue[currentQueueIndex];
-    if (nextSong) playSong(nextSong, { isTransition });
+    if (nextSong) playSong(nextSong, playQueue, { isTransition });
 }
 
 function playPreviousSong() {
@@ -4304,7 +4304,7 @@ function playPreviousSong() {
     }
 
     const prevSong = playQueue[currentQueueIndex];
-    if (prevSong) playSong(prevSong, { isTransition: false });
+    if (prevSong) playSong(prevSong, playQueue, { isTransition: false });
 }
 
 function cleanupBlobs() {
