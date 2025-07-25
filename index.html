@@ -2238,13 +2238,7 @@ function setView(viewName) {
 
     viewContainers.forEach(container => {
         const isVisible = container.id === `${viewName}-view`;
-        
-        // Delay hiding Now Playing to allow fade-out
-        if (container.id === 'now-playing-view' && !isVisible) {
-            setTimeout(() => { container.style.display = 'none'; }, 500);
-        } else {
-            container.style.display = isVisible ? 'flex' : 'none';
-        }
+        container.style.display = isVisible ? 'flex' : 'none';
 
         // Call the render function for the newly visible view
         if (isVisible) {
