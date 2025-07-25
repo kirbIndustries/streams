@@ -3075,7 +3075,12 @@ function initVisualizer() {
         eqTreble.connect(analyser);
         analyser.connect(audioContext.destination);
 
-        analyser.fftSize = 2048;
+        if (isMobile) {
+            analyser.fftSize = 256;
+        } else {
+            analyser.fftSize = 2048;
+        }
+        
         analyser.smoothingTimeConstant = 0.8;
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
