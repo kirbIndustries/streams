@@ -2221,6 +2221,10 @@ function renderSearchResults() {
     `).join('');
     searchGrid.className = 'item-list'; // Search results are a list
     searchGrid.innerHTML = resultsHtml;
+
+    requestAnimationFrame(() => {
+        searchView.scrollTop = lastScrollPosition;
+    });
 }
 
 function setView(viewName) {
@@ -2234,21 +2238,19 @@ function setView(viewName) {
 
     viewContainers.forEach(container => {
         const isVisible = container.id === `${viewName}-view`;
-        container.style.display = isVisible ? 'flex' : 'none';
+        
+        // Delay hiding Now Playing to allow fade-out
+        if (container.id === 'now-playing-view' && !isVisible) {
+            setTimeout(() => { container.style.display = 'none'; }, 500);
+        } else {
+            container.style.display = isVisible ? 'flex' : 'none';
+        }
 
+        // Call the render function for the newly visible view
         if (isVisible) {
-            // If returning from the player, restore scroll position. Otherwise, scroll to top.
-            if (previousView === 'now-playing') {
-                requestAnimationFrame(() => {
-                    container.scrollTop = lastScrollPosition;
-                });
-            } else {
-                container.scrollTop = 0;
-            }
-
             if (viewName === 'library') { renderLibraryPage(); } 
             else if (viewName === 'home') { renderHomePage(); } 
-            else if (viewName === 'search') { document.getElementById('search-results-grid').innerHTML = ''; }
+            else if (viewName === 'search') { renderSearchResults(); }
         }
     });
 
@@ -3336,6 +3338,10 @@ async function renderHomePage() {
             getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
         }
     });
+
+    requestAnimationFrame(() => {
+        homeView.scrollTop = lastScrollPosition;
+    });
 }
 
 function renderLibraryPage() {
@@ -3432,7 +3438,7 @@ function renderLibraryPage() {
 
     // --- SCROLL RESTORATION LOGIC ---
     requestAnimationFrame(() => {
-        libraryView.scrollTop = libraryScrollPosition;
+        libraryView.scrollTop = lastScrollPosition;
     });
 }
         
@@ -5018,7 +5024,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const viewName = btn.dataset.view;
                 if (isDrawerOpen) {
                     closeDrawer();
+                    return; 
                 }
+    
+                // If navigating to a different main tab, reset the scroll position we want to restore to.
+                if (activeView !== viewName) {
+                    lastScrollPosition = 0;
+                }
+    
                 setView(viewName);
             });
         });
