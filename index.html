@@ -2047,7 +2047,8 @@
         let panelContent = null; // 'lyrics' or 'queue'
         let libraryScrollPosition = 0;
         let isFullscreen = false;
-        let scrollPositions = { home: 0, library: 0, search: 0 };
+        let lastMainView = 'home'; // To remember where to return after playback ends
+        let lastScrollPosition = 0; // To remember scroll position when entering Now Playing
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
         const miniplayer = document.getElementById('bottom-miniplayer');
@@ -2220,11 +2221,6 @@ function renderSearchResults() {
     `).join('');
     searchGrid.className = 'item-list'; // Search results are a list
     searchGrid.innerHTML = resultsHtml;
-
-    requestAnimationFrame(() => {
-        const searchView = document.getElementById('search-view');
-        searchView.scrollTop = scrollPositions.search;
-    });
 }
 
 function setView(viewName) {
@@ -2240,23 +2236,29 @@ function setView(viewName) {
         const isVisible = container.id === `${viewName}-view`;
         container.style.display = isVisible ? 'flex' : 'none';
 
-        // Call the render function for the newly visible view
         if (isVisible) {
+            // If returning from the player, restore scroll position. Otherwise, scroll to top.
+            if (previousView === 'now-playing') {
+                requestAnimationFrame(() => {
+                    container.scrollTop = lastScrollPosition;
+                });
+            } else {
+                container.scrollTop = 0;
+            }
+
             if (viewName === 'library') { renderLibraryPage(); } 
             else if (viewName === 'home') { renderHomePage(); } 
-            else if (viewName === 'search') { renderSearchResults(); }
+            else if (viewName === 'search') { document.getElementById('search-results-grid').innerHTML = ''; }
         }
     });
-    
 
     if (isNowPlaying && currentSongId) {
         const song = songs.find(s => s.id === currentSongId);
         if (song) updatePlayerUI(song);
     }
 
-    if (viewName !== 'search') {
+    if (previousView === 'search' && viewName !== 'search') {
         document.getElementById('searchInput').value = '';
-        if(activeView === 'search') renderSearchResults(); // Clear results visually
     }
     
     toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
@@ -3334,11 +3336,6 @@ async function renderHomePage() {
             getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
         }
     });
-
-    requestAnimationFrame(() => {
-        const homeView = document.getElementById('home-view');
-        homeView.scrollTop = scrollPositions.home;
-    });
 }
 
 function renderLibraryPage() {
@@ -3433,9 +3430,9 @@ function renderLibraryPage() {
     
     libraryGrid.innerHTML = itemsHtml;
 
+    // --- SCROLL RESTORATION LOGIC ---
     requestAnimationFrame(() => {
-        const libraryView = document.getElementById('library-view');
-        libraryView.scrollTop = scrollPositions.library;
+        libraryView.scrollTop = libraryScrollPosition;
     });
 }
         
@@ -5018,27 +5015,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
         tabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
+                const viewName = btn.dataset.view;
                 if (isDrawerOpen) {
                     closeDrawer();
-                    return; 
-                }
-                const viewName = btn.dataset.view;
-                const currentViewElement = document.getElementById(`${activeView}-view`);
-                if (currentViewElement) {
-                    scrollPositions[activeView] = currentViewElement.scrollTop;
                 }
                 setView(viewName);
             });
         });
-        
+    
         miniplayer.addEventListener('click', (e) => {
             if (e.target.closest('.mini-control-btn')) return;
         
-            const currentViewElement = document.getElementById(`${activeView}-view`);
+            const currentViewElement = document.querySelector('.view-container[style*="display: flex"]');
             if (currentViewElement) {
-                scrollPositions[activeView] = currentViewElement.scrollTop;
+                lastScrollPosition = currentViewElement.scrollTop;
             }
-        
+    
             setView('now-playing');
         });
         
