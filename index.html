@@ -936,7 +936,7 @@
             z-index: 1; /* Sit on top of the distortion shards */
             background-color: var(--background-color); /* Match the page background */
             opacity: 1; /* Start fully opaque (hiding the effect) */
-            transition: opacity 1s ease;
+            transition: opacity 1.5s ease;
         }
 
         /* When the container is active, fade out the overlay to reveal the effect */
@@ -956,7 +956,7 @@
             background-size: cover;
             background-position: center;
             scale: 2;
-            transition: background-image 1s ease;
+            transition: background-image 0.5s ease;
         }
 
         .background-blur.rotating {
@@ -983,7 +983,7 @@
             background-position: center;
             filter: url(#albumArtDistortion);
             will-change: transform;
-            transition: background-image 1s ease;
+            transition: background-image 0.5s ease;
             scale: 0.75;
             opacity: 0.5;
         }
