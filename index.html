@@ -2047,8 +2047,7 @@
         let panelContent = null; // 'lyrics' or 'queue'
         let libraryScrollPosition = 0;
         let isFullscreen = false;
-        let lastMainView = 'home'; // To remember where to return after playback ends
-        let lastScrollPosition = 0; // To remember scroll position when entering Now Playing
+        let scrollPositions = { home: 0, library: 0, search: 0 };
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
         const miniplayer = document.getElementById('bottom-miniplayer');
@@ -2223,7 +2222,8 @@ function renderSearchResults() {
     searchGrid.innerHTML = resultsHtml;
 
     requestAnimationFrame(() => {
-        searchView.scrollTop = lastScrollPosition;
+        const searchView = document.getElementById('search-view');
+        searchView.scrollTop = scrollPositions.search;
     });
 }
 
@@ -2254,8 +2254,9 @@ function setView(viewName) {
         if (song) updatePlayerUI(song);
     }
 
-    if (previousView === 'search' && (viewName === 'home' || viewName === 'library')) {
+    if (viewName !== 'search') {
         document.getElementById('searchInput').value = '';
+        if(activeView === 'search') renderSearchResults(); // Clear results visually
     }
     
     toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
@@ -3335,7 +3336,8 @@ async function renderHomePage() {
     });
 
     requestAnimationFrame(() => {
-        homeView.scrollTop = lastScrollPosition;
+        const homeView = document.getElementById('home-view');
+        homeView.scrollTop = scrollPositions.home;
     });
 }
 
@@ -3431,9 +3433,9 @@ function renderLibraryPage() {
     
     libraryGrid.innerHTML = itemsHtml;
 
-    // --- SCROLL RESTORATION LOGIC ---
     requestAnimationFrame(() => {
-        libraryView.scrollTop = lastScrollPosition;
+        const libraryView = document.getElementById('library-view');
+        libraryView.scrollTop = scrollPositions.library;
     });
 }
         
@@ -5016,29 +5018,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
         tabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
-                const viewName = btn.dataset.view;
                 if (isDrawerOpen) {
                     closeDrawer();
                     return; 
                 }
-    
-                // If navigating to a different main tab, reset the scroll position we want to restore to.
-                if (activeView !== viewName) {
-                    lastScrollPosition = 0;
+                const viewName = btn.dataset.view;
+                const currentViewElement = document.getElementById(`${activeView}-view`);
+                if (currentViewElement) {
+                    scrollPositions[activeView] = currentViewElement.scrollTop;
                 }
-    
                 setView(viewName);
             });
         });
-    
+        
         miniplayer.addEventListener('click', (e) => {
             if (e.target.closest('.mini-control-btn')) return;
         
-            const currentViewElement = document.querySelector('.view-container[style*="display: flex"]');
+            const currentViewElement = document.getElementById(`${activeView}-view`);
             if (currentViewElement) {
-                lastScrollPosition = currentViewElement.scrollTop;
+                scrollPositions[activeView] = currentViewElement.scrollTop;
             }
-    
+        
             setView('now-playing');
         });
         
