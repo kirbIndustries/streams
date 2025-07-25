@@ -2253,13 +2253,14 @@ function setView(viewName) {
             else if (viewName === 'search') { renderSearchResults(); }
         }
     });
+    
 
     if (isNowPlaying && currentSongId) {
         const song = songs.find(s => s.id === currentSongId);
         if (song) updatePlayerUI(song);
     }
 
-    if (previousView === 'search' && viewName !== 'search') {
+    if (previousView === 'search' && (viewName === 'home' || viewName === 'library')) {
         document.getElementById('searchInput').value = '';
     }
     
