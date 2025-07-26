@@ -2275,15 +2275,6 @@ function setView(viewName) {
         container.style.display = isVisible ? 'flex' : 'none';
 
         if (isVisible) {
-            // If returning from the player, restore scroll position. Otherwise, scroll to top.
-            if (previousView === 'now-playing') {
-                requestAnimationFrame(() => {
-                    container.scrollTop = lastScrollPosition;
-                });
-            } else {
-                container.scrollTop = 0;
-            }
-
             if (viewName === 'library') { renderLibraryPage(); } 
             else if (viewName === 'home') { renderHomePage(); } 
             else if (viewName === 'search') { renderSearchResults(); }
