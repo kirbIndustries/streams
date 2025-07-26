@@ -2082,8 +2082,7 @@
         let panelContent = null; // 'lyrics' or 'queue'
         let libraryScrollPosition = 0;
         let isFullscreen = false;
-        let lastMainView = 'home'; // To remember where to return after playback ends
-        let lastScrollPosition = 0; // To remember scroll position when entering Now Playing
+        let scrollPositions = { home: 0, library: 0, search: 0 };
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
         const miniplayer = document.getElementById('bottom-miniplayer');
@@ -2256,10 +2255,14 @@ function renderSearchResults() {
     `).join('');
     searchGrid.className = 'item-list'; // Search results are a list
     searchGrid.innerHTML = resultsHtml;
+
+    requestAnimationFrame(() => {
+        const searchView = document.getElementById('search-view');
+        searchView.scrollTop = scrollPositions.search;
+    });
 }
 
 function setView(viewName) {
-    const previousView = activeView;
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
 
@@ -2283,7 +2286,7 @@ function setView(viewName) {
 
             if (viewName === 'library') { renderLibraryPage(); } 
             else if (viewName === 'home') { renderHomePage(); } 
-            else if (viewName === 'search') { document.getElementById('search-results-grid').innerHTML = ''; }
+            else if (viewName === 'search') { renderSearchResults(); }
         }
     });
 
@@ -2292,8 +2295,9 @@ function setView(viewName) {
         if (song) updatePlayerUI(song);
     }
 
-    if (previousView === 'search' && viewName !== 'search') {
+    if (viewName !== 'search') {
         document.getElementById('searchInput').value = '';
+        if(activeView === 'search') renderSearchResults(); // Clear results visually
     }
     
     toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
@@ -3382,6 +3386,11 @@ async function renderHomePage() {
             getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
         }
     });
+
+    requestAnimationFrame(() => {
+        const homeView = document.getElementById('home-view');
+        homeView.scrollTop = scrollPositions.home;
+    });
 }
 
 function renderLibraryPage() {
@@ -3478,7 +3487,8 @@ function renderLibraryPage() {
 
     // --- SCROLL RESTORATION LOGIC ---
     requestAnimationFrame(() => {
-        libraryView.scrollTop = libraryScrollPosition;
+        const libraryView = document.getElementById('library-view');
+        libraryView.scrollTop = scrollPositions.library;
     });
 }
         
@@ -5061,9 +5071,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
         tabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
-                const viewName = btn.dataset.view;
                 if (isDrawerOpen) {
                     closeDrawer();
+                    return; 
+                }
+                const viewName = btn.dataset.view;
+                const currentViewElement = document.getElementById(`${activeView}-view`);
+                if (currentViewElement) {
+                    scrollPositions[activeView] = currentViewElement.scrollTop;
                 }
                 setView(viewName);
             });
@@ -5072,11 +5087,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         miniplayer.addEventListener('click', (e) => {
             if (e.target.closest('.mini-control-btn')) return;
         
-            const currentViewElement = document.querySelector('.view-container[style*="display: flex"]');
+            const currentViewElement = document.getElementById(`${activeView}-view`);
             if (currentViewElement) {
-                lastScrollPosition = currentViewElement.scrollTop;
+                scrollPositions[activeView] = currentViewElement.scrollTop;
             }
-    
+        
             setView('now-playing');
         });
         
