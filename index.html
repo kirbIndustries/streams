@@ -461,12 +461,36 @@
             min-height: fit-content;
             position: relative;
         }
+
+        .queue-item {
+            padding: 5px 1px;
+            background-color: transparent;
+            border: none;
+            border-radius: 0;
+            color: var(--text-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            cursor: grab;
+            touch-action: pan-y;
+            overflow: hidden;
+            min-height: fit-content;
+            position: relative;
+        }
         
-        .music-item.active, .queue-item.active {
+        .music-item.active {
             background-color: var(--background-color) !important;
             font-weight: bold;
             border-radius: 40px;
             transition: all 0.3s ease;
+        }
+
+        .queue-item.active {
+            background-color: var(--search-background) !important;
+            font-weight: bold;
+            border-radius: 11px;
+            transition: all 0.3s ease;
+            padding: 5px 1px;
+            border: 1px solid var(--glass-border);
         }
         
         .album-art {
