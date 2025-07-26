@@ -2067,6 +2067,8 @@
         let panelContent = null; // 'lyrics' or 'queue'
         let libraryScrollPosition = 0;
         let isFullscreen = false;
+        let lastMainView = 'home'; // To remember where to return after playback ends
+        let lastScrollPosition = 0; // To remember scroll position when entering Now Playing
         let scrollPositions = { home: 0, library: 0, search: 0 };
         const viewContainers = document.querySelectorAll('.view-container');
         const tabBtns = document.querySelectorAll('.tab-btn');
