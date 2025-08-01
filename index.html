@@ -3095,7 +3095,7 @@ function initVisualizer() {
         const turbulenceFilter = document.getElementById('turbulence');
 
         const baselineDistortion = 80;
-        const peakDistortion = 150;
+        const peakDistortion = 250;
 
         let beatDetector;
         if (!isMobile) {
@@ -3128,7 +3128,7 @@ function initVisualizer() {
                 const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
                 displacementFilter.setAttribute('scale', currentDistortion);
     
-                const maxShift = 40; 
+                const maxShift = 60; 
                 const outwardShift = smoothedPulse * maxShift;
                 const shardTime = Date.now() * 0.00005;
     
