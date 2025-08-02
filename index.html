@@ -1886,7 +1886,7 @@
                 </div>
                 <div class="menu-item" id="menuAddToPlaylist">
                     <span class="material-symbols-rounded">playlist_add</span>
-                    <span>Add to Playlist...</span>
+                    <span>Add to Playlist</span>
                 </div>
                 <div class="menu-separator"></div>
                 <div class="menu-item" id="menuCrossfade">
@@ -1979,7 +1979,7 @@
             <h2 style="margin-bottom: 20px;">Add to playlist</h2>
             <div id="playlistList" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
             <div class="menu-separator"></div>
-            <input type="text" id="newPlaylistName" placeholder="Or create new playlist..." class="search-input" style="padding-left: 15px; margin-bottom: 10px;">
+            <input type="text" id="newPlaylistName" placeholder="Create new playlist" class="search-input" style="padding-left: 15px; margin-bottom: 10px;">
             <div style="display: flex; justify-content: flex-end; gap: 10px;">
                 <button id="closePlaylistModal" class="filter-btn">Cancel</button>
                 <button id="createPlaylistBtn" class="filter-btn active">Create & Add</button>
@@ -3475,7 +3475,7 @@ function renderPlaylists() {
     musicListContainer.innerHTML = ''; 
 
     if (playlists.length === 0) {
-        musicListContainer.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">playlist_add</span><p>No playlists yet.</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Create one from the "More Options" menu while a song is playing.</p></div>';
+        musicListContainer.innerHTML = '<div class="no-results"><span class="material-symbols-rounded">playlist_add</span><p>No playlists to add to</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Create one from the "More Options" menu while a song is playing.</p></div>';
         return;
     }
 
@@ -3664,7 +3664,7 @@ async function renderLyrics() {
 
     if (song.lrcData && song.lrcData.length > 0) {
         lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
-            `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '...'}</p>`
+            `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '• • •'}</p>`
         ).join('');
 
         lyricsContainer.querySelectorAll('p').forEach(lineEl => {
@@ -4192,7 +4192,7 @@ async function removeFolder(folderName) {
                     playlistList.appendChild(item);
                 });
             } else {
-                playlistList.innerHTML = '<p style="color: var(--secondary-text-color); text-align: center;">No playlists yet.</p>';
+                playlistList.innerHTML = '<p style="color: var(--secondary-text-color); text-align: center;">No playlists to add to</p>';
             }
             openModal(playlistModal);
         }
@@ -5173,7 +5173,7 @@ document.getElementById('uploadBtn').addEventListener('click', async () => {
             }
 
             if (filesToAdd.length > 0) {
-                Gurasuraisu.showPopup(`Found ${filesToAdd.length} new songs. Processing...`);
+                Gurasuraisu.showPopup(`${filesToAdd.length} new songs added to Library`);
                 await addSongs(filesToAdd, 'filesystem');
             } else {
                 Gurasuraisu.showPopup('No new songs found in the selected directory.');
