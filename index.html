@@ -1071,6 +1071,7 @@
         .filter-btn.active {
             background: var(--secondary-text-color);
             color: var(--background-color);
+            border-radius: 20px;
         }
 
         .filter-separator {
@@ -1788,10 +1789,10 @@
         <div class="page-content-wrapper">
             <div class="library-controls">
                 <div class="filter-container">
-                    <button class="filter-btn active" data-filter="albums"><span class="material-symbols-rounded">album</span></button>
-                    <button class="filter-btn" data-filter="artists"><span class="material-symbols-rounded">artist</span></button>
-                    <button class="filter-btn" data-filter="songs"><span class="material-symbols-rounded">music_note</span></button>
-                    <button class="filter-btn" data-filter="playlists"><span class="material-symbols-rounded">queue_music</span></button>
+                    <button class="filter-btn" data-filter="albums" style="border-radius: 20px 10px 10px 20px;"><span class="material-symbols-rounded">album</span></button>
+                    <button class="filter-btn" data-filter="artists" style="border-radius: 10px;"><span class="material-symbols-rounded">artist</span></button>
+                    <button class="filter-btn" data-filter="songs" style="border-radius: 10px;"><span class="material-symbols-rounded">music_note</span></button>
+                    <button class="filter-btn" data-filter="playlists" style="border-radius: 10px 20px 20px 10px;"><span class="material-symbols-rounded">queue_music</span></button>
                 </div>
                 <div class="filter-separator"></div>
                 <div class="view-controls">
