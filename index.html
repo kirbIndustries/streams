@@ -409,8 +409,18 @@
             border: 1px solid var(--glass-border);
         }
 
-        #sortBtn.action-btn {
-            gap: 0;
+        .library-action-btn {
+            background-color: transparent;
+            color: var(--text-color);
+            border: none;
+            border-radius: 50px;
+            padding: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 42px;
         }
 
           @keyframes fadeInOut {
@@ -1826,13 +1836,12 @@
                     <button class="filter-btn" data-filter="songs">Songs</button>
                     <button class="filter-btn" data-filter="playlists" style="border-radius: 10px 25px 25px 10px;">Playlists</button>
                 </div>
-                <div class="filter-separator"></div>
                 <div class="view-controls">
-                    <button id="sortBtn" class="action-btn"><span class="material-symbols-rounded">history</span><span id="sort-mode-display"></span></button>
+                    <button id="sortBtn" class="library-action-btn"><span class="material-symbols-rounded">history</span><span id="sort-mode-display"></span></button>
                 </div>
                  <div class="library-actions">
-                    <button class="action-btn" id="uploadBtn"><span class="material-symbols-rounded">add</span></button>
-                    <button class="action-btn" id="manageFoldersBtn"><span class="material-symbols-rounded">folder_managed</span></button>
+                    <button class="library-action-btn" id="uploadBtn"><span class="material-symbols-rounded">add</span></button>
+                    <button class="library-action-btn" id="manageFoldersBtn"><span class="material-symbols-rounded">folder_managed</span></button>
                 </div>
             </div>
             <div id="library-grid" class="item-grid" style="padding-bottom: 210px;">
