@@ -322,13 +322,14 @@
             position: fixed;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 1;
+            z-index: 1002;
             background-color: var(--overlay-color);
             backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
             padding: 10px 12px;
             border-radius: 32px;
             border: 1px solid var(--glass-border);
             box-shadow: 0 0 15px rgba(0, 0, 0, 0.05);
+            bottom: 80px;
         }
 
         @media (max-width: 630px) {
@@ -1835,7 +1836,7 @@
                     <button class="action-btn" id="manageFoldersBtn"><span class="material-symbols-rounded">folder_managed</span></button>
                 </div>
             </div>
-            <div id="library-grid" class="item-grid" style="padding-top: 136px;">
+            <div id="library-grid" class="item-grid" style="padding-bottom: 210px;">
                 <!-- Library content will be rendered here -->
             </div>
              <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
