@@ -312,12 +312,27 @@
 
         .library-controls {
             display: flex;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             gap: 10px;
             flex-direction: row;
             justify-content: center;
             align-content: center;
             margin-bottom: 20px;
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1;
+            background-color: var(--overlay-color);
+            backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
+            padding: 10px;
+            border-radius: 32px;
+            border: 1px solid var(--glass-border);
+        }
+
+        @media (min-width: 530px) {
+            .library-controls {
+                flex-wrap: wrap;
+            }
         }
 
         .search-container {
@@ -1066,6 +1081,8 @@
         .filter-container {
             display: flex;
             gap: 6px;
+            max-width: 242px;
+            justify-content: center;
         }
         
         .filter-btn {
@@ -1816,7 +1833,7 @@
                     <button class="action-btn" id="manageFoldersBtn"><span class="material-symbols-rounded">folder_managed</span></button>
                 </div>
             </div>
-            <div id="library-grid" class="item-grid">
+            <div id="library-grid" class="item-grid" style="padding-top: 136px;">
                 <!-- Library content will be rendered here -->
             </div>
              <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
