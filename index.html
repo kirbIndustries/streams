@@ -4037,24 +4037,18 @@ async function playSong(song, playContext = null) {
         song.hasBeenLogged = false;
         
         let fileUrl;
-        // Configure the audio element *before* setting the source.
-        if (song.storage === 'soundcloud') {
-            fileUrl = song.streamUrl;
-            audioPlayer.crossOrigin = "anonymous"; // Set crossOrigin for SC tracks
-            disconnectAudioGraph(); // Bypass EQ/visualizer
+        // Check for a pre-fetched blob URL first.
+        if (song.blobUrl) {
+            fileUrl = song.blobUrl;
+            audioPlayer.removeAttribute('crossorigin'); // Not needed for blobs
+            connectAudioGraph(); // Re-enable the visualizer!
         } else {
+            // Fallback for local files
             fileUrl = await getSongFileUrl(song);
-            audioPlayer.removeAttribute('crossorigin'); // Remove for local blob URLs
-            connectAudioGraph(); // Re-enable EQ/visualizer
+            audioPlayer.removeAttribute('crossorigin');
+            connectAudioGraph();
         }
 
-        if (!fileUrl) {
-            Gurasuraisu.showPopup(`Could not find file for "${song.name}". It may have been moved.`);
-            isPlayerLoading = false;
-            playNextSong();
-            return;
-        }
-        
         if (!fileUrl) {
             Gurasuraisu.showPopup(`Could not find file for "${song.name}". It may have been moved.`);
             isPlayerLoading = false;
@@ -4323,18 +4317,32 @@ async function playSoundcloudTrack(trackId) {
         const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
         if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
         const streamData = await streamResponse.json();
+        const finalStreamUrl = streamData.url;
+
+        // Fetch the entire audio file as a blob in memory
+        const audioResponse = await fetch(finalStreamUrl);
+        if (!audioResponse.ok) throw new Error('Could not download audio file.');
+        const audioBlob = await audioResponse.blob();
+        const blobUrl = URL.createObjectURL(audioBlob);
 
         const songObject = {
             id: trackData.id,
             name: trackData.title,
             artist: trackData.user.username,
             album: 'SoundCloud',
-            albumArt: trackData.artwork_url.replace('-large', '-t500x500'), // Get higher resolution art
+            albumArt: trackData.artwork_url ? trackData.artwork_url.replace('-large', '-t500x500') : generateRandomGradient(),
             storage: 'soundcloud',
-            streamUrl: streamData.url
+            blobUrl: blobUrl // This is the new property we will use for playback
         };
         
-        playSong(songObject, [songObject]); // Play the song in its own context
+        // Clean up any previously created blob URLs from SoundCloud tracks to prevent memory leaks
+        playQueue.forEach(song => {
+            if (song.storage === 'soundcloud' && song.blobUrl) {
+                URL.revokeObjectURL(song.blobUrl);
+            }
+        });
+
+        playSong(songObject, [songObject]);
 
     } catch (error) {
         console.error('Error playing SoundCloud track:', error);
