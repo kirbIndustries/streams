@@ -2440,22 +2440,48 @@ function renderSoundcloudSearchResults() {
             break;
         case 'albums':
             resultsGrid.className = 'item-grid';
-            const albums = lastSoundcloudSearchResults.reduce((acc, track) => {
-                const albumName = track.title.split('-')[0].trim(); // Simple album name parsing
-                if (!acc[albumName]) {
-                    acc[albumName] = { art: track.artwork_url || generateRandomGradient(), artist: track.user.username };
-                }
+            // Group all tracks by artist first
+            const artistsToTracks = lastSoundcloudSearchResults.reduce((acc, track) => {
+                const artistName = track.user.username;
+                if (!acc[artistName]) acc[artistName] = [];
+                acc[artistName].push(track);
                 return acc;
             }, {});
-             resultsHtml = Object.entries(albums).map(([name, data]) => `
-                <div class="item-card" data-album-name="${sanitize(name)}">
-                    <img src="${data.art}" class="item-card-art">
-                    <div class="item-card-info"><div class="item-card-title">${sanitize(name)}</div><div class="item-card-subtitle">${sanitize(data.artist)}</div></div>
+
+            const albums = [];
+            // For each artist, group their tracks by parsed album name
+            for (const artistName in artistsToTracks) {
+                const tracks = artistsToTracks[artistName];
+                const albumGroups = {};
+                tracks.forEach(track => {
+                    const parsed = extractAlbumAndTrack(track.title);
+                    const albumName = parsed.album;
+
+                    if (!albumGroups[albumName]) {
+                        albumGroups[albumName] = {
+                            name: albumName,
+                            artist: artistName,
+                            art: track.artwork_url || generateRandomGradient(),
+                            tracks: [] // Store tracks to create a play context later
+                        };
+                    }
+                    albumGroups[albumName].tracks.push(track);
+                });
+                albums.push(...Object.values(albumGroups));
+            }
+
+            resultsHtml = albums.map(album => `
+                <div class="item-card" data-album-id="${sanitize(album.artist)}::${sanitize(album.name)}">
+                    <img src="${album.art}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${sanitize(album.name)}</div>
+                        <div class="item-card-subtitle">${sanitize(album.artist)}</div>
+                    </div>
                 </div>`).join('');
             break;
         case 'tracks':
         default:
-            resultsGrid.className = 'item-grid';
+            resultsGrid.className = 'item-list';
             resultsHtml = lastSoundcloudSearchResults.map(track => `
                 <div class="item-card" data-track-id="${track.id}">
                     <img src="${track.artwork_url || generateRandomGradient()}" class="item-card-art">
@@ -2509,8 +2535,8 @@ function setView(viewName) {
      
 const initDB = () => {
     return new Promise((resolve, reject) => {
-        // DB version bumped to 7
-        const request = indexedDB.open('musicDB', 7);
+        // DB version bumped to 8
+        const request = indexedDB.open('musicDB', 8);
 
         request.onerror = (event) => {
             console.error('IndexedDB error:', event.target.error);
@@ -2525,13 +2551,18 @@ const initDB = () => {
             if (!db.objectStoreNames.contains('songs')) {
                 const songStore = db.createObjectStore('songs', { keyPath: 'id' });
                 songStore.createIndex('albumArtist', 'albumArtist');
-                // Add new index for play count
                 songStore.createIndex('playCount', 'playCount');
+                // Add the new index here for new users
+                songStore.createIndex('soundcloudId', 'soundcloudId', { unique: true });
             } else {
-                // Ensure playCount index exists on existing stores
-                const songStore = event.target.transaction.objectStore('songs');
+                // Ensure all indexes exist for existing users
+                const songStore = tx.objectStore('songs');
                 if (!songStore.indexNames.contains('playCount')) {
                     songStore.createIndex('playCount', 'playCount');
+                }
+                // **THE FIX:** Add the soundcloudId index for existing users.
+                if (!songStore.indexNames.contains('soundcloudId')) {
+                    songStore.createIndex('soundcloudId', 'soundcloudId', { unique: true });
                 }
             }
             if (!db.objectStoreNames.contains('playlists')) {
@@ -2911,6 +2942,18 @@ async function extractMetadata(file) {
                 }
             });
     });
+}
+
+function extractAlbumAndTrack(title) {
+    // A common pattern is "Album Name - Track Name" or "Artist - Track Name"
+    const parts = title.split(' - ');
+    if (parts.length > 1) {
+        const album = parts[0].trim();
+        const trackName = parts.slice(1).join(' - ').trim();
+        return { album, trackName };
+    }
+    // Fallback for titles without a clear separator
+    return { album: title, trackName: title };
 }
         
 async function addSongs(files, storageType) {
@@ -4528,7 +4571,6 @@ async function proactivelyCacheNextInQueue() {
     }
 }
 
-// This is a NEW function to save a SoundCloud track to the local library
 async function saveSoundcloudTrackToLibrary() {
     if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'soundcloud') return;
     const songToSave = currentlyPlayingSong;
@@ -4536,48 +4578,45 @@ async function saveSoundcloudTrackToLibrary() {
 
     try {
         let audioBlob;
-        // Check if the song is already cached
-        const tx = db.transaction('soundcloudCache', 'readonly');
-        const cacheReq = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(songToSave.id));
+        const readTx = db.transaction('soundcloudCache', 'readonly');
+        const cacheEntry = await promiseIDBRequest(readTx.objectStore('soundcloudCache').get(songToSave.id));
         
-        if (cacheReq && cacheReq.blob) {
-            audioBlob = cacheReq.blob;
+        if (cacheEntry && cacheEntry.blob) {
+            audioBlob = cacheEntry.blob;
         } else {
-            // If not cached, we must fetch the audio data first
-            if (!songToSave.streamUrl) throw new Error("Stream URL is missing.");
+            if (!songToSave.streamUrl) throw new Error("Stream URL is missing for download.");
             const audioResponse = await fetch(songToSave.streamUrl);
             if (!audioResponse.ok) throw new Error("Could not download audio.");
             audioBlob = await audioResponse.blob();
         }
 
+        const parsed = extractAlbumAndTrack(songToSave.name);
         const newLocalId = Date.now() + Math.random();
+
         const newLocalSong = {
             id: newLocalId,
-            name: songToSave.name,
+            soundcloudId: songToSave.id, // **THE LINK**
+            name: parsed.trackName,
             artist: songToSave.artist,
-            album: songToSave.album,
-            albumArtist: songToSave.artist, // Assume artist is album artist for SC
+            album: parsed.album, // Use the parsed album name
+            albumArtist: songToSave.artist,
             storage: 'indexeddb',
-            handleName: `${songToSave.name}.mp3`,
+            handleName: `${parsed.trackName}.mp3`,
             dateAdded: Date.now(),
-            year: new Date().getFullYear().toString(),
+            year: new Date(songToSave.created_at || Date.now()).getFullYear().toString(),
             albumArt: songToSave.albumArt,
-            trackNumber: null,
-            discNumber: null,
-            lyrics: null,
-            lrcData: null,
             playCount: 0
         };
 
-        // Save to the main 'songs' store and the 'musicFiles' store
-        const songTx = db.transaction(['songs', 'musicFiles'], 'readwrite');
-        songTx.objectStore('songs').put(newLocalSong);
-        songTx.objectStore('musicFiles').put({ id: newLocalId, file: audioBlob });
-        await songTx.done;
+        const writeTx = db.transaction(['songs', 'musicFiles', 'soundcloudCache'], 'readwrite');
+        writeTx.objectStore('songs').put(newLocalSong);
+        writeTx.objectStore('musicFiles').put({ id: newLocalId, file: audioBlob });
+        writeTx.objectStore('soundcloudCache').delete(songToSave.id); // Remove from SC cache
+        await writeTx.done;
         
-        songs.push(newLocalSong); // Add to in-memory library
+        songs.push(newLocalSong);
         processAndSortSongs();
-        Gurasuraisu.showPopup(`Successfully saved "${songToSave.name}" to your library!`);
+        Gurasuraisu.showPopup(`Successfully saved "${newLocalSong.name}" to your library!`);
 
     } catch (error) {
         console.error("Failed to save SoundCloud track to library:", error);
@@ -4587,7 +4626,22 @@ async function saveSoundcloudTrackToLibrary() {
 
 async function playSoundcloudTrack(trackId, playContext) {
     const numericTrackId = Number(trackId);
-    
+
+    try {
+        const checkTx = db.transaction('songs', 'readonly');
+        const songIndex = checkTx.objectStore('songs').index('soundcloudId');
+        const localSong = await promiseIDBRequest(songIndex.get(numericTrackId));
+
+        if (localSong) {
+            console.log(`Redirecting SoundCloud play to local library version: ${localSong.name}`);
+            playSong(localSong, playContext || [localSong]);
+            return; // Stop execution here.
+        }
+    } catch (e) {
+        console.error("Error checking for local version:", e);
+    }
+
+    // If we reach here, no local version exists. Proceed with normal SC playback.
     try {
         const tx = db.transaction('soundcloudCache', 'readwrite');
         const store = tx.objectStore('soundcloudCache');
@@ -5526,17 +5580,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     closeDrawer();
                 }
             } else if (soundcloudSongItem) {
-                // Build the context from all SoundCloud songs currently in the drawer
                 const trackId = soundcloudSongItem.dataset.trackId;
-                const contextNodes = drawerContent.querySelectorAll('.music-item[data-track-id]');
-                const playContext = Array.from(contextNodes).map(node => ({
-                    id: Number(node.dataset.trackId),
-                    name: node.querySelector('.song-title').textContent,
-                    artist: node.querySelector('.album-artist').textContent,
-                    albumArt: node.querySelector('img').src,
-                    storage: 'soundcloud'
-                }));
-                playSoundcloudTrack(trackId, playContext);
+                // Rebuild the play context from all items in the drawer
+                const context = Array.from(drawerContent.querySelectorAll('.music-item[data-track-id]'))
+                    .map(item => JSON.parse(item.dataset.playContext));
+                
+                playSoundcloudTrack(trackId, context);
                 closeDrawer();
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
@@ -5730,15 +5779,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             
-            const isLocal = currentlyPlayingSong.storage !== 'soundcloud';
+            const isStreamedSoundcloud = song.storage === 'soundcloud';
         
-            // Show/hide menu items based on song type
-            document.getElementById('menuEditMetadata').style.display = isLocal ? 'flex' : 'none';
-            document.getElementById('menuDeleteSong').style.display = isLocal ? 'flex' : 'none';
-
-            // Show "Save to Library" ONLY for SoundCloud songs.
-            document.getElementById('menuSaveToLibrary').style.display = isLocal ? 'none' : 'flex';
-                    
+            // "Save" is visible ONLY for streamed/cached SC songs.
+            document.getElementById('menuSaveToLibrary').style.display = isStreamedSoundcloud ? 'flex' : 'none';
+            
+            // "Add to Playlist" is visible ONLY for local songs (which now includes saved SC songs).
+            document.getElementById('menuAddToPlaylist').style.display = isStreamedSoundcloud ? 'none' : 'flex';
+            
+            // Local-only options
+            document.getElementById('menuEditMetadata').style.display = isStreamedSoundcloud ? 'none' : 'flex';
+            document.getElementById('menuDeleteSong').style.display = isStreamedSoundcloud ? 'none' : 'flex';
+            
             moreOptionsMenu.classList.toggle('visible');
         });
 
@@ -5781,73 +5833,53 @@ document.addEventListener('DOMContentLoaded', async () => {
             const trackCard = e.target.closest('.item-card[data-track-id]');
             const cachedCard = e.target.closest('.music-item[data-cached-id]');
             const artistCard = e.target.closest('.item-card[data-artist-name]');
-            const albumCard = e.target.closest('.item-card[data-album-name]');
+            const albumCard = e.target.closest('.item-card[data-album-id]');
         
             if (trackCard) {
-                // Build the context from the current search results
-                const playContext = lastSoundcloudSearchResults.map(track => ({
-                    id: track.id,
-                    name: track.title,
-                    artist: track.user.username,
-                    album: 'SoundCloud',
-                    albumArt: track.artwork_url || generateRandomGradient(),
-                    storage: 'soundcloud'
-                }));
-                playSoundcloudTrack(trackCard.dataset.trackId, playContext);
+                playSoundcloudTrack(trackCard.dataset.trackId, [lastSoundcloudSearchResults.find(t => t.id == trackCard.dataset.trackId)]);
             } else if (cachedCard) {
-                const trackId = parseFloat(cachedCard.dataset.cachedId);
-                // **THE FIX:** When playing from offline view, the context is all other visible offline songs
-                const contextNodes = document.querySelectorAll('#soundcloud-results-grid .music-item[data-cached-id]');
-                const playContext = Array.from(contextNodes).map(node => {
-                    return {
-                        id: parseFloat(node.dataset.cachedId),
-                        name: node.querySelector('.song-title').textContent,
-                        artist: node.querySelector('.album-artist').textContent,
-                        albumArt: node.querySelector('img').src,
+                playSoundcloudTrack(parseFloat(cachedCard.dataset.cachedId));
+            } else if (artistCard || albumCard) {
+                let contextTracks = [];
+                let drawerTitle = '';
+                let drawerSubtitle = '';
+        
+                if (artistCard) {
+                    const artistName = artistCard.dataset.artistName;
+                    contextTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
+                    drawerTitle = artistName;
+                    drawerSubtitle = `${contextTracks.length} tracks found`;
+                } else { // Album card
+                    const [artistName, albumName] = albumCard.dataset.albumId.split('::');
+                    contextTracks = lastSoundcloudSearchResults.filter(t => 
+                        t.user.username === artistName && extractAlbumAndTrack(t.title).album === albumName
+                    );
+                    drawerTitle = albumName;
+                    drawerSubtitle = artistName;
+                }
+        
+                const contentHtml = `<div class="item-list">${contextTracks.map(track => {
+                    const songObject = { // Create a consistent song object for the play context
+                        id: track.id,
+                        name: track.title,
+                        artist: track.user.username,
+                        album: 'SoundCloud',
+                        albumArt: track.artwork_url || generateRandomGradient(),
                         storage: 'soundcloud'
                     };
-                });
-                playSoundcloudTrack(trackId, playContext);
-            } else if (artistCard) {
-                // An artist was clicked in the online search view
-                const artistName = artistCard.dataset.artistName;
-                const artistTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
-                
-                const contentHtml = `<div class="item-list">${artistTracks.map(track => `
-                    <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
+                    return `
+                    <div class="music-item" data-track-id="${track.id}" data-play-context='${JSON.stringify(songObject)}' style="cursor: pointer;">
                          <div class="song-info">
-                            <img src="${track.artwork_url || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                            <img src="${songObject.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
-                                <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                                <div class="song-title">${sanitize(songObject.name)}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(songObject.artist)}</div>
                             </div>
                         </div>
                     </div>
-                `).join('')}</div>`;
+                `}).join('')}</div>`;
                 
-                openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
-            } else if (albumCard) {
-                // An album was clicked in the online search view
-                const albumName = albumCard.dataset.albumName;
-                // Filter tracks using the same simple parsing logic as the renderer
-                const albumTracks = lastSoundcloudSearchResults.filter(t => t.title.split('-')[0].trim() === albumName);
-                
-                // Find a representative artist for the subtitle
-                const representativeArtist = albumTracks.length > 0 ? albumTracks[0].user.username : '';
-        
-                const contentHtml = `<div class="item-list">${albumTracks.map(track => `
-                    <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
-                         <div class="song-info">
-                            <img src="${track.artwork_url || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
-                            <div>
-                                <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
-                            </div>
-                        </div>
-                    </div>
-                `).join('')}</div>`;
-        
-                openDrawer(albumName, representativeArtist, contentHtml);
+                openDrawer(drawerTitle, drawerSubtitle, contentHtml);
             }
         });
     
