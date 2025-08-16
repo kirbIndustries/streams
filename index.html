@@ -5527,6 +5527,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         drawerContent.addEventListener('click', (e) => {
+            const localSongItem = e.target.closest('.music-item[data-id]');
+            const soundcloudSongItem = e.target.closest('.music-item[data-track-id]');
             const songItem = e.target.closest('.music-item[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
             const backButton = e.target.closest('.drawer-back-btn'); // Correctly find the button
