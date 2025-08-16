@@ -4585,25 +4585,24 @@ async function saveSoundcloudTrackToLibrary() {
     }
 }
 
-async function playSoundcloudTrack(trackId) {
+async function playSoundcloudTrack(trackId, playContext) {
     const numericTrackId = Number(trackId);
     
     try {
-        // Use a single readwrite transaction to both get the item and potentially update its timestamp.
         const tx = db.transaction('soundcloudCache', 'readwrite');
         const store = tx.objectStore('soundcloudCache');
         const cachedEntry = await promiseIDBRequest(store.get(numericTrackId));
 
+        let songToPlay;
+
         if (cachedEntry) {
             console.log("Playing from cache:", cachedEntry.metadata.name);
-            const songObject = cachedEntry.metadata;
-            songObject.blobUrl = URL.createObjectURL(cachedEntry.blob);
+            songToPlay = cachedEntry.metadata;
+            songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
             
-            // Update timestamp to mark it as recently used for cache pruning.
+            // Update timestamp to mark as recently used
             cachedEntry.timestamp = Date.now();
-            store.put(cachedEntry); // This is now safe within a readwrite transaction.
-            
-            playSong(songObject, [songObject]);
+            store.put(cachedEntry);
         } else {
             console.log("Not in cache, streaming from SoundCloud...");
             const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
@@ -4618,7 +4617,7 @@ async function playSoundcloudTrack(trackId) {
             const streamData = await streamResponse.json();
             const finalStreamUrl = streamData.url;
 
-            const songObject = {
+            songToPlay = {
                 id: trackData.id,
                 name: trackData.title,
                 artist: trackData.user.username,
@@ -4628,18 +4627,18 @@ async function playSoundcloudTrack(trackId) {
                 streamUrl: finalStreamUrl
             };
             
-            playSong(songObject, [songObject]);
-
-            // Start caching in the background *after* playback has started
-            cacheSoundcloudTrack(songObject, finalStreamUrl);
+            // Start caching in the background *after* initiating playback logic
+            cacheSoundcloudTrack(songToPlay, finalStreamUrl);
         }
-        await tx.done; // Ensure the transaction successfully completes.
+
+        playSong(songToPlay, playContext);
+        await tx.done;
     } catch (error) {
         console.error('Error playing or fetching SoundCloud track:', error);
-        Gurasuraisu.showPopup('Could not play the selected track.');
+        Gurasuraisu.showPopup('Could not play the selected track');
     }
 }
-
+        
 function connectAudioGraph() {
     if (source && audioContext && eqBass) {
         try {
@@ -4874,20 +4873,16 @@ function updateQueueFromDOM() {
         
 function playNextSong({ userInitiated = false, isTransition = false } = {}) {
     if (userInitiated && repeatMode === 'one') toggleRepeat();
-
     if (!userInitiated && !isTransition && repeatMode === 'one') {
         audioPlayer.currentTime = 0;
         audioPlayer.play().catch(e => console.error("Repeat-one playback failed", e));
         return;
     }
-
     if (!playQueue || playQueue.length === 0) return;
     currentQueueIndex++;
-
     if (currentQueueIndex >= playQueue.length) {
-        if (repeatMode === 'all') {
-            currentQueueIndex = 0;
-        } else {
+        if (repeatMode === 'all') currentQueueIndex = 0;
+        else {
             resetPlayer();
             return;
         }
@@ -4895,43 +4890,47 @@ function playNextSong({ userInitiated = false, isTransition = false } = {}) {
 
     const nextSong = playQueue[currentQueueIndex];
     if (nextSong) {
-        playSong(nextSong, playQueue, { isTransition });
-        proactivelyCacheNextInQueue(); // Also cache when skipping
+        // **THE FIX:** Check song type and call the correct function
+        if (nextSong.storage === 'soundcloud') {
+            playSoundcloudTrack(nextSong.id, playQueue);
+        } else {
+            playSong(nextSong, playQueue, { isTransition });
+        }
+        proactivelyCacheNextInQueue();
     }
 }
-
+        
 function playPreviousSong() {
     if (repeatMode === 'one') toggleRepeat();
-
     if (!playQueue.length) return;
-
     if (audioPlayer.currentTime > 5) {
         audioPlayer.currentTime = 0;
         audioPlayer.play().catch(e => console.error("Restart playback failed", e));
         return;
     }
-    
     currentQueueIndex--;
-
     if (currentQueueIndex < 0) {
         currentQueueIndex = (repeatMode === 'all') ? playQueue.length - 1 : 0;
     }
 
     const prevSong = playQueue[currentQueueIndex];
     if (prevSong) {
-        playSong(prevSong, playQueue, { isTransition: false });
-        proactivelyCacheNextInQueue(); // Also cache when skipping
-    }}
+        // **THE FIX:** Check song type and call the correct function
+        if (prevSong.storage === 'soundcloud') {
+            playSoundcloudTrack(prevSong.id, playQueue);
+        } else {
+            playSong(prevSong, playQueue, { isTransition: false });
+        }
+        proactivelyCacheNextInQueue();
+    }
+}
 
 function cleanupBlobs() {
     songs.forEach(song => {
         if (song.url) URL.revokeObjectURL(song.url);
     });
 }
-        
-function searchSongs(query) {
-}
-        
+   
 function toggleShuffle() {
     isShuffleEnabled = !isShuffleEnabled;
     document.getElementById("shuffleBtn").classList.toggle("active", isShuffleEnabled);
@@ -5527,9 +5526,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                     closeDrawer();
                 }
             } else if (soundcloudSongItem) {
-                // **THE FIX:** Logic for playing a SoundCloud song from the drawer
+                // Build the context from all SoundCloud songs currently in the drawer
                 const trackId = soundcloudSongItem.dataset.trackId;
-                playSoundcloudTrack(trackId);
+                const contextNodes = drawerContent.querySelectorAll('.music-item[data-track-id]');
+                const playContext = Array.from(contextNodes).map(node => ({
+                    id: Number(node.dataset.trackId),
+                    name: node.querySelector('.song-title').textContent,
+                    artist: node.querySelector('.album-artist').textContent,
+                    albumArt: node.querySelector('img').src,
+                    storage: 'soundcloud'
+                }));
+                playSoundcloudTrack(trackId, playContext);
                 closeDrawer();
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
@@ -5777,14 +5784,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             const albumCard = e.target.closest('.item-card[data-album-name]');
         
             if (trackCard) {
-                // A track was clicked in the online search view
-                playSoundcloudTrack(trackCard.dataset.trackId);
-        
+                // Build the context from the current search results
+                const playContext = lastSoundcloudSearchResults.map(track => ({
+                    id: track.id,
+                    name: track.title,
+                    artist: track.user.username,
+                    album: 'SoundCloud',
+                    albumArt: track.artwork_url || generateRandomGradient(),
+                    storage: 'soundcloud'
+                }));
+                playSoundcloudTrack(trackCard.dataset.trackId, playContext);
             } else if (cachedCard) {
-                // A track was clicked in the offline cached view
                 const trackId = parseFloat(cachedCard.dataset.cachedId);
-                playSoundcloudTrack(trackId);
-        
+                // **THE FIX:** When playing from offline view, the context is all other visible offline songs
+                const contextNodes = document.querySelectorAll('#soundcloud-results-grid .music-item[data-cached-id]');
+                const playContext = Array.from(contextNodes).map(node => {
+                    return {
+                        id: parseFloat(node.dataset.cachedId),
+                        name: node.querySelector('.song-title').textContent,
+                        artist: node.querySelector('.album-artist').textContent,
+                        albumArt: node.querySelector('img').src,
+                        storage: 'soundcloud'
+                    };
+                });
+                playSoundcloudTrack(trackId, playContext);
             } else if (artistCard) {
                 // An artist was clicked in the online search view
                 const artistName = artistCard.dataset.artistName;
@@ -5803,7 +5826,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 `).join('')}</div>`;
                 
                 openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
-        
             } else if (albumCard) {
                 // An album was clicked in the online search view
                 const albumName = albumCard.dataset.albumName;
