@@ -1920,6 +1920,10 @@
                     <button class="filter-btn" data-filter="artists">Artists</button>
                     <button class="filter-btn" data-filter="tracks" style="border-radius: 10px 25px 25px 10px;">Songs</button>
                 </div>
+                <div class="search-container" id="soundcloud-offline-search-container" style="display: none; max-width: 247.03px";>
+                    <span class="material-symbols-rounded search-icon">search</span>
+                    <input type="text" id="soundcloudOfflineSearchInput" placeholder="Search your cached songs" class="library-search-input">
+                </div>
                 <div class="library-actions">
                     <button class="library-action-btn" id="soundcloudOfflineToggle">
                         <span class="material-symbols-rounded">download</span>
@@ -1930,11 +1934,6 @@
             <div class="search-container" id="soundcloud-search-container">
                 <span class="material-symbols-rounded search-icon">search</span>
                 <input type="text" id="soundcloudSearchInput" placeholder="Search SoundCloud" class="library-search-input">
-            </div>
-
-            <div class="search-container" id="soundcloud-offline-search-container" style="display: none;">
-                <span class="material-symbols-rounded search-icon">search</span>
-                <input type="text" id="soundcloudOfflineSearchInput" placeholder="Search your cached songs" class="library-search-input">
             </div>
             
             <div id="soundcloud-results-grid" class="item-grid">
