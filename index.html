@@ -2944,7 +2944,7 @@ async function extractMetadata(file) {
     });
 }
 
-function extractAlbumAndTrack(title) {
+function extractAlbumAndTrackForSC(title) {
     // A common pattern is "Album Name - Track Name" or "Artist - Track Name"
     const parts = title.split(' - ');
     if (parts.length > 1) {
@@ -5779,17 +5779,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             
-            const isStreamedSoundcloud = song.storage === 'soundcloud';
+            const isLocal = currentlyPlayingSong.storage !== 'soundcloud';
         
+            // Show/hide menu items based on song type
+            document.getElementById('menuEditMetadata').style.display = isLocal ? 'flex' : 'none';
+            document.getElementById('menuDeleteSong').style.display = isLocal ? 'flex' : 'none';
+            
             // "Save" is visible ONLY for streamed/cached SC songs.
             document.getElementById('menuSaveToLibrary').style.display = isStreamedSoundcloud ? 'flex' : 'none';
             
             // "Add to Playlist" is visible ONLY for local songs (which now includes saved SC songs).
             document.getElementById('menuAddToPlaylist').style.display = isStreamedSoundcloud ? 'none' : 'flex';
-            
-            // Local-only options
-            document.getElementById('menuEditMetadata').style.display = isStreamedSoundcloud ? 'none' : 'flex';
-            document.getElementById('menuDeleteSong').style.display = isStreamedSoundcloud ? 'none' : 'flex';
             
             moreOptionsMenu.classList.toggle('visible');
         });
