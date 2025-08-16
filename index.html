@@ -1205,6 +1205,45 @@
           filter: brightness(1.5);
         }
 
+        #soundcloudToggle {
+            appearance: none;
+            width: 50px;
+            height: 32px;
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+        }
+        
+        #soundcloudToggle::before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background-color: var(--secondary-text-color);
+            border-radius: 50%;
+            top: 50%;
+            left: 6px;
+            transform: translateY(-50%);
+            transition: transform 0.3s, background-color 0.3s, width 0.3s, height 0.3s, left 0.3s, right 0.3s;
+            border: 1px solid var(--glass-border);
+        }
+        
+        #soundcloudToggle:checked {
+            background-color: var(--secondary-text-color);
+        }
+        
+        #soundcloudToggle:checked::before {
+            width: 22px;
+            height: 22px;
+            background-color: var(--background-color);
+            left: 21px;
+            transform: translateY(-50%);
+        }
+
         @media (min-height: 900px) {
             .controls-container {
                 position: fixed;
@@ -1831,6 +1870,10 @@
             <span class="material-symbols-rounded">newsstand</span>
             Library
         </button>
+        <button class="tab-btn" data-view="soundcloud" id="soundcloud-tab" style="display: none;">
+            <span class="material-symbols-rounded">podcasts</span>
+            New
+        </button>
         <button class="tab-btn" data-view="search">
             <span class="material-symbols-rounded">search</span>
             Search
@@ -1862,6 +1905,17 @@
                 <!-- Library content will be rendered here -->
             </div>
              <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
+        </div>
+    </div>
+    <div id="soundcloud-view" class="view-container" style="display: none;">
+        <div class="page-content-wrapper">
+            <div class="search-container">
+                <span class="material-symbols-rounded search-icon">search</span>
+                <input type="text" id="soundcloudSearchInput" placeholder="Search SoundCloud" class="library-search-input">
+            </div>
+            <div id="soundcloud-results-grid" class="item-grid">
+                <!-- SoundCloud search results will be rendered here -->
+            </div>
         </div>
     </div>
     <div id="search-view" class="view-container" style="display: none;">
@@ -1995,7 +2049,20 @@
             <div id="folderList" style="max-height: 250px; overflow-y: auto; margin-bottom: 15px;">
                 <!-- Folder list will be populated here -->
             </div>
+            
+            <div class="menu-separator"></div>
+            
+            <h2 style="margin-top: 20px; margin-bottom: 15px;">Integrations</h2>
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label for="soundcloudToggle">Enable SoundCloud Streaming</label>
+                    <input type="checkbox" id="soundcloudToggle">
+                </div>
+                <input type="text" id="soundcloudClientId" placeholder="SoundCloud Client ID" class="search-input" style="padding-left: 15px;">
+            </div>
+
             <div style="display: flex; justify-content: flex-end; margin-top: 25px;">
+                <button id="saveIntegrations" class="filter-btn">Save</button>
                 <button id="closeFoldersModal" class="filter-btn active">Close</button>
             </div>
         </div>
@@ -2183,6 +2250,11 @@
         let playlistModal, sleepTimerModal;
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let activeAlbum = null; // Will store { artist, name } of the selected album
+
+        // --- SoundCloud variables ---
+        let soundcloudClientId = '';
+        let isSoundcloudEnabled = false;
+        let soundcloudSearchTimeout;
 
         function sanitize(str) {
             if (!str) return '';
@@ -3960,8 +4032,14 @@ async function playSong(song, playContext = null) {
     try {
         audioPlayer.pause();
         song.hasBeenLogged = false;
-        const fileUrl = await getSongFileUrl(song);
-
+        
+        let fileUrl;
+        if (song.storage === 'soundcloud') {
+            fileUrl = song.streamUrl;
+        } else {
+            fileUrl = await getSongFileUrl(song);
+        }
+        
         if (!fileUrl) {
             Gurasuraisu.showPopup(`Could not find file for "${song.name}". It may have been moved.`);
             isPlayerLoading = false;
@@ -4151,9 +4229,101 @@ function openManageFoldersModal() {
             btn.onclick = (e) => removeFolder(e.currentTarget.dataset.name);
         });
     }
+    
+    // Populate SoundCloud settings
+    document.getElementById('soundcloudClientId').value = soundcloudClientId;
+    document.getElementById('soundcloudToggle').checked = isSoundcloudEnabled;
     openModal(manageFoldersModal);
 }
 
+async function saveSoundcloudSettings() {
+    soundcloudClientId = document.getElementById('soundcloudClientId').value.trim();
+    isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
+
+    const tx = db.transaction('config', 'readwrite');
+    await Promise.all([
+        tx.objectStore('config').put({ key: 'soundcloudClientId', value: soundcloudClientId }),
+        tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled })
+    ]);
+    
+    toggleSoundcloudTab();
+    Gurasuraisu.showPopup('Integration settings saved.');
+}
+
+function toggleSoundcloudTab() {
+    const tab = document.getElementById('soundcloud-tab');
+    if (tab) {
+        tab.style.display = isSoundcloudEnabled ? 'flex' : 'none';
+    }
+}
+
+async function searchSoundCloud() {
+    const query = document.getElementById('soundcloudSearchInput').value.trim();
+    const resultsGrid = document.getElementById('soundcloud-results-grid');
+    if (!query) {
+        resultsGrid.innerHTML = '';
+        return;
+    }
+    if (!soundcloudClientId) {
+        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>SoundCloud Client ID is not set.</p></div>`;
+        return;
+    }
+
+    resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
+
+    try {
+        const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=50`);
+        if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
+        
+        const data = await response.json();
+        const resultsHtml = data.collection.map(track => `
+            <div class="item-card" data-track-id="${track.id}">
+                <img src="${track.artwork_url || generateRandomGradient()}" class="item-card-art">
+                <div class="item-card-info">
+                    <div class="item-card-title">${sanitize(track.title)}</div>
+                    <div class="item-card-subtitle">${sanitize(track.user.username)}</div>
+                </div>
+            </div>`).join('');
+        resultsGrid.innerHTML = resultsHtml;
+
+    } catch (error) {
+        console.error('SoundCloud Search Error:', error);
+        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Error searching SoundCloud.</p></div>`;
+    }
+}
+
+
+async function playSoundcloudTrack(trackId) {
+    try {
+        const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${soundcloudClientId}`);
+        if (!trackResponse.ok) throw new Error('Could not fetch track details.');
+        const trackData = await trackResponse.json();
+
+        const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+        if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
+        
+        const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
+        if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
+        const streamData = await streamResponse.json();
+
+        const songObject = {
+            id: trackData.id,
+            name: trackData.title,
+            artist: trackData.user.username,
+            album: 'SoundCloud',
+            albumArt: trackData.artwork_url.replace('-large', '-t500x500'), // Get higher resolution art
+            storage: 'soundcloud',
+            streamUrl: streamData.url
+        };
+        
+        playSong(songObject, [songObject]); // Play the song in its own context
+
+    } catch (error) {
+        console.error('Error playing SoundCloud track:', error);
+        Gurasuraisu.showPopup('Could not play the selected track.');
+    }
+}
+        
 async function removeFolder(folderName) {
     if (!confirm(`Are you sure you want to remove the folder "${folderName}"? All songs from this folder will be removed from your library.`)) {
         return;
@@ -4632,6 +4802,18 @@ window.addEventListener("load", async () => {
                 console.log(`Restored and verified ${directoryHandles.length} folder handles.`);
             }
         }
+
+        // --- Load SoundCloud Settings ---
+        const configTx = db.transaction('config', 'readonly');
+        const scIdReq = configTx.objectStore('config').get('soundcloudClientId');
+        const scEnabledReq = configTx.objectStore('config').get('isSoundcloudEnabled');
+        
+        const scIdResult = await new Promise(r => { scIdReq.onsuccess = () => r(scIdReq.result) });
+        const scEnabledResult = await new Promise(r => { scEnabledReq.onsuccess = () => r(scEnabledReq.result) });
+        
+        soundcloudClientId = scIdResult ? scIdResult.value : '';
+        isSoundcloudEnabled = scEnabledResult ? scEnabledResult.value : false;
+        toggleSoundcloudTab();
 
         await loadSongsAndPlaylists();
         await scanForNewSongs();
@@ -5185,7 +5367,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
 
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
-        
+        document.getElementById('saveIntegrations').addEventListener('click', saveSoundcloudSettings);
+
+        const soundcloudSearchInput = document.getElementById('soundcloudSearchInput');
+        soundcloudSearchInput.addEventListener('input', () => {
+            clearTimeout(soundcloudSearchTimeout);
+            soundcloudSearchTimeout = setTimeout(searchSoundCloud, 300);
+        });
+
+        document.getElementById('soundcloud-results-grid').addEventListener('click', e => {
+            const trackCard = e.target.closest('.item-card[data-track-id]');
+            if (trackCard) {
+                const trackId = trackCard.dataset.trackId;
+                playSoundcloudTrack(trackId);
+            }
+        });
+
         setupDrawerInteractions();
     } catch (error) {
         console.error('Failed to initialize application:', error);
