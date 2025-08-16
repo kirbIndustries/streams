@@ -2401,9 +2401,9 @@ function setView(viewName) {
             else if (viewName === 'search') { renderSearchResults(); }
         }
     });
-
+    
     if (isNowPlaying && currentSongId) {
-        const song = songs.find(s => s.id === currentSongId);
+        const song = currentlyPlayingSong; 
         if (song) updatePlayerUI(song);
     }
 
@@ -2413,7 +2413,7 @@ function setView(viewName) {
     }
     
     toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
-    updateMiniplayerUI(songs.find(s => s.id === currentSongId), audioPlayer.paused ? 'paused' : 'playing');
+    updateMiniplayerUI(currentlyPlayingSong, audioPlayer.paused ? 'paused' : 'playing');
 
     document.getElementById('distortion-container').classList.toggle('active', isNowPlaying);
     if (isVisualizerInitialized && isNowPlaying && audioContext.state === 'suspended') {
