@@ -1914,10 +1914,11 @@
     </div>
     <div id="soundcloud-view" class="view-container" style="display: none;">
         <div class="page-content-wrapper">
-            <!-- Add these new controls -->
             <div class="library-controls" id="soundcloud-controls">
-                <div class="filter-container">
-                    <!-- Filters can be added here in the future if needed -->
+                <div class="filter-container" id="soundcloud-filter-container">
+                    <button class="filter-btn active" data-filter="albums" style="border-radius: 25px 10px 10px 25px;">Albums</button>
+                    <button class="filter-btn" data-filter="artists">Artists</button>
+                    <button class="filter-btn" data-filter="tracks" style="border-radius: 10px 25px 25px 10px;">Songs</button>
                 </div>
                 <div class="library-actions">
                     <button class="library-action-btn" id="soundcloudOfflineToggle">
@@ -1930,6 +1931,12 @@
                 <span class="material-symbols-rounded search-icon">search</span>
                 <input type="text" id="soundcloudSearchInput" placeholder="Search SoundCloud" class="library-search-input">
             </div>
+
+            <div class="search-container" id="soundcloud-offline-search-container" style="display: none;">
+                <span class="material-symbols-rounded search-icon">search</span>
+                <input type="text" id="soundcloudOfflineSearchInput" placeholder="Search your cached songs" class="library-search-input">
+            </div>
+            
             <div id="soundcloud-results-grid" class="item-grid">
                 <!-- SoundCloud search/offline results will be rendered here -->
             </div>
@@ -2014,6 +2021,10 @@
                 <div class="menu-item" id="menuEditMetadata">
                     <span class="material-symbols-rounded">edit</span>
                     <span>Edit Info</span>
+                </div>
+                <div class="menu-item" id="menuSaveToLibrary">
+                    <span class="material-symbols-rounded">save</span>
+                    <span>Save to Library</span>
                 </div>
                 <div class="menu-item" id="menuAddToPlaylist">
                     <span class="material-symbols-rounded">playlist_add</span>
@@ -2275,6 +2286,8 @@
         let soundcloudSearchTimeout;
         let currentlyPlayingSong = null;
         let isSoundcloudOfflineMode = false;
+        let soundcloudFilter = 'tracks';
+        let lastSoundcloudSearchResults = []; // To store API results for filtering
         const SOUNDCLOUD_CACHE_LIMIT = 200 * 1024 * 1024; // 200MB
 
         function sanitize(str) {
@@ -2400,6 +2413,61 @@ function renderSearchResults() {
         const searchView = document.getElementById('search-view');
         searchView.scrollTop = scrollPositions.search;
     });
+}
+
+function renderSoundcloudSearchResults() {
+    const resultsGrid = document.getElementById('soundcloud-results-grid');
+    if (lastSoundcloudSearchResults.length === 0) {
+        resultsGrid.innerHTML = '<div class="no-results" style="grid-column: 1 / -1;"><p>No results found.</p></div>';
+        return;
+    }
+
+    let resultsHtml = '';
+    switch (soundcloudFilter) {
+        case 'artists':
+            resultsGrid.className = 'item-grid';
+            const artists = lastSoundcloudSearchResults.reduce((acc, track) => {
+                const artistName = track.user.username;
+                if (!acc[artistName]) {
+                    acc[artistName] = track.artwork_url || track.user.avatar_url || generateRandomGradient();
+                }
+                return acc;
+            }, {});
+            resultsHtml = Object.entries(artists).map(([name, art]) => `
+                <div class="item-card" data-artist-name="${sanitize(name)}">
+                    <img src="${art}" class="item-card-art" style="border-radius: 50%;">
+                    <div class="item-card-info" style="text-align: center;"><div class="item-card-title">${sanitize(name)}</div></div>
+                </div>`).join('');
+            break;
+        case 'albums':
+            resultsGrid.className = 'item-grid';
+            const albums = lastSoundcloudSearchResults.reduce((acc, track) => {
+                const albumName = track.title.split('-')[0].trim(); // Simple album name parsing
+                if (!acc[albumName]) {
+                    acc[albumName] = { art: track.artwork_url || generateRandomGradient(), artist: track.user.username };
+                }
+                return acc;
+            }, {});
+             resultsHtml = Object.entries(albums).map(([name, data]) => `
+                <div class="item-card" data-album-name="${sanitize(name)}">
+                    <img src="${data.art}" class="item-card-art">
+                    <div class="item-card-info"><div class="item-card-title">${sanitize(name)}</div><div class="item-card-subtitle">${sanitize(data.artist)}</div></div>
+                </div>`).join('');
+            break;
+        case 'tracks':
+        default:
+            resultsGrid.className = 'item-grid';
+            resultsHtml = lastSoundcloudSearchResults.map(track => `
+                <div class="item-card" data-track-id="${track.id}">
+                    <img src="${track.artwork_url || generateRandomGradient()}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${sanitize(track.title)}</div>
+                        <div class="item-card-subtitle">${sanitize(track.user.username)}</div>
+                    </div>
+                </div>`).join('');
+            break;
+    }
+    resultsGrid.innerHTML = resultsHtml;
 }
 
 function setView(viewName) {
@@ -3849,15 +3917,24 @@ async function renderLyrics() {
         lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none; white-space: pre-wrap;">${song.lyrics}</p>`;
     }
 }
-
+        
 async function renderOfflineSoundcloudView() {
     const resultsGrid = document.getElementById('soundcloud-results-grid');
+    const query = document.getElementById('soundcloudOfflineSearchInput').value.toLowerCase();
     resultsGrid.innerHTML = '';
     
     try {
         const tx = db.transaction('soundcloudCache', 'readonly');
         const store = tx.objectStore('soundcloudCache');
         const allCachedItems = await promiseIDBRequest(store.getAll());
+
+        let filteredItems = allCachedItems;
+        if (query) {
+            filteredItems = allCachedItems.filter(item => 
+                item.metadata.name.toLowerCase().includes(query) ||
+                item.metadata.artist.toLowerCase().includes(query)
+            );
+        }
 
         if (allCachedItems.length === 0) {
             resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No SoundCloud songs are cached for offline playback.</p></div>`;
@@ -3892,17 +3969,22 @@ async function renderOfflineSoundcloudView() {
 // This new function will control the view in the "New" tab
 function renderSoundcloudPage() {
     const searchContainer = document.getElementById('soundcloud-search-container');
-    const resultsGrid = document.getElementById('soundcloud-results-grid');
+    const offlineSearchContainer = document.getElementById('soundcloud-offline-search-container');
+    const filterContainer = document.getElementById('soundcloud-filter-container');
     
     if (isSoundcloudOfflineMode) {
         searchContainer.style.display = 'none';
+        offlineSearchContainer.style.display = 'flex';
+        filterContainer.style.display = 'none';
         document.getElementById('soundcloudOfflineToggle').classList.add('active');
         renderOfflineSoundcloudView();
     } else {
         searchContainer.style.display = 'block';
+        offlineSearchContainer.style.display = 'none';
+        filterContainer.style.display = 'flex';
         document.getElementById('soundcloudOfflineToggle').classList.remove('active');
-        resultsGrid.className = 'item-grid'; // Revert to grid for search results
-        searchSoundCloud(); // Re-run search with current query
+        document.getElementById('soundcloudOfflineSearchInput').value = '';
+        renderSoundcloudSearchResults();
     }
 }
         
@@ -4183,6 +4265,8 @@ async function playSong(song, playContext = null) {
 
         await audioPlayer.play();
 
+        proactivelyCacheNextInQueue();
+
         playPauseIcon.textContent = 'pause';
         playPauseBtn.classList.add('playing');
         Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
@@ -4367,6 +4451,7 @@ async function searchSoundCloud() {
     const resultsGrid = document.getElementById('soundcloud-results-grid');
     if (!query) {
         resultsGrid.innerHTML = '';
+        lastSoundcloudSearchResults = [];
         return;
     }
     if (!soundcloudClientId) {
@@ -4374,22 +4459,15 @@ async function searchSoundCloud() {
         return;
     }
 
-    resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
+    resultsGrid.innerHTML = `<div class="loading-message" style="grid-column: 1 / -1;">...</div>`;
 
     try {
-        const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=50`);
+        const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=100`);
         if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
         
         const data = await response.json();
-        const resultsHtml = data.collection.map(track => `
-            <div class="item-card" data-track-id="${track.id}">
-                <img src="${track.artwork_url || generateRandomGradient()}" class="item-card-art">
-                <div class="item-card-info">
-                    <div class="item-card-title">${sanitize(track.title)}</div>
-                    <div class="item-card-subtitle">${sanitize(track.user.username)}</div>
-                </div>
-            </div>`).join('');
-        resultsGrid.innerHTML = resultsHtml;
+        lastSoundcloudSearchResults = data.collection;
+        renderSoundcloudSearchResults(); // New renderer function
 
     } catch (error) {
         console.error('SoundCloud Search Error:', error);
@@ -4447,6 +4525,96 @@ async function cacheSoundcloudTrack(songObject, streamUrl) {
 
     } catch (error) {
         console.error(`Failed to cache ${songObject.name}:`, error);
+    }
+}
+
+// This is a NEW function for proactive background caching
+async function proactivelyCacheNextInQueue() {
+    if (playQueue.length === 0 || currentQueueIndex < 0) return;
+
+    // Look ahead 2 songs in the queue
+    for (let i = 1; i <= 2; i++) {
+        const nextIndex = currentQueueIndex + i;
+        if (nextIndex >= playQueue.length) break;
+
+        const nextSong = playQueue[nextIndex];
+        if (nextSong.storage === 'soundcloud') {
+            const tx = db.transaction('soundcloudCache', 'readonly');
+            const store = tx.objectStore('soundcloudCache');
+            const checkReq = store.get(nextSong.id);
+            checkReq.onsuccess = () => {
+                if (!checkReq.result) {
+                    console.log(`Proactively caching next song: ${nextSong.name}`);
+                    // Fetch stream URL and cache without awaiting, so it runs in the background
+                    fetch(`https://api-v2.soundcloud.com/tracks/${nextSong.id}?client_id=${soundcloudClientId}`)
+                        .then(res => res.json())
+                        .then(trackData => {
+                            const stream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+                            return fetch(`${stream.url}?client_id=${soundcloudClientId}`);
+                        })
+                        .then(res => res.json())
+                        .then(streamData => cacheSoundcloudTrack(nextSong, streamData.url))
+                        .catch(err => console.error(`Failed to proactively cache ${nextSong.name}:`, err));
+                }
+            };
+        }
+    }
+}
+
+// This is a NEW function to save a SoundCloud track to the local library
+async function saveSoundcloudTrackToLibrary() {
+    if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'soundcloud') return;
+    const songToSave = currentlyPlayingSong;
+    Gurasuraisu.showPopup(`Saving "${songToSave.name}" to library...`);
+
+    try {
+        let audioBlob;
+        // Check if the song is already cached
+        const tx = db.transaction('soundcloudCache', 'readonly');
+        const cacheReq = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(songToSave.id));
+        
+        if (cacheReq && cacheReq.blob) {
+            audioBlob = cacheReq.blob;
+        } else {
+            // If not cached, we must fetch the audio data first
+            if (!songToSave.streamUrl) throw new Error("Stream URL is missing.");
+            const audioResponse = await fetch(songToSave.streamUrl);
+            if (!audioResponse.ok) throw new Error("Could not download audio.");
+            audioBlob = await audioResponse.blob();
+        }
+
+        const newLocalId = Date.now() + Math.random();
+        const newLocalSong = {
+            id: newLocalId,
+            name: songToSave.name,
+            artist: songToSave.artist,
+            album: songToSave.album,
+            albumArtist: songToSave.artist, // Assume artist is album artist for SC
+            storage: 'indexeddb',
+            handleName: `${songToSave.name}.mp3`,
+            dateAdded: Date.now(),
+            year: new Date().getFullYear().toString(),
+            albumArt: songToSave.albumArt,
+            trackNumber: null,
+            discNumber: null,
+            lyrics: null,
+            lrcData: null,
+            playCount: 0
+        };
+
+        // Save to the main 'songs' store and the 'musicFiles' store
+        const songTx = db.transaction(['songs', 'musicFiles'], 'readwrite');
+        songTx.objectStore('songs').put(newLocalSong);
+        songTx.objectStore('musicFiles').put({ id: newLocalId, file: audioBlob });
+        await songTx.done;
+        
+        songs.push(newLocalSong); // Add to in-memory library
+        processAndSortSongs();
+        Gurasuraisu.showPopup(`Successfully saved "${songToSave.name}" to your library!`);
+
+    } catch (error) {
+        console.error("Failed to save SoundCloud track to library:", error);
+        Gurasuraisu.showPopup("Error: Could not save song.");
     }
 }
 
@@ -4756,7 +4924,10 @@ function playNextSong({ userInitiated = false, isTransition = false } = {}) {
     }
 
     const nextSong = playQueue[currentQueueIndex];
-    if (nextSong) playSong(nextSong, playQueue, { isTransition });
+    if (nextSong) {
+        playSong(nextSong, playQueue, { isTransition });
+        proactivelyCacheNextInQueue(); // Also cache when skipping
+    }
 }
 
 function playPreviousSong() {
@@ -4777,8 +4948,10 @@ function playPreviousSong() {
     }
 
     const prevSong = playQueue[currentQueueIndex];
-    if (prevSong) playSong(prevSong, playQueue, { isTransition: false });
-}
+    if (prevSong) {
+        playSong(prevSong, playQueue, { isTransition: false });
+        proactivelyCacheNextInQueue(); // Also cache when skipping
+    }}
 
 function cleanupBlobs() {
     songs.forEach(song => {
@@ -5467,6 +5640,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                 openSongContextMenu(e, songId);
             }
         };
+
+        // ADD listener for the new "Save to Library" button
+        document.getElementById('menuSaveToLibrary').addEventListener('click', () => {
+            saveSoundcloudTrackToLibrary();
+            moreOptionsMenu.classList.remove('visible');
+        });
+    
+        // ADD listener for the offline search input
+        document.getElementById('soundcloudOfflineSearchInput').addEventListener('input', renderOfflineSoundcloudView);
+    
+        // ADD listeners for the new filter buttons
+        document.getElementById('soundcloud-filter-container').addEventListener('click', (e) => {
+            const btn = e.target.closest('.filter-btn');
+            if (btn) {
+                document.querySelector('#soundcloud-filter-container .filter-btn.active').classList.remove('active');
+                btn.classList.add('active');
+                soundcloudFilter = btn.dataset.filter;
+                renderSoundcloudSearchResults();
+            }
+        });
         
         document.getElementById('library-grid').addEventListener('click', handleSongActionsClick);
         document.getElementById('search-results-grid').addEventListener('click', handleSongActionsClick);
@@ -5553,7 +5746,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         moreButton.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!currentSongId || !currentlyPlayingSong) {
-                Gurasuraisu.showPopup('No song is currently playing.');
+                Gurasuraisu.showPopup('No song is currently playing');
                 return;
             }
             
@@ -5562,7 +5755,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Show/hide menu items based on song type
             document.getElementById('menuEditMetadata').style.display = isLocal ? 'flex' : 'none';
             document.getElementById('menuDeleteSong').style.display = isLocal ? 'flex' : 'none';
-            
+
+            // Show "Save to Library" ONLY for SoundCloud songs.
+            document.getElementById('menuSaveToLibrary').style.display = isLocal ? 'none' : 'flex';
+                    
             moreOptionsMenu.classList.toggle('visible');
         });
 
@@ -5600,17 +5796,63 @@ document.addEventListener('DOMContentLoaded', async () => {
             clearTimeout(soundcloudSearchTimeout);
             soundcloudSearchTimeout = setTimeout(searchSoundCloud, 300);
         });
-
+        
         document.getElementById('soundcloud-results-grid').addEventListener('click', e => {
             const trackCard = e.target.closest('.item-card[data-track-id]');
             const cachedCard = e.target.closest('.music-item[data-cached-id]');
-            
+            const artistCard = e.target.closest('.item-card[data-artist-name]');
+            const albumCard = e.target.closest('.item-card[data-album-name]');
+        
             if (trackCard) {
-                const trackId = trackCard.dataset.trackId;
-                playSoundcloudTrack(trackId);
+                // A track was clicked in the online search view
+                playSoundcloudTrack(trackCard.dataset.trackId);
+        
             } else if (cachedCard) {
+                // A track was clicked in the offline cached view
                 const trackId = parseFloat(cachedCard.dataset.cachedId);
                 playSoundcloudTrack(trackId);
+        
+            } else if (artistCard) {
+                // An artist was clicked in the online search view
+                const artistName = artistCard.dataset.artistName;
+                const artistTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
+                
+                const contentHtml = `<div class="item-list">${artistTracks.map(track => `
+                    <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
+                         <div class="song-info">
+                            <img src="${track.artwork_url || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                            <div>
+                                <div class="song-title">${sanitize(track.title)}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}</div>`;
+                
+                openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
+        
+            } else if (albumCard) {
+                // An album was clicked in the online search view
+                const albumName = albumCard.dataset.albumName;
+                // Filter tracks using the same simple parsing logic as the renderer
+                const albumTracks = lastSoundcloudSearchResults.filter(t => t.title.split('-')[0].trim() === albumName);
+                
+                // Find a representative artist for the subtitle
+                const representativeArtist = albumTracks.length > 0 ? albumTracks[0].user.username : '';
+        
+                const contentHtml = `<div class="item-list">${albumTracks.map(track => `
+                    <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
+                         <div class="song-info">
+                            <img src="${track.artwork_url || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                            <div>
+                                <div class="song-title">${sanitize(track.title)}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}</div>`;
+        
+                openDrawer(albumName, representativeArtist, contentHtml);
             }
         });
     
@@ -5753,13 +5995,26 @@ async function loadSongsAndPlaylists() {
 
         async function addSongToPlaylist(playlistId) {
             const playlist = playlists.find(p => p.id === playlistId);
-            if (!playlist || !currentSongId) return;
+            if (!playlist || !currentlyPlayingSong) return;
+        
+            const songToAdd = currentlyPlayingSong;
             
-            if (!playlist.songIds.includes(currentSongId)) {
-                playlist.songIds.push(currentSongId);
-                const tx = db.transaction('playlists', 'readwrite');
-                tx.objectStore('playlists').put(playlist);
-                await tx.done;
+            if (!playlist.songIds.includes(songToAdd.id)) {
+                playlist.songIds.push(songToAdd.id);
+                
+                // If it's a SC song, ensure it's cached so we have its metadata for later
+                if (songToAdd.storage === 'soundcloud') {
+                    const tx = db.transaction('soundcloudCache', 'readonly');
+                    const checkReq = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(songToAdd.id));
+                    if (!checkReq) {
+                        // If not cached, cache it now.
+                        await cacheSoundcloudTrack(songToAdd, songToAdd.streamUrl);
+                    }
+                }
+                
+                const writeTx = db.transaction('playlists', 'readwrite');
+                writeTx.objectStore('playlists').put(playlist);
+                await writeTx.done;
                 Gurasuraisu.showPopup(`Added to "${playlist.name}"`);
             } else {
                 Gurasuraisu.showPopup(`Song is already in "${playlist.name}"`);
