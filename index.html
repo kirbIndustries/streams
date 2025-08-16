@@ -4044,29 +4044,6 @@ function attachSongAndAlbumEventListeners() {
           openSongContextMenu(e, songId);
       });
   });
-
-  if (currentViewMode === 'grid') {
-      document.querySelectorAll('.album-section').forEach(albumEl => {
-          albumEl.addEventListener('click', (e) => {
-              if (e.target.closest('.song-actions')) return;
-              activeAlbum = {
-                  artist: albumEl.dataset.albumArtist,
-                  name: albumEl.dataset.albumName
-              };
-          });
-      });
-  } else {
-      document.querySelectorAll('.album-header').forEach(header => {
-          header.addEventListener('click', e => {
-              if (e.target.closest('.song-actions')) return;
-              const albumSection = header.closest('.album-section');
-              activeAlbum = {
-                  artist: albumSection.dataset.albumArtist,
-                  name: albumSection.dataset.albumName
-              };
-          });
-      });
-  }
 }
 
 function rebuildQueueFromCurrentView() {
