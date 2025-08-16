@@ -1926,7 +1926,7 @@
                 </div>
                 <div class="library-actions">
                     <button class="library-action-btn" id="soundcloudOfflineToggle">
-                        <span class="material-symbols-rounded">download</span>
+                        <span class="material-symbols-rounded">history</span>
                     </button>
                 </div>
             </div>
@@ -1945,7 +1945,7 @@
         <div class="page-content-wrapper">
             <div class="search-container">
                 <span class="material-symbols-rounded search-icon">search</span>
-                <input type="text" id="searchInput" placeholder="Search for songs, artists, or albums" class="library-search-input">
+                <input type="text" id="searchInput" placeholder="Search your Library" class="library-search-input">
             </div>
             <div id="search-results-grid" class="item-grid">
                 <!-- Search results will be rendered here -->
@@ -4038,15 +4038,6 @@ function scrollToCurrentSongInQueue() {
 }
 
 function attachSongAndAlbumEventListeners() {
-  document.querySelectorAll('.music-item:not(.queue-item)').forEach(item => {
-    item.addEventListener('click', (e) => {
-        if (e.target.closest('.song-actions')) return;
-        const songId = parseFloat(item.dataset.id);
-        const song = songs.find(s => s.id === songId);
-        if (song) playSong(song);
-    });
-  });
-
   document.querySelectorAll('.song-actions').forEach(button => {
       button.addEventListener('click', (e) => {
           const songId = parseFloat(button.dataset.id);
