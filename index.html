@@ -2561,7 +2561,7 @@ function updateSongsArrayFromDOM() {
     });
     
     albumSection.querySelectorAll('.music-item').forEach((musicItem, songIndex) => {
-      const songId = parseFloat(musicItem.dataset.id);
+      const songId = musicItem.dataset.id;
       const song = songs.find(s => s.id === songId);
       
       if (song) {
@@ -2826,7 +2826,7 @@ async function addSongs(files, storageType) {
             if (!isAudioFile(file)) continue;
 
             const metadata = await extractMetadata(file);
-            const newSongId = Date.now() + Math.random();
+            const newSongId = 'local_' + (Date.now() + Math.random());
 
             newSongs.push({
                 id: newSongId,
@@ -2848,7 +2848,7 @@ async function addSongs(files, storageType) {
             });
 
             if (storageType === 'indexeddb') {
-                songFilesToStore.push({ id: newSongId, file: file });
+                songFilesToStore.push({ id: newSongId, file: file }); // Use the new prefixed ID here too
             }
 
         } catch (error) {
@@ -3681,7 +3681,7 @@ function renderPlaylistSongs(playlistId) {
     musicListContainer.querySelectorAll('.music-item').forEach(item => {
         item.addEventListener('click', (e) => {
             if (e.target.closest('button')) return;
-            const songId = parseFloat(item.dataset.id);
+            const songId = item.dataset.id;
             const songToPlay = songs.find(s => s.id === songId);
             if (songToPlay) playSong(songToPlay);
         });
@@ -3807,7 +3807,7 @@ async function renderLyrics() {
 
         lyricsContainer.querySelectorAll('p').forEach(lineEl => {
             lineEl.addEventListener('click', () => {
-                const seekTime = parseFloat(lineEl.dataset.time);
+                const seekTime = lineEl.dataset.time;
                 if (!isNaN(seekTime)) {
                     audioPlayer.currentTime = seekTime;
                 }
@@ -3874,7 +3874,7 @@ function attachSongAndAlbumEventListeners() {
   document.querySelectorAll('.music-item:not(.queue-item)').forEach(item => {
     item.addEventListener('click', (e) => {
         if (e.target.closest('.song-actions')) return;
-        const songId = parseFloat(item.dataset.id);
+        const songId = item.dataset.id;
         const song = songs.find(s => s.id === songId);
         if (song) playSong(song);
     });
@@ -3882,7 +3882,7 @@ function attachSongAndAlbumEventListeners() {
 
   document.querySelectorAll('.song-actions').forEach(button => {
       button.addEventListener('click', (e) => {
-          const songId = parseFloat(button.dataset.id);
+          const songId = button.dataset.id;
           openSongContextMenu(e, songId);
       });
   });
@@ -3950,7 +3950,7 @@ function rebuildQueueFromCurrentView() {
         } else {
              // Fallback for other potential views (like song list view later)
              songItems.forEach(item => {
-                const songId = parseFloat(item.dataset.id);
+                const songId = item.dataset.id;
                 const song = songs.find(s => s.id === songId);
                 if (song && !newQueue.some(s => s.id === song.id)) {
                     newQueue.push(song);
@@ -4015,6 +4015,13 @@ function openSongContextMenu(event, songId) {
 }
 
 async function playSong(song, playContext = null) {
+    if (song && song.storage === 'soundcloud' && !song.blobUrl) {
+        console.log("SoundCloud song is missing blob, re-fetching...");
+        // Remove the 'soundcloud_' prefix to get the numeric ID for the API call
+        const numericId = song.id.replace('soundcloud_', ''); 
+        return playSoundcloudTrack(numericId);
+    }
+    
     if (isPlayerLoading || !song) return;
 
     // --- NEW QUEUE LOGIC ---
@@ -4366,9 +4373,11 @@ async function playSoundcloudTrack(trackId) {
                 await new Promise(res => setTimeout(res, 500)); // Wait before retrying
             }
         }
+
+        const uniqueSongId = 'soundcloud_' + trackData.id;
         
         const songObject = {
-            id: trackData.id,
+            id: uniqueSongId,
             name: trackData.title,
             artist: trackData.user.username,
             album: 'SoundCloud',
@@ -4485,7 +4494,7 @@ async function removeFolder(folderName) {
         }
 
         async function saveMetadataChanges() {
-            const songId = parseFloat(editSongId.value);
+            const songId = editSongId.value;
             const song = songs.find(s => s.id === songId);
             if (!song) return;
 
@@ -4532,7 +4541,7 @@ function addQueueItemEventListeners() {
             // Prevent click from propagating to the remove button
             if (e.target.closest('.remove-from-queue-btn')) return;
 
-            const songId = parseFloat(item.dataset.id);
+            const songId = item.dataset.id;
             const song = playQueue.find(s => s.id === songId);
             if (song) {
                 playSong(song, playQueue);
@@ -4612,7 +4621,7 @@ function updateQueueFromDOM() {
     isQueueUserModified = true; // Flag that the user has manually reordered the queue
     const newQueueOrder = [];
     document.querySelectorAll('.queue-item').forEach(item => {
-        const songId = parseFloat(item.dataset.id);
+        const songId = item.dataset.id;
         const song = songs.find(s => s.id === songId);
         if (song) newQueueOrder.push(song);
     });
@@ -5129,12 +5138,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('search-results-grid').addEventListener('click', (e) => {
             const songItem = e.target.closest('.music-item[data-id]');
             if (songItem) {
-                const songId = parseFloat(songItem.dataset.id);
+                const songId = songItem.dataset.id;
                 const song = songs.find(s => s.id === songId);
                 if (song) {
                     // Get context from the search results
                     const contextSongs = Array.from(document.querySelectorAll('#search-results-grid .music-item[data-id]'))
-                        .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
+                        .map(item => songs.find(s => s.id === item.dataset.id))
                         .filter(Boolean);
 
                     isShuffleEnabled = false; 
@@ -5150,7 +5159,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const albumCard = e.target.closest('.item-card[data-album-id]');
     
             if (highlightCard) {
-                const songId = parseFloat(highlightCard.dataset.id);
+                const songId = highlightCard.dataset.id;
                 const song = songs.find(s => s.id === songId);
                 if (song) {
                     // Play this single song as its own context
@@ -5176,12 +5185,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const playlistCard = e.target.closest('.item-card[data-playlist-id]');
 
             if (songItem) {
-                const songId = parseFloat(songItem.dataset.id);
+                const songId = songItem.dataset.id;
                 const song = songs.find(s => s.id === songId);
                 if (song) {
                     // Get the context from the currently displayed list
                     const contextSongs = Array.from(libraryGrid.querySelectorAll('.music-item[data-id]'))
-                        .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
+                        .map(item => songs.find(s => s.id === item.dataset.id))
                         .filter(Boolean);
                     isShuffleEnabled = false; 
                     updateShuffleButtonState();
@@ -5249,12 +5258,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }).join('')}</div>`;
                 openDrawer(sanitize(artistName), `${artistAlbums.length} albums`, contentHtml);
             } else if (songItem) {
-                const songId = parseFloat(songItem.dataset.id);
+                const songId = songItem.dataset.id;
                 const song = songs.find(s => s.id === songId);
                 if (song) {
                     // Get context from the items currently in the drawer
                     const contextSongs = Array.from(drawerContent.querySelectorAll('.music-item[data-id]'))
-                        .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
+                        .map(item => songs.find(s => s.id === item.dataset.id))
                         .filter(Boolean);
 
                     isShuffleEnabled = false; 
@@ -5341,7 +5350,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const actionButton = e.target.closest('.song-item-actions');
             if (actionButton) {
                 e.stopPropagation(); // Prevent the song from playing
-                const songId = parseFloat(actionButton.dataset.id);
+                const songId = actionButton.dataset.id;
                 openSongContextMenu(e, songId);
             }
         };
