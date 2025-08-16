@@ -4623,7 +4623,7 @@ async function playSoundcloudTrack(trackId, playContext) {
         const trackData = await trackResponse.json();
 
         const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-        if (!progressiveStream || !progressive-stream.url) throw new Error('No streamable URL found.');
+        if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
         
         const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
         if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
@@ -5551,7 +5551,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         id: Number(item.dataset.trackId),
                         name: title,
                         artist: artist,
-                        albumArt: node.querySelector('img').src,
+                        albumArt: item.querySelector('img').src,
                         storage: 'soundcloud'
                     };
                 });
