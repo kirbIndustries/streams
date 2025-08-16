@@ -377,19 +377,19 @@
             gap: 10px;
         }
 
-        .filter-container .filter-btn {
+        .filter-container .filter-btn, .filter-container .filter-btn-sc {
             padding: 8px 16px;
             height: 42px;
             border-radius: 10px;
         }
 
-        .filter-container .filter-btn:active {
+        .filter-container .filter-btn:active, .filter-container .filter-btn-sc:active {
             transform: scale(1);
             padding: 8px 20px;
             filter: brightness(1.5);
         }
 
-        .filter-container .filter-btn.active {
+        .filter-container .filter-btn.active, .filter-container .filter-btn-sc.active {
             background: var(--secondary-text-color);
             color: var(--background-color);
             border-radius: 25px !important;
@@ -397,7 +397,7 @@
             font-weight: 500;
         }
         
-        .filter-container .filter-btn .material-symbols-rounded {
+        .filter-container .filter-btn .material-symbols-rounded, .filter-container .filter-btn-sc .material-symbols-rounded{
             font-size: 22px;
         }
         
@@ -1110,7 +1110,7 @@
             justify-content: center;
         }
         
-        .filter-btn {
+        .filter-btn, .filter-btn-sc {
             flex: 1;
             padding: 8px 10px;
             border-radius: 20px;
@@ -1123,7 +1123,7 @@
             backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
         }
         
-        .filter-btn.active {
+        .filter-btn.active, .filter-btn-sc.active {
             background: var(--secondary-text-color);
             color: var(--background-color);
         }
@@ -1916,9 +1916,9 @@
         <div class="page-content-wrapper">
             <div class="library-controls" id="soundcloud-controls">
                 <div class="filter-container" id="soundcloud-filter-container" style="max-width: 246px;">
-                    <button class="filter-btn active" data-filter="albums" style="border-radius: 25px 10px 10px 25px;">Albums</button>
-                    <button class="filter-btn" data-filter="artists">Artists</button>
-                    <button class="filter-btn" data-filter="tracks" style="border-radius: 10px 25px 25px 10px;">Songs</button>
+                    <button class="filter-btn-sc active" data-filter="albums" style="border-radius: 25px 10px 10px 25px;">Albums</button>
+                    <button class="filter-btn-sc" data-filter="artists">Artists</button>
+                    <button class="filter-btn-sc" data-filter="tracks" style="border-radius: 10px 25px 25px 10px;">Songs</button>
                 </div>
                 <div class="search-container" id="soundcloud-offline-search-container" style="display: none; max-width: 246px; margin: 0px;">
                     <span class="material-symbols-rounded search-icon">search</span>
@@ -5625,9 +5625,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
         // ADD listeners for the new filter buttons
         document.getElementById('soundcloud-filter-container').addEventListener('click', (e) => {
-            const btn = e.target.closest('.filter-btn');
+            const btn = e.target.closest('.filter-btn-sc');
             if (btn) {
-                document.querySelector('#soundcloud-filter-container .filter-btn.active').classList.remove('active');
+                document.querySelector('#soundcloud-filter-container .filter-btn-sc.active').classList.remove('active');
                 btn.classList.add('active');
                 soundcloudFilter = btn.dataset.filter;
                 renderSoundcloudSearchResults();
