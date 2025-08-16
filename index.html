@@ -4037,12 +4037,22 @@ async function playSong(song, playContext = null) {
         song.hasBeenLogged = false;
         
         let fileUrl;
+        // Configure the audio element *before* setting the source.
         if (song.storage === 'soundcloud') {
             fileUrl = song.streamUrl;
-            disconnectAudioGraph(); // Bypass EQ/visualizer for SC tracks
+            audioPlayer.crossOrigin = "anonymous"; // Set crossOrigin for SC tracks
+            disconnectAudioGraph(); // Bypass EQ/visualizer
         } else {
             fileUrl = await getSongFileUrl(song);
-            connectAudioGraph(); // Re-enable EQ/visualizer for local tracks
+            audioPlayer.removeAttribute('crossorigin'); // Remove for local blob URLs
+            connectAudioGraph(); // Re-enable EQ/visualizer
+        }
+
+        if (!fileUrl) {
+            Gurasuraisu.showPopup(`Could not find file for "${song.name}". It may have been moved.`);
+            isPlayerLoading = false;
+            playNextSong();
+            return;
         }
         
         if (!fileUrl) {
@@ -4059,14 +4069,10 @@ async function playSong(song, playContext = null) {
         if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
             URL.revokeObjectURL(audioPlayer.src);
         }
-        audioPlayer.src = fileUrl;
 
-        // Add crossorigin attribute for SoundCloud tracks
-        if (song.storage === 'soundcloud') {
-            audioPlayer.crossOrigin = "anonymous";
-        } else {
-            audioPlayer.removeAttribute('crossorigin');
-        }
+        // Now set the source, which triggers the browser to fetch it using the attributes we just set.
+        audioPlayer.src = fileUrl;
+        audioPlayer.load(); // Explicitly call load() to ensure the new source is processed.
         
         // Update both the main player and the miniplayer
         updatePlayerUI(song);
