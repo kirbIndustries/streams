@@ -2519,6 +2519,8 @@ function resetPlayer() {
 
     Gurasuraisu.clearMediaSession();
 
+    connectAudioGraph();
+
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = null;
         navigator.mediaSession.playbackState = 'none';
@@ -4037,8 +4039,10 @@ async function playSong(song, playContext = null) {
         let fileUrl;
         if (song.storage === 'soundcloud') {
             fileUrl = song.streamUrl;
+            disconnectAudioGraph(); // Bypass EQ/visualizer for SC tracks
         } else {
             fileUrl = await getSongFileUrl(song);
+            connectAudioGraph(); // Re-enable EQ/visualizer for local tracks
         }
         
         if (!fileUrl) {
@@ -4056,6 +4060,13 @@ async function playSong(song, playContext = null) {
             URL.revokeObjectURL(audioPlayer.src);
         }
         audioPlayer.src = fileUrl;
+
+        // Add crossorigin attribute for SoundCloud tracks
+        if (song.storage === 'soundcloud') {
+            audioPlayer.crossOrigin = "anonymous";
+        } else {
+            audioPlayer.removeAttribute('crossorigin');
+        }
         
         // Update both the main player and the miniplayer
         updatePlayerUI(song);
@@ -4322,6 +4333,30 @@ async function playSoundcloudTrack(trackId) {
     } catch (error) {
         console.error('Error playing SoundCloud track:', error);
         Gurasuraisu.showPopup('Could not play the selected track.');
+    }
+}
+
+function connectAudioGraph() {
+    if (source && audioContext && eqBass) {
+        try {
+            source.disconnect(); // Disconnect everything first to ensure a clean state
+        } catch(e) { /* Fails if not connected, which is fine */ }
+        // Reconnect the full chain: source -> EQ -> analyser -> output
+        source.connect(eqBass);
+        document.getElementById('visualizerCanvas').style.visibility = 'visible';
+        console.log("Audio graph connected for visualizer and EQ.");
+    }
+}
+
+function disconnectAudioGraph() {
+    if (source) {
+        try {
+            // Disconnect the source from the processing graph (EQ/analyser).
+            // The HTMLAudioElement will now play directly to the speakers by default.
+            source.disconnect();
+        } catch(e) { /* Fails if not connected, which is fine */ }
+        document.getElementById('visualizerCanvas').style.visibility = 'hidden';
+        console.log("Audio graph disconnected for CORS track. Visualizer/EQ disabled.");
     }
 }
         
