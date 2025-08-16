@@ -5580,17 +5580,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     closeDrawer();
                 }
             } else if (soundcloudSongItem) {
-                // Build the context from all SoundCloud songs currently in the drawer
                 const trackId = soundcloudSongItem.dataset.trackId;
-                const contextNodes = drawerContent.querySelectorAll('.music-item[data-track-id]');
-                const playContext = Array.from(contextNodes).map(node => ({
-                    id: Number(node.dataset.trackId),
-                    name: node.querySelector('.song-title').textContent,
-                    artist: node.querySelector('.album-artist').textContent,
-                    albumArt: node.querySelector('img').src,
-                    storage: 'soundcloud'
-                }));
-                playSoundcloudTrack(trackId, playContext);
+                // Rebuild the play context from all items in the drawer
+                const context = Array.from(drawerContent.querySelectorAll('.music-item[data-track-id]'))
+                    .map(item => JSON.parse(item.dataset.playContext));
+                
+                playSoundcloudTrack(trackId, context);
                 closeDrawer();
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
@@ -5789,10 +5784,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Show/hide menu items based on song type
             document.getElementById('menuEditMetadata').style.display = isLocal ? 'flex' : 'none';
             document.getElementById('menuDeleteSong').style.display = isLocal ? 'flex' : 'none';
-
-            // Show "Save to Library" ONLY for SoundCloud songs.
-            document.getElementById('menuSaveToLibrary').style.display = isLocal ? 'none' : 'flex';
-                    
+            
+            // "Save" is visible ONLY for streamed/cached SC songs.
+            document.getElementById('menuSaveToLibrary').style.display = isStreamedSoundcloud ? 'flex' : 'none';
+            
+            // "Add to Playlist" is visible ONLY for local songs (which now includes saved SC songs).
+            document.getElementById('menuAddToPlaylist').style.display = isStreamedSoundcloud ? 'none' : 'flex';
+            
             moreOptionsMenu.classList.toggle('visible');
         });
 
@@ -5835,73 +5833,53 @@ document.addEventListener('DOMContentLoaded', async () => {
             const trackCard = e.target.closest('.item-card[data-track-id]');
             const cachedCard = e.target.closest('.music-item[data-cached-id]');
             const artistCard = e.target.closest('.item-card[data-artist-name]');
-            const albumCard = e.target.closest('.item-card[data-album-name]');
+            const albumCard = e.target.closest('.item-card[data-album-id]');
         
             if (trackCard) {
-                // Build the context from the current search results
-                const playContext = lastSoundcloudSearchResults.map(track => ({
-                    id: track.id,
-                    name: track.title,
-                    artist: track.user.username,
-                    album: 'SoundCloud',
-                    albumArt: track.artwork_url || generateRandomGradient(),
-                    storage: 'soundcloud'
-                }));
-                playSoundcloudTrack(trackCard.dataset.trackId, playContext);
+                playSoundcloudTrack(trackCard.dataset.trackId, [lastSoundcloudSearchResults.find(t => t.id == trackCard.dataset.trackId)]);
             } else if (cachedCard) {
-                const trackId = parseFloat(cachedCard.dataset.cachedId);
-                // **THE FIX:** When playing from offline view, the context is all other visible offline songs
-                const contextNodes = document.querySelectorAll('#soundcloud-results-grid .music-item[data-cached-id]');
-                const playContext = Array.from(contextNodes).map(node => {
-                    return {
-                        id: parseFloat(node.dataset.cachedId),
-                        name: node.querySelector('.song-title').textContent,
-                        artist: node.querySelector('.album-artist').textContent,
-                        albumArt: node.querySelector('img').src,
+                playSoundcloudTrack(parseFloat(cachedCard.dataset.cachedId));
+            } else if (artistCard || albumCard) {
+                let contextTracks = [];
+                let drawerTitle = '';
+                let drawerSubtitle = '';
+        
+                if (artistCard) {
+                    const artistName = artistCard.dataset.artistName;
+                    contextTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
+                    drawerTitle = artistName;
+                    drawerSubtitle = `${contextTracks.length} tracks found`;
+                } else { // Album card
+                    const [artistName, albumName] = albumCard.dataset.albumId.split('::');
+                    contextTracks = lastSoundcloudSearchResults.filter(t => 
+                        t.user.username === artistName && extractAlbumAndTrack(t.title).album === albumName
+                    );
+                    drawerTitle = albumName;
+                    drawerSubtitle = artistName;
+                }
+        
+                const contentHtml = `<div class="item-list">${contextTracks.map(track => {
+                    const songObject = { // Create a consistent song object for the play context
+                        id: track.id,
+                        name: track.title,
+                        artist: track.user.username,
+                        album: 'SoundCloud',
+                        albumArt: track.artwork_url || generateRandomGradient(),
                         storage: 'soundcloud'
                     };
-                });
-                playSoundcloudTrack(trackId, playContext);
-            } else if (artistCard) {
-                // An artist was clicked in the online search view
-                const artistName = artistCard.dataset.artistName;
-                const artistTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
-                
-                const contentHtml = `<div class="item-list">${artistTracks.map(track => `
-                    <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
+                    return `
+                    <div class="music-item" data-track-id="${track.id}" data-play-context='${JSON.stringify(songObject)}' style="cursor: pointer;">
                          <div class="song-info">
-                            <img src="${track.artwork_url || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                            <img src="${songObject.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
-                                <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                                <div class="song-title">${sanitize(songObject.name)}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(songObject.artist)}</div>
                             </div>
                         </div>
                     </div>
-                `).join('')}</div>`;
+                `}).join('')}</div>`;
                 
-                openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
-            } else if (albumCard) {
-                // An album was clicked in the online search view
-                const albumName = albumCard.dataset.albumName;
-                // Filter tracks using the same simple parsing logic as the renderer
-                const albumTracks = lastSoundcloudSearchResults.filter(t => t.title.split('-')[0].trim() === albumName);
-                
-                // Find a representative artist for the subtitle
-                const representativeArtist = albumTracks.length > 0 ? albumTracks[0].user.username : '';
-        
-                const contentHtml = `<div class="item-list">${albumTracks.map(track => `
-                    <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
-                         <div class="song-info">
-                            <img src="${track.artwork_url || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
-                            <div>
-                                <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
-                            </div>
-                        </div>
-                    </div>
-                `).join('')}</div>`;
-        
-                openDrawer(albumName, representativeArtist, contentHtml);
+                openDrawer(drawerTitle, drawerSubtitle, contentHtml);
             }
         });
     
