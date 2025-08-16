@@ -4016,6 +4016,13 @@ function openSongContextMenu(event, songId) {
 }
 
 async function playSong(song, playContext = null) {
+    // If this is a SoundCloud song but we don't have a playable blob URL for it yet,
+    // delegate to playSoundcloudTrack to fetch it. That function will then call playSong again.
+    const existingSong = songs.find(s => s.id === song.id);
+    if (song.storage === 'soundcloud' && (!existingSong || !existingSong.blobUrl)) {
+        return playSoundcloudTrack(song.id);
+    }
+    
     if (isPlayerLoading || !song) return;
 
     // --- NEW QUEUE LOGIC ---
@@ -5473,8 +5480,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('soundcloud-results-grid').addEventListener('click', e => {
             const trackCard = e.target.closest('.item-card[data-track-id]');
             if (trackCard) {
-                const trackId = trackCard.dataset.trackId;
-                playSoundcloudTrack(trackId);
+                const trackId = parseInt(trackCard.dataset.trackId, 10);
+                // Create a "stub" song object and let playSong handle the logic
+                const songStub = { id: trackId, storage: 'soundcloud' };
+                playSong(songStub, [songStub]);
             }
         });
 
