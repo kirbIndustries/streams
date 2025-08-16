@@ -4587,68 +4587,54 @@ async function saveSoundcloudTrackToLibrary() {
 
 async function playSoundcloudTrack(trackId, playContext) {
     const numericTrackId = Number(trackId);
-
-    // --- Step 1: Check the cache first in a fast, read-only transaction ---
+    
     try {
-        const readTx = db.transaction('soundcloudCache', 'readonly');
-        const store = readTx.objectStore('soundcloudCache');
+        const tx = db.transaction('soundcloudCache', 'readwrite');
+        const store = tx.objectStore('soundcloudCache');
         const cachedEntry = await promiseIDBRequest(store.get(numericTrackId));
+
+        let songToPlay;
 
         if (cachedEntry) {
             console.log("Playing from cache:", cachedEntry.metadata.name);
-            const songObject = cachedEntry.metadata;
-            songObject.blobUrl = URL.createObjectURL(cachedEntry.blob);
+            songToPlay = cachedEntry.metadata;
+            songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
             
-            // Play the song immediately. This is the top priority.
-            playSong(songObject, playContext);
-
-            // In the background, update the timestamp in a separate, safe transaction.
-            const writeTx = db.transaction('soundcloudCache', 'readwrite');
+            // Update timestamp to mark as recently used
             cachedEntry.timestamp = Date.now();
-            await promiseIDBRequest(writeTx.objectStore('soundcloudCache').put(cachedEntry));
+            store.put(cachedEntry);
+        } else {
+            console.log("Not in cache, streaming from SoundCloud...");
+            const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
+            if (!trackResponse.ok) throw new Error('Could not fetch track details.');
+            const trackData = await trackResponse.json();
 
-            return; // Exit the function since we've handled the cached case.
+            const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+            if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
+            
+            const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
+            if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
+            const streamData = await streamResponse.json();
+            const finalStreamUrl = streamData.url;
+
+            songToPlay = {
+                id: trackData.id,
+                name: trackData.title,
+                artist: trackData.user.username,
+                album: 'SoundCloud',
+                albumArt: trackData.artwork_url ? trackData.artwork_url.replace('-large', '-t500x500') : generateRandomGradient(),
+                storage: 'soundcloud',
+                streamUrl: finalStreamUrl
+            };
+            
+            // Start caching in the background *after* initiating playback logic
+            cacheSoundcloudTrack(songToPlay, finalStreamUrl);
         }
-    } catch (e) {
-        console.error("Error during cache check, proceeding with streaming:", e);
-        // If the cache check fails, we can still try to stream it.
-    }
 
-    // --- Step 2: If we are here, the song was NOT in the cache. ---
-    // Perform all network operations completely outside of any DB transaction.
-    try {
-        console.log("Not in cache, streaming from SoundCloud...");
-        const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
-        if (!trackResponse.ok) throw new Error('Could not fetch track details.');
-        const trackData = await trackResponse.json();
-
-        const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-        if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
-        
-        const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
-        if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
-        const streamData = await streamResponse.json();
-        const finalStreamUrl = streamData.url;
-
-        const songToPlay = {
-            id: trackData.id,
-            name: trackData.title,
-            artist: trackData.user.username,
-            album: 'SoundCloud',
-            albumArt: trackData.artwork_url ? trackData.artwork_url.replace('-large', '-t500x500') : generateRandomGradient(),
-            storage: 'soundcloud',
-            streamUrl: finalStreamUrl
-        };
-
-        // --- Step 3: Play the song FIRST using the live stream URL. ---
         playSong(songToPlay, playContext);
-
-        // --- Step 4: After playback has started, start the caching process in the background. ---
-        // This no longer blocks or interferes with the playback itself.
-        cacheSoundcloudTrack(songToPlay, finalStreamUrl);
-
+        await tx.done;
     } catch (error) {
-        console.error('Error streaming SoundCloud track:', error);
+        console.error('Error playing or fetching SoundCloud track:', error);
         Gurasuraisu.showPopup('Could not play the selected track');
     }
 }
@@ -5540,23 +5526,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                     closeDrawer();
                 }
             } else if (soundcloudSongItem) {
+                // Build the context from all SoundCloud songs currently in the drawer
                 const trackId = soundcloudSongItem.dataset.trackId;
-                
-                // Create the play context from the tracks currently visible in the drawer.
-                const contextSongs = Array.from(drawerContent.querySelectorAll('.music-item[data-track-id]')).map(item => {
-                    // Reconstruct a minimal song object for the queue
-                    const title = item.querySelector('.song-title').textContent;
-                    const artist = item.querySelector('.album-artist').textContent;
-                    return {
-                        id: Number(item.dataset.trackId),
-                        name: title,
-                        artist: artist,
-                        albumArt: item.querySelector('img').src,
-                        storage: 'soundcloud'
-                    };
-                });
-                
-                playSoundcloudTrack(trackId, contextSongs);
+                const contextNodes = drawerContent.querySelectorAll('.music-item[data-track-id]');
+                const playContext = Array.from(contextNodes).map(node => ({
+                    id: Number(node.dataset.trackId),
+                    name: node.querySelector('.song-title').textContent,
+                    artist: node.querySelector('.album-artist').textContent,
+                    albumArt: node.querySelector('img').src,
+                    storage: 'soundcloud'
+                }));
+                playSoundcloudTrack(trackId, playContext);
                 closeDrawer();
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
