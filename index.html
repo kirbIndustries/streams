@@ -2422,8 +2422,8 @@ function setView(viewName) {
      
 const initDB = () => {
     return new Promise((resolve, reject) => {
-        // DB version bumped to 4 to add play history and song play counts
-        const request = indexedDB.open('musicDB', 4);
+        // DB version bumped to 6
+        const request = indexedDB.open('musicDB', 6);
 
         request.onerror = (event) => {
             console.error('IndexedDB error:', event.target.error);
