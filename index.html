@@ -2437,8 +2437,8 @@ function setView(viewName) {
      
 const initDB = () => {
     return new Promise((resolve, reject) => {
-        // DB version bumped to 6
-        const request = indexedDB.open('musicDB', 6);
+        // DB version bumped to 7
+        const request = indexedDB.open('musicDB', 7);
 
         request.onerror = (event) => {
             console.error('IndexedDB error:', event.target.error);
