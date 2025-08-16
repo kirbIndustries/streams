@@ -2263,14 +2263,15 @@
         let playlistModal, sleepTimerModal;
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let activeAlbum = null; // Will store { artist, name } of the selected album
+        let currentlyPlayingSong = null;
 
         // --- SoundCloud variables ---
         let soundcloudClientId = '';
         let isSoundcloudEnabled = false;
         let soundcloudSearchTimeout;
-        let currentlyPlayingSong = null;
         let isSoundcloudOfflineMode = false;
         const SOUNDCLOUD_CACHE_LIMIT = 200 * 1024 * 1024; // 200MB
+        let latestPlaybackRequestTimestamp = 0;
 
         function sanitize(str) {
             if (!str) return '';
@@ -4085,6 +4086,9 @@ function openSongContextMenu(event, songId) {
 async function playSong(song, playContext = null) {
     if (isPlayerLoading || !song) return;
 
+    const requestTimestamp = Date.now();
+    latestPlaybackRequestTimestamp = requestTimestamp;
+
     // --- NEW QUEUE LOGIC ---
     if (playContext && Array.isArray(playContext)) {
         // PRIORITY 1: A new context was explicitly provided. This ALWAYS overwrites the old queue.
@@ -4105,6 +4109,9 @@ async function playSong(song, playContext = null) {
 
     try {
         audioPlayer.pause();
+        updatePlayerUI(song, 0); 
+        updateMiniplayerUI(song, 'paused');
+        
         song.hasBeenLogged = false;
         currentlyPlayingSong = song;
         
@@ -4120,12 +4127,13 @@ async function playSong(song, playContext = null) {
             disconnectAudioGraph(); // Visualizer disabled for live stream
         } else { // Case 3: Playing a local file
             fileUrl = await getSongFileUrl(song);
+            if (requestTimestamp !== latestPlaybackRequestTimestamp) return; 
             audioPlayer.removeAttribute('crossorigin');
             connectAudioGraph();
         }
 
         if (!fileUrl) {
-            Gurasuraisu.showPopup(`Could not find file for "${song.name}". It may have been moved.`);
+            Gurasuraisu.showPopup(`Could not find file for "${song.name}"`);
             isPlayerLoading = false;
             playNextSong();
             return;
@@ -4165,17 +4173,20 @@ async function playSong(song, playContext = null) {
 
         await audioPlayer.play();
 
+        if (requestTimestamp !== latestPlaybackRequestTimestamp) return;
+
         playPauseIcon.textContent = 'pause';
         playPauseBtn.classList.add('playing');
         Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
         updateMiniplayerUI(song, 'playing');
 
     } catch (error) {
-        if (error.name !== 'AbortError') console.error("Failed to play song:", song.name, error);
-        Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
-        updateMiniplayerUI(song, 'paused');
-    } finally {
-        isPlayerLoading = false;
+        // If this request was the latest one and it failed, log the error.
+        if (requestTimestamp === latestPlaybackRequestTimestamp) {
+            if (error.name !== 'AbortError') console.error("Failed to play song:", song.name, error);
+            Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
+            updateMiniplayerUI(song, 'paused');
+        }
     }
 }
 
