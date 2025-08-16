@@ -4016,13 +4016,6 @@ function openSongContextMenu(event, songId) {
 }
 
 async function playSong(song, playContext = null) {
-    // If this is a SoundCloud song but we don't have a playable blob URL for it yet,
-    // delegate to playSoundcloudTrack to fetch it. That function will then call playSong again.
-    const existingSong = songs.find(s => s.id === song.id);
-    if (song.storage === 'soundcloud' && (!existingSong || !existingSong.blobUrl)) {
-        return playSoundcloudTrack(song.id);
-    }
-    
     if (isPlayerLoading || !song) return;
 
     // --- NEW QUEUE LOGIC ---
@@ -4041,9 +4034,23 @@ async function playSong(song, playContext = null) {
         rebuildQueueFromCurrentView();
     }
     
-    isPlayerLoading = true;
-
     try {
+        isPlayerLoading = true;
+        
+        // If the song is from SoundCloud and doesn't have a ready-to-play blobUrl,
+        // tell playSoundcloudTrack to fetch/cache and return a complete, playable song object.
+        if (song.storage === 'soundcloud' && !song.blobUrl) {
+            song = await playSoundcloudTrack(song.id);
+            if (!song) { // If fetching failed, abort playback.
+                throw new Error("Could not retrieve SoundCloud track.");
+            }
+        }
+
+        // At this point, `song` is guaranteed to be a full object with a playable URL.
+        if (!song || !song.id) {
+             throw new Error("Invalid song object for playback.");
+        }
+        
         audioPlayer.pause();
         song.hasBeenLogged = false;
         
@@ -4316,36 +4323,36 @@ async function searchSoundCloud() {
 
 async function playSoundcloudTrack(trackId) {
     try {
-        // 1. Check if song already exists in our main `songs` array (from a previous play in this session)
-        const existingSong = songs.find(s => s.id === trackId);
-        if (existingSong && existingSong.blobUrl) {
-            playSong(existingSong, [existingSong]);
-            return;
+        const canCache = db.objectStoreNames.contains('soundcloudCache');
+
+        // First, check if a valid, playable object already exists in the main `songs` array
+        const existingSong = songs.find(s => s.id === trackId && s.blobUrl);
+        if (existingSong) {
+            return existingSong; // Return the already loaded song
         }
         
-        // 2. Check IndexedDB Cache
-        const tx = db.transaction('soundcloudCache', 'readonly');
-        const store = tx.objectStore('soundcloudCache');
-        const cacheRequest = store.get(trackId);
-        const cached = await new Promise(resolve => {
-            cacheRequest.onsuccess = () => resolve(cacheRequest.result);
-            cacheRequest.onerror = () => resolve(null);
-        });
+        // Check IndexedDB Cache
+        if (canCache) {
+            const tx = db.transaction('soundcloudCache', 'readonly');
+            const store = tx.objectStore('soundcloudCache');
+            const cacheRequest = store.get(trackId);
+            const cached = await new Promise(resolve => {
+                cacheRequest.onsuccess = () => resolve(cacheRequest.result);
+                cacheRequest.onerror = () => resolve(null);
+            });
 
-        if (cached) {
-            console.log("Loading SoundCloud track from cache.");
-            const songObject = cached.song;
-            songObject.blobUrl = URL.createObjectURL(cached.blob);
-            
-            // Add to main `songs` array if not already there, making it a "first-class" song
-            if (!songs.some(s => s.id === songObject.id)) {
-                songs.push(songObject);
+            if (cached) {
+                console.log("Loading SoundCloud track from cache.");
+                const songObject = cached.song;
+                songObject.blobUrl = URL.createObjectURL(cached.blob);
+                if (!songs.some(s => s.id === songObject.id)) {
+                    songs.push(songObject);
+                }
+                return songObject; // Return the song object from cache
             }
-            playSong(songObject, [songObject]);
-            return;
         }
 
-        // 3. Not in cache, fetch from SoundCloud API
+        // Not in cache, fetch from SoundCloud API
         console.log("Fetching SoundCloud track from API.");
         const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${soundcloudClientId}`);
         if (!trackResponse.ok) throw new Error('Could not fetch track details.');
@@ -4353,17 +4360,18 @@ async function playSoundcloudTrack(trackId) {
 
         const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
         if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
-        
-        const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
-        if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
-        const streamData = await streamResponse.json();
-        const finalStreamUrl = streamData.url;
 
-        // 4. Resiliently fetch audio file with retries
+        // Resiliently fetch audio file with retries
         let audioBlob;
         const maxRetries = 3;
         for (let i = 0; i < maxRetries; i++) {
             try {
+                // FIX: Re-fetch the stream URL on each attempt as it may expire quickly
+                const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
+                if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
+                const streamData = await streamResponse.json();
+                const finalStreamUrl = streamData.url;
+
                 const audioResponse = await fetch(finalStreamUrl);
                 if (!audioResponse.ok) throw new Error(`Download failed with status ${audioResponse.status}`);
                 audioBlob = await audioResponse.blob();
@@ -4376,29 +4384,27 @@ async function playSoundcloudTrack(trackId) {
         }
         
         const songObject = {
-            id: trackData.id,
-            name: trackData.title,
-            artist: trackData.user.username,
+            id: trackData.id, name: trackData.title, artist: trackData.user.username,
             album: 'SoundCloud',
             albumArt: trackData.artwork_url ? trackData.artwork_url.replace('-large', '-t500x500') : generateRandomGradient(),
-            storage: 'soundcloud', // Keep for identification
-            dateAdded: Date.now()
+            storage: 'soundcloud', dateAdded: Date.now()
         };
         songObject.blobUrl = URL.createObjectURL(audioBlob);
 
-        // 5. Save to cache for next time
-        const writeTx = db.transaction('soundcloudCache', 'readwrite');
-        writeTx.objectStore('soundcloudCache').put({ id: trackData.id, song: songObject, blob: audioBlob });
+        if (canCache) {
+            const writeTx = db.transaction('soundcloudCache', 'readwrite');
+            writeTx.objectStore('soundcloudCache').put({ id: trackData.id, song: songObject, blob: audioBlob });
+        }
 
-        // 6. Add to main songs array and play
         if (!songs.some(s => s.id === songObject.id)) {
             songs.push(songObject);
         }
-        playSong(songObject, [songObject]);
+        return songObject; // Return the newly fetched song object
 
     } catch (error) {
         console.error('Error playing SoundCloud track:', error);
         Gurasuraisu.showPopup(error.message);
+        return null; // Return null on failure
     }
 }
 
