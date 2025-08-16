@@ -2485,6 +2485,13 @@ const initDB = () => {
     });
 };
 
+function promiseIDBRequest(request) {
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
 function createPlayQueue() {
     if (isShuffleEnabled) {
         let availableSongs = [...songs];
@@ -3841,18 +3848,21 @@ async function renderLyrics() {
 async function renderOfflineSoundcloudView() {
     const resultsGrid = document.getElementById('soundcloud-results-grid');
     resultsGrid.innerHTML = '';
-    const tx = db.transaction('soundcloudCache', 'readonly');
-    const store = tx.objectStore('soundcloudCache');
-    const allCachedReq = store.getAll();
+    
+    try {
+        const tx = db.transaction('soundcloudCache', 'readonly');
+        const store = tx.objectStore('soundcloudCache');
+        const allCachedItems = await promiseIDBRequest(store.getAll());
 
-    allCachedReq.onsuccess = () => {
-        const cachedSongs = allCachedReq.result;
-        if (cachedSongs.length === 0) {
+        if (allCachedItems.length === 0) {
             resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No SoundCloud songs are cached for offline playback.</p></div>`;
             return;
         }
         
-        const resultsHtml = cachedSongs.map(entry => {
+        // Sort by most recently played
+        allCachedItems.sort((a, b) => b.timestamp - a.timestamp);
+
+        const resultsHtml = allCachedItems.map(entry => {
             const track = entry.metadata;
             return `
             <div class="music-item" data-cached-id="${track.id}" style="cursor: pointer;">
@@ -3868,7 +3878,10 @@ async function renderOfflineSoundcloudView() {
         }).join('');
         resultsGrid.className = 'item-list';
         resultsGrid.innerHTML = resultsHtml;
-    };
+    } catch (error) {
+        console.error('Failed to render offline songs:', error);
+        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Error loading cached songs.</p></div>`;
+    }
 }
 
 // This new function will control the view in the "New" tab
@@ -4433,64 +4446,55 @@ async function cacheSoundcloudTrack(songObject, streamUrl) {
 }
 
 async function playSoundcloudTrack(trackId) {
-    const tx = db.transaction('soundcloudCache', 'readonly');
-    const store = tx.objectStore('soundcloudCache');
-    const cacheReq = store.get(trackId);
+    try {
+        const tx = db.transaction('soundcloudCache', 'readwrite');
+        const store = tx.objectStore('soundcloudCache');
+        const cachedEntry = await promiseIDBRequest(store.get(trackId));
 
-    cacheReq.onsuccess = async () => {
-        if (cacheReq.result) {
-            console.log("Playing from cache:", cacheReq.result.metadata.name);
-            const entry = cacheReq.result;
-            const songObject = entry.metadata;
-            songObject.blobUrl = URL.createObjectURL(entry.blob);
-
-            // Update timestamp to mark it as recently used
-            const writeTx = db.transaction('soundcloudCache', 'readwrite');
-            entry.timestamp = Date.now();
-            writeTx.objectStore('soundcloudCache').put(entry);
-
+        if (cachedEntry) {
+            console.log("Playing from cache:", cachedEntry.metadata.name);
+            const songObject = cachedEntry.metadata;
+            songObject.blobUrl = URL.createObjectURL(cachedEntry.blob);
+            
+            // Update timestamp to mark it as recently used for cache pruning
+            cachedEntry.timestamp = Date.now();
+            store.put(cachedEntry);
+            
             playSong(songObject, [songObject]);
         } else {
             console.log("Not in cache, streaming from SoundCloud...");
-            try {
-                const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${soundcloudClientId}`);
-                if (!trackResponse.ok) throw new Error('Could not fetch track details.');
-                const trackData = await trackResponse.json();
+            const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${soundcloudClientId}`);
+            if (!trackResponse.ok) throw new Error('Could not fetch track details.');
+            const trackData = await trackResponse.json();
 
-                const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-                if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
-                
-                const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
-                if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
-                const streamData = await streamResponse.json();
-                const finalStreamUrl = streamData.url;
+            const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+            if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
+            
+            const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
+            if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
+            const streamData = await streamResponse.json();
+            const finalStreamUrl = streamData.url;
 
-                const songObject = {
-                    id: trackData.id,
-                    name: trackData.title,
-                    artist: trackData.user.username,
-                    album: 'SoundCloud',
-                    albumArt: trackData.artwork_url ? trackData.artwork_url.replace('-large', '-t500x500') : generateRandomGradient(),
-                    storage: 'soundcloud',
-                    streamUrl: finalStreamUrl // Use direct stream URL for immediate playback
-                };
-                
-                playSong(songObject, [songObject]);
+            const songObject = {
+                id: trackData.id,
+                name: trackData.title,
+                artist: trackData.user.username,
+                album: 'SoundCloud',
+                albumArt: trackData.artwork_url ? trackData.artwork_url.replace('-large', '-t500x500') : generateRandomGradient(),
+                storage: 'soundcloud',
+                streamUrl: finalStreamUrl
+            };
+            
+            playSong(songObject, [songObject]);
 
-                // Start caching in the background *after* playback has started
-                cacheSoundcloudTrack(songObject, finalStreamUrl);
-
-            } catch (error) {
-                console.error('Error streaming SoundCloud track:', error);
-                Gurasuraisu.showPopup('Failed to play the selected song');
-            }
+            // Start caching in the background *after* playback has started
+            cacheSoundcloudTrack(songObject, finalStreamUrl);
         }
-    };
-    
-    cacheReq.onerror = (e) => {
-        console.error("IndexedDB error checking cache:", e);
-        Gurasuraisu.showPopup('Error accessing song cache');
-    };
+        await tx.done; // Ensure the transaction successfully completes
+    } catch (error) {
+        console.error('Error playing or fetching SoundCloud track:', error);
+        Gurasuraisu.showPopup('Failed to play selected item');
+    }
 }
 
 function connectAudioGraph() {
