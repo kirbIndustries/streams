@@ -4270,30 +4270,20 @@ async function searchSoundCloud() {
     }
 
     resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
-    
-    // Use the v1 API endpoint for tracks (which supports searching via the 'q' param)
-    const apiUrl = `https://api.soundcloud.com/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=50`;
 
     try {
-        const response = await fetch(apiUrl);
+        const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=50`);
         if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
         
-        const tracks = await response.json();
-        const resultsHtml = tracks.map(track => {
-            // Store the entire track object as a JSON string in a data attribute.
-            // This avoids making a second API call later.
-            // We replace single quotes to prevent breaking the HTML attribute.
-            const trackObjectString = JSON.stringify(track).replace(/'/g, "&apos;");
-
-            return `
-            <div class="item-card" data-track-object='${trackObjectString}'>
+        const data = await response.json();
+        const resultsHtml = data.collection.map(track => `
+            <div class="item-card" data-track-id="${track.id}">
                 <img src="${track.artwork_url || generateRandomGradient()}" class="item-card-art">
                 <div class="item-card-info">
                     <div class="item-card-title">${sanitize(track.title)}</div>
                     <div class="item-card-subtitle">${sanitize(track.user.username)}</div>
                 </div>
-            </div>`;
-        }).join('');
+            </div>`).join('');
         resultsGrid.innerHTML = resultsHtml;
 
     } catch (error) {
@@ -4302,31 +4292,36 @@ async function searchSoundCloud() {
     }
 }
 
-function playSoundcloudTrack(track) {
-    if (!track.streamable) {
-        Gurasuraisu.showPopup('This track is not streamable.');
-        return;
-    }
-    
-    // The v1 API provides the stream URL directly. We just need to add our client_id.
-    const authenticatedStreamUrl = `${track.stream_url}?client_id=${soundcloudClientId}`;
-    
-    // Use a higher resolution artwork if available
-    const artwork = track.artwork_url ? track.artwork_url.replace('-large', '-t500x500') : generateRandomGradient();
 
-    const songObject = {
-        id: track.id,
-        name: track.title,
-        artist: track.user.username,
-        album: 'SoundCloud',
-        albumArt: artwork,
-        storage: 'soundcloud',
-        streamUrl: authenticatedStreamUrl
-    };
-    
-    // Play the song using the existing player function.
-    // The context is just this single song.
-    playSong(songObject, [songObject]);
+async function playSoundcloudTrack(trackId) {
+    try {
+        const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${soundcloudClientId}`);
+        if (!trackResponse.ok) throw new Error('Could not fetch track details.');
+        const trackData = await trackResponse.json();
+
+        const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+        if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
+        
+        const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
+        if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
+        const streamData = await streamResponse.json();
+
+        const songObject = {
+            id: trackData.id,
+            name: trackData.title,
+            artist: trackData.user.username,
+            album: 'SoundCloud',
+            albumArt: trackData.artwork_url.replace('-large', '-t500x500'), // Get higher resolution art
+            storage: 'soundcloud',
+            streamUrl: streamData.url
+        };
+        
+        playSong(songObject, [songObject]); // Play the song in its own context
+
+    } catch (error) {
+        console.error('Error playing SoundCloud track:', error);
+        Gurasuraisu.showPopup('Could not play the selected track.');
+    }
 }
         
 async function removeFolder(folderName) {
@@ -5381,16 +5376,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         document.getElementById('soundcloud-results-grid').addEventListener('click', e => {
-            const trackCard = e.target.closest('.item-card[data-track-object]');
+            const trackCard = e.target.closest('.item-card[data-track-id]');
             if (trackCard) {
-                try {
-                    // Parse the JSON string from the data attribute to get the full track object.
-                    const track = JSON.parse(trackCard.dataset.trackObject);
-                    playSoundcloudTrack(track);
-                } catch (error) {
-                    console.error("Failed to parse SoundCloud track object:", error);
-                    Gurasuraisu.showPopup('Could not play the selected track.');
-                }
+                const trackId = trackCard.dataset.trackId;
+                playSoundcloudTrack(trackId);
             }
         });
 
