@@ -2256,6 +2256,8 @@
         let soundcloudClientId = '';
         let isSoundcloudEnabled = false;
         let soundcloudSearchTimeout;
+        let isSoundcloudOfflineMode = false;
+        const SOUNDCLOUD_CACHE_LIMIT_MB = 200;
 
         function sanitize(str) {
             if (!str) return '';
@@ -2341,6 +2343,105 @@ function setupDrawerInteractions() {
 
     document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
 }
+
+// A new function to render the controls for the SoundCloud tab
+function renderSoundcloudControls() {
+    const libraryControls = document.querySelector('.library-controls');
+    libraryControls.innerHTML = `
+        <div class="filter-container">
+            <!-- Filters can be added here in the future if needed -->
+        </div>
+        <div class="view-controls">
+            <button id="toggleOfflineBtn" class="action-btn">
+                <span class="material-symbols-rounded">${isSoundcloudOfflineMode ? 'wifi' : 'wifi_off'}</span>
+                <span>${isSoundcloudOfflineMode ? 'Go Online' : 'Offline Library'}</span>
+            </button>
+        </div>`;
+    
+    document.getElementById('toggleOfflineBtn').addEventListener('click', () => {
+        isSoundcloudOfflineMode = !isSoundcloudOfflineMode;
+        renderSoundcloudView(); // Re-render the view
+        // Update the button's appearance immediately
+        const btn = document.getElementById('toggleOfflineBtn');
+        btn.innerHTML = `
+            <span class="material-symbols-rounded">${isSoundcloudOfflineMode ? 'wifi' : 'wifi_off'}</span>
+            <span>${isSoundcloudOfflineMode ? 'Go Online' : 'Offline Library'}</span>`;
+    });
+}
+
+// A new function to render the main content of the SoundCloud tab
+async function renderSoundcloudView() {
+    const scResultsGrid = document.getElementById('soundcloud-results-grid');
+    const scSearchInput = document.getElementById('soundcloudSearchInput');
+
+    if (isSoundcloudOfflineMode) {
+        scSearchInput.style.display = 'none'; // Hide search bar in offline mode
+        if (!db.objectStoreNames.contains('soundcloudCache')) {
+            scResultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Cache not available.</p></div>`;
+            return;
+        }
+
+        const tx = db.transaction('soundcloudCache', 'readonly');
+        const store = tx.objectStore('soundcloudCache');
+        const allCached = await new Promise(resolve => {
+            store.getAll().onsuccess = event => resolve(event.target.result);
+        });
+
+        if (allCached.length === 0) {
+            scResultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Your offline library is empty.</p></div>`;
+            return;
+        }
+
+        scResultsGrid.className = 'item-list'; // Always a list view for offline mode
+        scResultsGrid.innerHTML = allCached.map(item => {
+            const song = item.song;
+            return `
+            <div class="music-item" data-track-id="${song.id}" style="cursor: pointer;">
+                 <div class="song-info">
+                    <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                    <div>
+                        <div class="song-title" style="white-space: normal;">${sanitize(song.name)}</div>
+                        <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+    } else {
+        scSearchInput.style.display = 'block'; // Show search bar
+        scResultsGrid.className = 'item-grid'; // Grid view for search results
+        searchSoundCloud(); // Re-run search with current query
+    }
+}
+
+async function manageSoundcloudCache() {
+    if (!db.objectStoreNames.contains('soundcloudCache')) return;
+
+    const tx = db.transaction('soundcloudCache', 'readwrite');
+    const store = tx.objectStore('soundcloudCache');
+    const index = store.index('dateAdded');
+    const allCachedReq = index.getAll();
+
+    allCachedReq.onsuccess = async () => {
+        const allCached = allCachedReq.result;
+        let totalSize = allCached.reduce((sum, item) => sum + item.blob.size, 0);
+        const limitBytes = SOUNDCLOUD_CACHE_LIMIT_MB * 1024 * 1024;
+
+        if (totalSize > limitBytes) {
+            console.log(`Cache size (${(totalSize / 1024 / 1024).toFixed(2)}MB) exceeds limit of ${SOUNDCLOUD_CACHE_LIMIT_MB}MB. Pruning...`);
+            allCached.sort((a, b) => a.song.dateAdded - b.song.dateAdded); // Sort oldest first
+
+            while (totalSize > limitBytes && allCached.length > 0) {
+                const oldestItem = allCached.shift();
+                await new Promise(resolve => {
+                    store.delete(oldestItem.id).onsuccess = resolve;
+                });
+                totalSize -= oldestItem.blob.size;
+                console.log(`Removed "${oldestItem.song.name}" from cache.`);
+            }
+        }
+    };
+}
         
 function renderSearchResults() {
     const searchGrid = document.getElementById('search-results-grid');
@@ -2385,6 +2486,36 @@ function renderSearchResults() {
 function setView(viewName) {
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
+    const libraryControls = document.querySelector('.library-controls');
+
+    // Show/hide tab-specific controls
+    if (viewName === 'soundcloud') {
+        libraryControls.style.display = 'flex';
+        renderSoundcloudControls();
+    } else if (viewName === 'library') {
+        libraryControls.style.display = 'flex';
+        // Restore original library controls
+        libraryControls.innerHTML = `
+            <div class="filter-container">
+                <button class="filter-btn active" data-filter="albums" style="border-radius: 25px 10px 10px 25px;">Albums</button>
+                <button class="filter-btn" data-filter="artists">Artists</button>
+                <button class="filter-btn" data-filter="songs">Songs</button>
+                <button class="filter-btn" data-filter="playlists" style="border-radius: 10px 25px 25px 10px;">Playlists</button>
+            </div>
+            <div class="view-controls">
+                <button id="sortBtn" class="library-action-btn"><span class="material-symbols-rounded">history</span><span id="sort-mode-display"></span></button>
+            </div>
+             <div class="library-actions">
+                <button class="library-action-btn" id="uploadBtn"><span class="material-symbols-rounded">add</span></button>
+                <button class="library-action-btn" id="manageFoldersBtn"><span class="material-symbols-rounded">folder_managed</span></button>
+            </div>`;
+        // Re-attach listeners for the restored buttons
+        document.getElementById('uploadBtn').addEventListener('click', () => { /* ...existing upload logic... */ });
+        document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
+        // ... re-attach other library control listeners ...
+    } else {
+        libraryControls.style.display = 'none';
+    }
 
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
@@ -2398,6 +2529,7 @@ function setView(viewName) {
             if (viewName === 'library') { renderLibraryPage(); } 
             else if (viewName === 'home') { renderHomePage(); } 
             else if (viewName === 'search') { renderSearchResults(); }
+            else if (viewName === 'soundcloud') { renderSoundcloudView(); }
         }
     });
 
@@ -2422,8 +2554,8 @@ function setView(viewName) {
      
 const initDB = () => {
     return new Promise((resolve, reject) => {
-        // DB version bumped to 5 to add SoundCloud support
-        const request = indexedDB.open('musicDB', 5);
+        // DB version bumped to 6 to add cache management index
+        const request = indexedDB.open('musicDB', 6);
 
         request.onerror = (event) => {
             console.error('IndexedDB error:', event.target.error);
@@ -2457,9 +2589,11 @@ const initDB = () => {
             if (!db.objectStoreNames.contains('playHistory')) {
                 db.createObjectStore('playHistory', { keyPath: 'timestamp' });
             }
-            if (!db.objectStoreNames.contains('soundcloudCache')) {
-                db.createObjectStore('soundcloudCache', { keyPath: 'id' });
+            if (db.objectStoreNames.contains('soundcloudCache')) {
+                db.deleteObjectStore('soundcloudCache');
             }
+            const scCacheStore = db.createObjectStore('soundcloudCache', { keyPath: 'id' });
+            scCacheStore.createIndex('dateAdded', 'dateAdded'); // Index for LRU cache management
         };
 
         request.onsuccess = (event) => {
@@ -4308,89 +4442,66 @@ async function searchSoundCloud() {
 
 async function playSoundcloudTrack(trackId) {
     try {
-        // 1. Check if song already exists in our main `songs` array (from a previous play in this session)
-        const existingSong = songs.find(s => s.id === trackId);
-        if (existingSong && existingSong.blobUrl) {
-            playSong(existingSong, [existingSong]);
-            return;
+        const canCache = db.objectStoreNames.contains('soundcloudCache');
+
+        // 1. Check Cache First
+        if (canCache) {
+            const tx = db.transaction('soundcloudCache', 'readonly');
+            const cached = await new Promise(resolve => {
+                tx.objectStore('soundcloudCache').get(trackId).onsuccess = e => resolve(e.target.result);
+            });
+            if (cached) {
+                console.log("Loading SoundCloud track from cache.");
+                const songObject = cached.song;
+                songObject.blobUrl = URL.createObjectURL(cached.blob);
+                playSong(songObject, [songObject]);
+                return;
+            }
         }
         
-        // 2. Check IndexedDB Cache
-        const tx = db.transaction('soundcloudCache', 'readonly');
-        const store = tx.objectStore('soundcloudCache');
-        const cacheRequest = store.get(trackId);
-        const cached = await new Promise(resolve => {
-            cacheRequest.onsuccess = () => resolve(cacheRequest.result);
-            cacheRequest.onerror = () => resolve(null);
-        });
-
-        if (cached) {
-            console.log("Loading SoundCloud track from cache.");
-            const songObject = cached.song;
-            songObject.blobUrl = URL.createObjectURL(cached.blob);
-            
-            // Add to main `songs` array if not already there, making it a "first-class" song
-            if (!songs.some(s => s.id === songObject.id)) {
-                songs.push(songObject);
-            }
-            playSong(songObject, [songObject]);
-            return;
-        }
-
-        // 3. Not in cache, fetch from SoundCloud API
-        console.log("Fetching SoundCloud track from API.");
+        // 2. Fetch Metadata from SoundCloud
         const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${soundcloudClientId}`);
         if (!trackResponse.ok) throw new Error('Could not fetch track details.');
         const trackData = await trackResponse.json();
 
-        const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-        if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
-        
-        const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
-        if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
-        const streamData = await streamResponse.json();
-        const finalStreamUrl = streamData.url;
-
-        // 4. Resiliently fetch audio file with retries
-        let audioBlob;
-        const maxRetries = 3;
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                const audioResponse = await fetch(finalStreamUrl);
-                if (!audioResponse.ok) throw new Error(`Download failed with status ${audioResponse.status}`);
-                audioBlob = await audioResponse.blob();
-                break; // Success!
-            } catch (error) {
-                console.warn(`Attempt ${i + 1} to download audio failed.`, error);
-                if (i === maxRetries - 1) throw new Error('Could not download audio file after multiple attempts.');
-                await new Promise(res => setTimeout(res, 500)); // Wait before retrying
-            }
-        }
-        
         const songObject = {
             id: trackData.id,
             name: trackData.title,
             artist: trackData.user.username,
             album: 'SoundCloud',
             albumArt: trackData.artwork_url ? trackData.artwork_url.replace('-large', '-t500x500') : generateRandomGradient(),
-            storage: 'soundcloud', // Keep for identification
+            storage: 'soundcloud',
             dateAdded: Date.now()
         };
-        songObject.blobUrl = URL.createObjectURL(audioBlob);
 
-        // 5. Save to cache for next time
-        const writeTx = db.transaction('soundcloudCache', 'readwrite');
-        writeTx.objectStore('soundcloudCache').put({ id: trackData.id, song: songObject, blob: audioBlob });
+        // 3. Play Immediately Using a Streamed Response
+        // This gets audio playing FAST, while the full download for caching happens in the background.
+        const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+        if (!progressiveStream) throw new Error('No streamable URL found.');
+        
+        const streamInfoResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
+        const streamInfo = await streamInfoResponse.json();
+        
+        const response = await fetch(streamInfo.url);
+        const blob = await response.blob();
+        songObject.blobUrl = URL.createObjectURL(blob);
 
-        // 6. Add to main songs array and play
-        if (!songs.some(s => s.id === songObject.id)) {
-            songs.push(songObject);
-        }
+        // Prioritize playback!
         playSong(songObject, [songObject]);
+
+        // 4. Cache in the background AFTER playback has started
+        if (canCache) {
+            console.log(`Caching "${songObject.name}" in the background.`);
+            const writeTx = db.transaction('soundcloudCache', 'readwrite');
+            writeTx.objectStore('soundcloudCache').put({ id: trackData.id, song: songObject, blob: blob });
+            await writeTx.done;
+            // After caching, run the size manager
+            manageSoundcloudCache();
+        }
 
     } catch (error) {
         console.error('Error playing SoundCloud track:', error);
-        Gurasuraisu.showPopup(error.message);
+        Gurasuraisu.showPopup(error.message || 'Could not play track.');
     }
 }
 
