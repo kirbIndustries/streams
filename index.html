@@ -5797,6 +5797,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             clearTimeout(soundcloudSearchTimeout);
             soundcloudSearchTimeout = setTimeout(searchSoundCloud, 300);
         });
+    } catch (error) {
+      console.error("An error occurred:", error);
     }
 });
         
