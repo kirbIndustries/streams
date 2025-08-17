@@ -4021,6 +4021,7 @@ async function renderOfflineSoundcloudView() {
 
 // This new function will control the view in the "New" tab
 // Add this new function to your script.
+// Replace the entire old renderNewMusicPage function with this one.
 function renderNewMusicPage() {
     const view = document.getElementById('new-music-view');
     view.innerHTML = ''; // Clear the view for re-rendering
@@ -4090,7 +4091,7 @@ function renderNewMusicPage() {
     wrapper.appendChild(resultsGrid);
     view.appendChild(wrapper);
 
-    // 9. Attach Event Listeners to the new elements
+    // --- **THE FIX IS HERE:** Attach event listeners *after* creating the elements ---
     document.getElementById('newMusicSearchInput').addEventListener('input', () => {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(performUnifiedSearch, 300);
@@ -4110,33 +4111,26 @@ function renderNewMusicPage() {
     
     document.getElementById('soundcloudOfflineToggle').addEventListener('click', () => {
         isSoundcloudOfflineMode = !isSoundcloudOfflineMode;
-        // Re-render the controls and content based on the new mode
-        const onlineSearch = document.getElementById('new-music-search-container');
-        const offlineSearch = document.getElementById('soundcloud-offline-search-container');
-        const filters = document.getElementById('new-music-filter-container');
-        const toggleBtn = document.getElementById('soundcloudOfflineToggle');
+        // Re-render controls and content based on the new mode
+        document.getElementById('new-music-search-container').style.display = isSoundcloudOfflineMode ? 'none' : 'flex';
+        document.getElementById('soundcloud-offline-search-container').style.display = isSoundcloudOfflineMode ? 'flex' : 'none';
+        document.getElementById('new-music-filter-container').style.display = isSoundcloudOfflineMode ? 'none' : 'flex';
+        document.getElementById('soundcloudOfflineToggle').classList.toggle('active', isSoundcloudOfflineMode);
 
         if (isSoundcloudOfflineMode) {
-            onlineSearch.style.display = 'none';
-            offlineSearch.style.display = 'flex';
-            filters.style.display = 'none';
-            toggleBtn.classList.add('active');
             renderOfflineSoundcloudView();
         } else {
-            onlineSearch.style.display = 'flex';
-            offlineSearch.style.display = 'none';
-            filters.style.display = 'flex';
-            toggleBtn.classList.remove('active');
-            // Show the last online search results without re-fetching
             renderUnifiedSearchResults(); 
         }
     });
 
     // 10. Initial Render based on current state
     if (isSoundcloudOfflineMode) {
-        // Manually trigger the state change to set the correct UI
-        document.getElementById('soundcloudOfflineToggle').click();
-        document.getElementById('soundcloudOfflineToggle').click(); // A bit of a hack to toggle it on and then back to the correct state
+        document.getElementById('new-music-search-container').style.display = 'none';
+        document.getElementById('soundcloud-offline-search-container').style.display = 'flex';
+        document.getElementById('new-music-filter-container').style.display = 'none';
+        document.getElementById('soundcloudOfflineToggle').classList.add('active');
+        renderOfflineSoundcloudView();
     } else {
         renderUnifiedSearchResults();
     }
@@ -5964,20 +5958,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             moreOptionsMenu.classList.remove('visible');
         });
-    
-        // ADD listener for the offline search input
-        document.getElementById('soundcloudOfflineSearchInput').addEventListener('input', renderOfflineSoundcloudView);
-    
-        // ADD listeners for the new filter buttons
-        document.getElementById('soundcloud-filter-container').addEventListener('click', (e) => {
-            const btn = e.target.closest('.filter-btn-sc');
-            if (btn) {
-                document.querySelector('#soundcloud-filter-container .filter-btn-sc.active').classList.remove('active');
-                btn.classList.add('active');
-                soundcloudFilter = btn.dataset.filter;
-                renderSoundcloudSearchResults();
-            }
-        });
         
         document.getElementById('library-grid').addEventListener('click', handleSongActionsClick);
         document.getElementById('search-results-grid').addEventListener('click', handleSongActionsClick);
@@ -6190,12 +6170,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         
                 openDrawer(albumName, representativeArtist, contentHtml);
             }
-        });
-    
-        // Add the new listener for the offline toggle
-        document.getElementById('soundcloudOfflineToggle').addEventListener('click', () => {
-            isSoundcloudOfflineMode = !isSoundcloudOfflineMode;
-            renderNewMusicPage();
         });
 
         setupDrawerInteractions();
