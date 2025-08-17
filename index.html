@@ -1476,6 +1476,29 @@
             pointer-events: auto;
         }
 
+        .context-menu {
+            position: absolute;
+            background-color: var(--search-background);
+            border-radius: 25px;
+            padding: 8px;
+            backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
+            border: 1px solid var(--glass-border);
+            z-index: 10001;
+            width: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            opacity: 0;
+            transform: translateY(10px) scale(0.95) scaleY(0.9);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            transform-origin: top;
+        }
+
+        .context-menu.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+
         .menu-item {
             display: flex;
             align-items: center;
@@ -2172,7 +2195,7 @@
         </div>
     </div>
 
-    <div id="songContextMenu" class="more-options-menu" style="width: auto;">
+    <div id="songContextMenu" class="context-menu">
         <div class="menu-item" id="menuAddToQueueNext">
             <span class="material-symbols-rounded">playlist_play</span>
             <span>Play Next</span>
