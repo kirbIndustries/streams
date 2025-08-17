@@ -2727,7 +2727,7 @@ function setupLongPressListeners(container) {
         longPressTimer = setTimeout(() => {
             isLongPress = true;
             const songId = parseFloat(musicItem.dataset.id);
-            openSongContextMenu(e, songId);
+            openSongContextMenu(musicItem, songId); // Pass the stable element reference
         }, LONG_PRESS_DURATION);
     }
 
@@ -4188,8 +4188,9 @@ function addToQueue(songId, position = 'last') {
     }
 }
 
-function openSongContextMenu(event, songId) {
-    event.stopPropagation();
+function openSongContextMenu(targetElement, songId) {
+    if (!targetElement) return; // Safety check
+
     const contextMenu = document.getElementById('songContextMenu');
     
     document.getElementById('menuAddToQueueNext').onclick = () => {
@@ -4201,7 +4202,7 @@ function openSongContextMenu(event, songId) {
         contextMenu.classList.remove('visible');
     };
 
-    const rect = event.currentTarget.getBoundingClientRect();
+    const rect = targetElement.getBoundingClientRect(); // Use the passed element
     contextMenu.style.top = `${rect.bottom}px`;
     contextMenu.style.left = `${rect.left - contextMenu.offsetWidth + rect.width}px`;
     contextMenu.classList.add('visible');
