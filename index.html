@@ -5797,6 +5797,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             clearTimeout(soundcloudSearchTimeout);
             soundcloudSearchTimeout = setTimeout(searchSoundCloud, 300);
         });
+    }
+});
         
 // Replace the entire old 'soundcloud-results-grid' listener with this one.
 document.getElementById('soundcloud-results-grid').addEventListener('click', e => {
