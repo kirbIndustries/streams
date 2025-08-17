@@ -2572,11 +2572,12 @@ function renderIntegrationsSearchResults() {
         const youtubeResults = lastYoutubeSearchResults.map(video => ({
             ...video,
             source: 'youtube',
+            id: video.id.videoId, // Use the correct ID property for the in-memory object
             displayName: parseYouTubeTitle(video.snippet.title),
             displayArtist: video.snippet.channelTitle,
             displayArt: video.snippet.thumbnails.high.url,
-            isSaved: isTrackSavedInLibrary(video.id, 'youtube'),
-            album: parseYouTubeTitle(video.snippet.title) // Use title as album for YT
+            isSaved: isTrackSavedInLibrary(video.id.videoId, 'youtube'), // Also check with the correct ID
+            album: parseYouTubeTitle(video.snippet.title)
         }));
         allResults.push(...youtubeResults);
     }
@@ -2592,18 +2593,18 @@ function renderIntegrationsSearchResults() {
     // Render unified results
     resultsGrid.className = 'item-grid';
     const resultsHtml = allResults.map(item => `
-        <div class="item-card" data-${item.source === 'youtube' ? 'video-id' : 'track-id'}="${item.source === 'youtube' ? item.id : item.id}" data-source="${item.source}">
-            <img src="${item.displayArt}" class="item-card-art">
-            <div class="item-card-info">
-                <div class="item-card-title">${sanitize(item.displayName)}</div>
-                <div class="item-card-subtitle">${sanitize(item.displayArtist)}</div>
-            </div>
-            ${item.isSaved ? '<div class="saved-indicator">✓</div>' : ''}
-            ${(isSoundcloudEnabled && isYoutubeEnabled) ? (item.source === 'youtube' ? '<div class="source-indicator youtube">YT</div>' : '<div class="source-indicator soundcloud">SC</div>') : ''}
-            <div class="cloud-indicator">
-                <span class="material-symbols-rounded">cloud</span>
-            </div>
-        </div>`).join('');
+                <div class="item-card" data-${item.source === 'youtube' ? 'video-id' : 'track-id'}="${item.source === 'youtube' ? item.id : item.id}" data-source="${item.source}">
+                    <img src="${item.displayArt}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${sanitize(item.displayName)}</div>
+                        <div class="item-card-subtitle">${sanitize(item.displayArtist)}</div>
+                    </div>
+                    ${item.isSaved ? '<div class="saved-indicator">✓</div>' : ''}
+                    ${(isSoundcloudEnabled && isYoutubeEnabled) ? (item.source === 'youtube' ? '<div class="source-indicator youtube">YT</div>' : '<div class="source-indicator soundcloud">SC</div>') : ''}
+                    <div class="cloud-indicator">
+                        <span class="material-symbols-rounded">cloud</span>
+                    </div>
+                </div>`).join('');
     
     resultsGrid.innerHTML = resultsHtml;
 }
@@ -6271,12 +6272,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Build the context from the current search results
                 if (lastYoutubeSearchResults && lastYoutubeSearchResults.length > 0) {
                     const playContext = lastYoutubeSearchResults.map(video => ({
-                        id: video.id,
+                        id: video.id.videoId, // Use the correct ID property
                         name: parseYouTubeTitle(video.snippet.title),
                         artist: video.snippet.channelTitle,
                         album: video.snippet.title,
                         albumArt: video.snippet.thumbnails.high.url,
-                        storage: 'youtube'
+                        storage: 'youtube',
+                        videoId: video.id.videoId
                     }));
                     playYouTubeTrack(videoCard.dataset.videoId, playContext);
                 }
