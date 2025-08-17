@@ -2254,7 +2254,7 @@
 
     <!-- Hidden YouTube iframe for silent playback -->
     <div id="youtube-player-container" style="position: fixed; top: -9999px; left: -9999px; width: 1px; height: 1px; overflow: hidden; z-index: -9999;">
-        <iframe id="youtube-player" width="1" height="1" src="about:blank" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        <iframe id="youtube-player" width="1" height="1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
     </div>
 
     <script>
@@ -2561,7 +2561,8 @@ function renderIntegrationsSearchResults() {
             displayName: track.title,
             displayArtist: track.user.username,
             displayArt: getHighResArtwork(track.artwork_url),
-            isSaved: isTrackSavedInLibrary(track.id, 'soundcloud')
+            isSaved: isTrackSavedInLibrary(track.id, 'soundcloud'),
+            album: track.title.split('-')[0].trim()
         }));
         allResults.push(...soundcloudResults);
     }
@@ -2574,7 +2575,8 @@ function renderIntegrationsSearchResults() {
             displayName: parseYouTubeTitle(video.snippet.title),
             displayArtist: video.snippet.channelTitle,
             displayArt: video.snippet.thumbnails.high.url,
-            isSaved: isTrackSavedInLibrary(video.id, 'youtube')
+            isSaved: isTrackSavedInLibrary(video.id, 'youtube'),
+            album: parseYouTubeTitle(video.snippet.title) // Use title as album for YT
         }));
         allResults.push(...youtubeResults);
     }
@@ -4951,7 +4953,8 @@ function initYouTubePlayer() {
                 'fs': 0,
                 'modestbranding': 1,
                 'rel': 0,
-                'showinfo': 0
+                'showinfo': 0,
+                'origin': window.location.origin
             },
             events: {
                 'onReady': onPlayerReady,
@@ -6124,7 +6127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.querySelector('#soundcloud-filter-container .filter-btn-sc.active').classList.remove('active');
                 btn.classList.add('active');
                 soundcloudFilter = btn.dataset.filter;
-                renderSoundcloudSearchResults();
+                renderIntegrationsSearchResults();
             }
         });
         
