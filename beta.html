@@ -6089,79 +6089,61 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
         document.getElementById('saveIntegrations').addEventListener('click', saveSoundcloudSettings);
         
-        document.getElementById('soundcloud-results-grid').addEventListener('click', e => {
+        document.getElementById('new-music-view').addEventListener('click', e => {
             const trackCard = e.target.closest('.item-card[data-track-id]');
             const cachedCard = e.target.closest('.music-item[data-cached-id]');
             const artistCard = e.target.closest('.item-card[data-artist-name]');
-            const albumCard = e.target.closest('.item-card[data-album-name]');
+            const albumCard = e.target.closest('.item-card[data-album-id]');
         
             if (trackCard) {
-                // Build the context from the current search results
-                const playContext = lastSoundcloudSearchResults.map(track => ({
-                    id: track.id,
-                    name: track.title,
-                    artist: track.user.username,
-                    album: 'SoundCloud',
-                    albumArt: getHighResArtwork(track.artwork_url),
-                    storage: 'soundcloud'
-                }));
-                playSoundcloudTrack(trackCard.dataset.trackId, playContext);
+                const trackId = trackCard.dataset.trackId;
+                const context = lastUnifiedSearchResults;
+                playSoundcloudTrack(trackId, context);
             } else if (cachedCard) {
                 const trackId = parseFloat(cachedCard.dataset.cachedId);
-                // When playing from offline view, the context is all other visible offline songs
-                const contextNodes = document.querySelectorAll('#soundcloud-results-grid .music-item[data-cached-id]');
-                const playContext = Array.from(contextNodes).map(node => {
-                    return {
-                        id: parseFloat(node.dataset.cachedId),
-                        name: node.querySelector('.song-title').textContent,
-                        artist: node.querySelector('.album-artist').textContent,
-                        albumArt: node.querySelector('img').src,
-                        storage: 'soundcloud'
-                    };
-                });
-                playSoundcloudTrack(trackId, playContext);
+                const contextNodes = document.querySelectorAll('#new-music-results-grid .music-item[data-cached-id]');
+                const context = Array.from(contextNodes).map(node => ({
+                    id: parseFloat(node.dataset.cachedId),
+                    name: node.querySelector('.song-title').textContent,
+                    artist: node.querySelector('.album-artist').textContent,
+                    albumArt: node.querySelector('img').src,
+                    storage: 'soundcloud'
+                }));
+                playSoundcloudTrack(trackId, context);
             } else if (artistCard) {
-                // An artist was clicked in the online search view
                 const artistName = artistCard.dataset.artistName;
-                const artistTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
-                
-                const contentHtml = `<div class="item-list">${artistTracks.map(track => { // <-- track is defined here
-                    // **THE FIX:** Use the 'track' object from the map, not 'songObject'.
-                    const artwork = getHighResArtwork(track.artwork_url);
+                const artistTracks = lastUnifiedSearchResults.filter(t => t.artist === artistName);
+                const contentHtml = `<div class="item-list">${artistTracks.map(track => {
+                    const artwork = getHighResArtwork(track.albumArt);
                     return `
                     <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
                          <div class="song-info">
                             <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
-                                <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                                <div class="song-title">${sanitize(track.name)}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.artist)}</div>
                             </div>
                         </div>
                     </div>
                     `}).join('')}</div>`;
-                
                 openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
             } else if (albumCard) {
-                // An album was clicked in the online search view
                 const albumName = albumCard.dataset.albumName;
-                const albumTracks = lastSoundcloudSearchResults.filter(t => t.title.split('-')[0].trim() === albumName);
-                const representativeArtist = albumTracks.length > 0 ? albumTracks[0].user.username : '';
-        
-                const contentHtml = `<div class="item-list">${albumTracks.map(track => { // <-- track is defined here
-                    // **THE FIX:** Use the 'track' object from the map, not 'songObject'.
-                    const artwork = getHighResArtwork(track.artwork_url);
+                const albumTracks = lastUnifiedSearchResults.filter(t => extractAlbumAndTrack(t.name, t.artist).album === albumName);
+                const representativeArtist = albumTracks.length > 0 ? albumTracks[0].artist : '';
+                const contentHtml = `<div class="item-list">${albumTracks.map(track => {
+                    const artwork = getHighResArtwork(track.albumArt);
                     return `
                     <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
                          <div class="song-info">
                             <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
-                                <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                                <div class="song-title">${sanitize(track.name)}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.artist)}</div>
                             </div>
                         </div>
                     </div>
                     `}).join('')}</div>`;
-        
                 openDrawer(albumName, representativeArtist, contentHtml);
             }
         });
