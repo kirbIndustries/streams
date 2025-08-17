@@ -2258,6 +2258,9 @@
         let currentQueueIndex = -1;
         let searchTimeout;
         let searchInput;
+        let longPressTimer;
+        let isLongPress = false;
+        const LONG_PRESS_DURATION = 500;
         let isDragging = false;
         let draggedItem = null;
         let isDraggingAlbum = false;
@@ -2699,6 +2702,52 @@ function updatePageTitle() {
         }
     } else {
         document.title = 'Music'; // Default title when no song is playing
+    }
+}
+
+function setupLongPressListeners(container) {
+    container.addEventListener('mousedown', handlePressStart);
+    container.addEventListener('touchstart', handlePressStart, { passive: false });
+    
+    // Use document-level listeners for mouseup/end to catch releases outside the item
+    document.addEventListener('mouseup', handlePressEnd);
+    document.addEventListener('touchend', handlePressEnd);
+
+    function handlePressStart(e) {
+        const musicItem = e.target.closest('.music-item[data-id]');
+        if (!musicItem) return;
+        
+        // Prevent touch scrolling while holding down
+        if (e.type === 'touchstart') {
+            e.preventDefault();
+        }
+        
+        isLongPress = false;
+        longPressTimer = setTimeout(() => {
+            isLongPress = true;
+            const songId = parseFloat(musicItem.dataset.id);
+            openSongContextMenu(e, songId);
+        }, LONG_PRESS_DURATION);
+    }
+
+    function handlePressEnd(e) {
+        clearTimeout(longPressTimer);
+        // If it was NOT a long press, treat it as a regular click
+        if (!isLongPress) {
+            // Find the item that was originally clicked on mouseup/touchend
+            const musicItem = e.target.closest('.music-item[data-id]');
+            if (musicItem) {
+                const songId = parseFloat(musicItem.dataset.id);
+                const song = songs.find(s => s.id === songId);
+                if (song) {
+                    // This logic mirrors the original click handler
+                    const contextSongs = Array.from(container.querySelectorAll('.music-item[data-id]'))
+                        .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
+                        .filter(Boolean);
+                    playSong(song, contextSongs.length > 0 ? contextSongs : [song]);
+                }
+            }
+        }
     }
 }
         
@@ -3773,7 +3822,6 @@ function renderPlaylistSongs(playlistId) {
                 <div>
                     <div class="song-title" style="font-size: 1em; margin-bottom: 2px; white-space: normal;">${song.name}</div>
                     <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
-                    <button class="song-item-actions" data-id="${song.id}"><span class="material-symbols-rounded" style="font-size: 10px;">circle</span></button>
                 </div>
                 <button class="remove-from-queue-btn" onclick="removeSongFromPlaylist(${song.id}, ${playlist.id}, event)" style="margin-left: auto;">
                     <span class="material-symbols-rounded" style="font-size: 14px;">cancel</span>
@@ -3854,9 +3902,6 @@ function renderSongs(albums, isArtistView = false) {
               <span class="track-number">${song.trackNumber ? song.trackNumber + "." : ""}</span>
               <span class="song-title">${song.name}</span>
             </div>
-            <button class="song-actions" data-id="${song.id}">
-                <span class="material-symbols-rounded" style="font-size: 10px;">circle</span>
-            </button>
           </div>
         `).join("")}
       </div>
@@ -3877,9 +3922,6 @@ function renderSongsAsList(songsToRender) {
                     <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
                 </div>
             </div>
-            <button class="song-actions" data-id="${song.id}">
-                <span class="material-symbols-rounded" style="font-size: 10px;">circle</span>
-            </button>
         </div>
     `).join('');
     attachSongAndAlbumEventListeners();
@@ -5473,7 +5515,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="song-info">
                             <span class="track-number">${song.trackNumber || '•'}</span>
                             <div class="song-title">${sanitize(song.name)}</div>
-                            <button class="song-item-actions" data-id="${song.id}"><span class="material-symbols-rounded" style="font-size: 10px;">circle</span></button>
                         </div>
                     </div>`).join('')}</div>`;
                 openDrawer(albumName, artist, contentHtml);
@@ -5624,14 +5665,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Re-render the library with the new sorting
             renderLibraryPage();
         });
-        
-        const handleSongActionsClick = (e) => {
-            const actionButton = e.target.closest('.song-item-actions');
-            if (actionButton) {
-                const songId = parseFloat(actionButton.dataset.id);
-                openSongContextMenu(e, songId);
-            }
-        };
 
         // ADD listener for the new "Save to Library" button
         document.getElementById('menuSaveToLibrary').addEventListener('click', () => {
@@ -5653,9 +5686,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
         
-        document.getElementById('library-grid').addEventListener('click', handleSongActionsClick);
-        document.getElementById('search-results-grid').addEventListener('click', handleSongActionsClick);
-        drawerContent.addEventListener('click', handleSongActionsClick);
+        setupLongPressListeners(document.getElementById('library-grid'));
+        setupLongPressListeners(document.getElementById('search-results-grid'));
+        setupLongPressListeners(drawerContent);
 
         shardContainer = document.getElementById('distortion-container');
         initializeShards(); 
