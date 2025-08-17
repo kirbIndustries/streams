@@ -2372,6 +2372,16 @@ function setupDrawerInteractions() {
 
     document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
 }
+
+function getHighResArtwork(url) {
+    if (!url) {
+        return generateRandomGradient(); // Fallback for tracks with no artwork
+    }
+    // This is a more robust replacement that handles multiple small sizes
+    return url.replace('-large.jpg', '-t500x500.jpg')
+              .replace('-t300x300.jpg', '-t500x500.jpg')
+              .replace('-badge.jpg', '-t500x500.jpg');
+}
         
 function renderSearchResults() {
     const searchGrid = document.getElementById('search-results-grid');
@@ -2427,7 +2437,7 @@ function renderSoundcloudSearchResults() {
             const artists = lastSoundcloudSearchResults.reduce((acc, track) => {
                 const artistName = track.user.username;
                 if (!acc[artistName]) {
-                    acc[artistName] = track.artwork_url || track.user.avatar_url || generateRandomGradient();
+                    acc[artistName] = getHighResArtwork(track.artwork_url) || track.user.avatar_url || generateRandomGradient();
                 }
                 return acc;
             }, {});
@@ -2442,7 +2452,7 @@ function renderSoundcloudSearchResults() {
             const albums = lastSoundcloudSearchResults.reduce((acc, track) => {
                 const albumName = track.title.split('-')[0].trim(); // Simple album name parsing
                 if (!acc[albumName]) {
-                    acc[albumName] = { art: track.artwork_url || generateRandomGradient(), artist: track.user.username };
+                    acc[albumName] = { art: getHighResArtwork(track.artwork_url), artist: track.user.username };
                 }
                 return acc;
             }, {});
@@ -2457,7 +2467,7 @@ function renderSoundcloudSearchResults() {
             resultsGrid.className = 'item-grid';
             resultsHtml = lastSoundcloudSearchResults.map(track => `
                 <div class="item-card" data-track-id="${track.id}">
-                    <img src="${track.artwork_url || generateRandomGradient()}" class="item-card-art">
+                    <img src="${getHighResArtwork(track.artwork_url)}" class="item-card-art">
                     <div class="item-card-info">
                         <div class="item-card-title">${sanitize(track.title)}</div>
                         <div class="item-card-subtitle">${sanitize(track.user.username)}</div>
@@ -4619,7 +4629,7 @@ async function playSoundcloudTrack(trackId, playContext) {
                 name: trackData.title,
                 artist: trackData.user.username,
                 album: trackData.title,
-                albumArt: trackData.artwork_url ? trackData.artwork_url.replace('-large', '-t500x500') : generateRandomGradient(),
+                albumArt: getHighResArtwork(trackData.artwork_url),
                 storage: 'soundcloud',
                 streamUrl: finalStreamUrl
             };
@@ -5788,7 +5798,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     name: track.title,
                     artist: track.user.username,
                     album: 'SoundCloud',
-                    albumArt: track.artwork_url || generateRandomGradient(),
+                    albumArt: getHighResArtwork(track.artwork_url),
                     storage: 'soundcloud'
                 }));
                 playSoundcloudTrack(trackCard.dataset.trackId, playContext);
@@ -5814,7 +5824,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const contentHtml = `<div class="item-list">${artistTracks.map(track => `
                     <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
                          <div class="song-info">
-                            <img src="${track.artwork_url || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                            <img src="${songObject.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
                                 <div class="song-title">${sanitize(track.title)}</div>
                                 <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
@@ -5836,7 +5846,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const contentHtml = `<div class="item-list">${albumTracks.map(track => `
                     <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
                          <div class="song-info">
-                            <img src="${track.artwork_url || generateRandomGradient()}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                            <img src="${songObject.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
                                 <div class="song-title">${sanitize(track.title)}</div>
                                 <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
