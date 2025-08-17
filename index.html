@@ -2730,53 +2730,77 @@ function updatePageTitle() {
 }
 
 function setupLongPressListeners(container) {
-    container.addEventListener('mousedown', handlePressStart);
-    container.addEventListener('touchstart', handlePressStart, { passive: false });
-    
-    // Use document-level listeners for mouseup/end to catch releases outside the item
-    document.addEventListener('mouseup', handlePressEnd);
-    document.addEventListener('touchend', handlePressEnd);
+    let longPressTimer;
+    let isLongPress = false;
+    let startX, startY;
+    const LONG_PRESS_DURATION = 500;
+    const MOVE_THRESHOLD = 10; // Pixels
 
-    function handlePressStart(e) {
-        const musicItem = e.target.closest('.music-item[data-id]');
+    const handlePressStart = (e) => {
+        const musicItem = e.target.closest('.music-item[data-id], .item-card[data-id]');
         if (!musicItem) return;
-        
-        // Prevent touch scrolling while holding down
-        if (e.type === 'touchstart') {
-            e.preventDefault();
-        }
-        
+
+        startX = e.touches ? e.touches[0].clientX : e.clientX;
+        startY = e.touches ? e.touches[0].clientY : e.clientY;
         isLongPress = false;
+
         longPressTimer = setTimeout(() => {
             isLongPress = true;
             const songId = parseFloat(musicItem.dataset.id);
-            openSongContextMenu(musicItem, songId); // Pass the stable element reference
+            openSongContextMenu(musicItem, songId);
         }, LONG_PRESS_DURATION);
-    }
+    };
 
-    function handlePressEnd(e) {
+    const handlePressMove = (e) => {
+        if (!longPressTimer) return;
+
+        const currentX = e.touches ? e.touches[0].clientX : e.clientX;
+        const currentY = e.touches ? e.touches[0].clientY : e.clientY;
+
+        if (Math.abs(currentX - startX) > MOVE_THRESHOLD || Math.abs(currentY - startY) > MOVE_THRESHOLD) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+    };
+
+    const handlePressEnd = (e) => {
         clearTimeout(longPressTimer);
-        // If it was a long press, prevent the subsequent click event
+
         if (isLongPress) {
             e.preventDefault();
+            e.stopPropagation();
+            return;
         }
-        // If it was NOT a long press, treat it as a regular click
-        if (!isLongPress) {
-            // Find the item that was originally clicked on mouseup/touchend
-            const musicItem = e.target.closest('.music-item[data-id]');
-            if (musicItem) {
-                const songId = parseFloat(musicItem.dataset.id);
-                const song = songs.find(s => s.id === songId);
-                if (song) {
-                    // This logic mirrors the original click handler
-                    const contextSongs = Array.from(container.querySelectorAll('.music-item[data-id]'))
-                        .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
-                        .filter(Boolean);
-                    playSong(song, contextSongs.length > 0 ? contextSongs : [song]);
-                }
+
+        // This is a regular click/tap
+        const musicItem = e.target.closest('.music-item[data-id], .item-card[data-id]');
+        if (musicItem) {
+            const songId = parseFloat(musicItem.dataset.id);
+            const song = songs.find(s => s.id === songId);
+            if (song) {
+                const contextSongs = Array.from(container.querySelectorAll('.music-item[data-id], .item-card[data-id]'))
+                    .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
+                    .filter(Boolean);
+                playSong(song, contextSongs.length > 0 ? contextSongs : [song]);
             }
         }
-    }
+    };
+    
+    // Remove old listeners to prevent duplicates if this function is called multiple times
+    container.removeEventListener('mousedown', handlePressStart);
+    container.removeEventListener('touchstart', handlePressStart, { passive: true });
+    container.removeEventListener('mousemove', handlePressMove);
+    container.removeEventListener('touchmove', handlePressMove, { passive: true });
+    container.removeEventListener('mouseup', handlePressEnd);
+    container.removeEventListener('touchend', handlePressEnd);
+
+    // Add new listeners
+    container.addEventListener('mousedown', handlePressStart);
+    container.addEventListener('touchstart', handlePressStart, { passive: true });
+    container.addEventListener('mousemove', handlePressMove);
+    container.addEventListener('touchmove', handlePressMove, { passive: true });
+    container.addEventListener('mouseup', handlePressEnd);
+    container.addEventListener('touchend', handlePressEnd);
 }
         
         function isAudioFile(file) {
@@ -5427,9 +5451,11 @@ audioPlayer.addEventListener('timeupdate', async () => {
         }
     }
 });
-
-playPauseBtn.addEventListener('click', () => {
-    if (audioContext && audioContext.state === 'suspended') audioContext.resume();
+        
+playPauseBtn.addEventListener('click', async () => {
+    if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+    }
     if (!currentSongId) return;
 
     if (!isVisualizerInitialized) initVisualizer();
@@ -5662,7 +5688,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const contextSongs = Array.from(drawerContent.querySelectorAll('.music-item[data-id]'))
                         .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
                         .filter(Boolean);
-                    playSong(song, contextSongs);
+                    playSong(song, contextSongs.length > 0 ? contextSongs : [song]);
                     closeDrawer();
                 }
             } else if (soundcloudSongItem) {
