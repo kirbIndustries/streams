@@ -4403,7 +4403,6 @@ async function saveSoundcloudSettings() {
     ]);
     
     toggleSoundcloudTab();
-    Gurasuraisu.showPopup('Integration settings saved.');
 }
 
 function toggleSoundcloudTab() {
@@ -4422,7 +4421,7 @@ async function searchSoundCloud() {
         return;
     }
     if (!soundcloudClientId) {
-        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>SoundCloud Client ID is not set.</p></div>`;
+        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>SoundCloud Client ID is not set</p></div>`;
         return;
     }
 
@@ -4438,7 +4437,7 @@ async function searchSoundCloud() {
 
     } catch (error) {
         console.error('SoundCloud Search Error:', error);
-        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Error searching SoundCloud.</p></div>`;
+        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Error searching SoundCloud</p></div>`;
     }
 }
 
@@ -4532,7 +4531,6 @@ async function proactivelyCacheNextInQueue() {
 async function saveSoundcloudTrackToLibrary() {
     if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'soundcloud') return;
     const songToSave = currentlyPlayingSong;
-    Gurasuraisu.showPopup(`Saving "${songToSave.name}" to library...`);
 
     try {
         let audioBlob;
@@ -4577,11 +4575,11 @@ async function saveSoundcloudTrackToLibrary() {
         
         songs.push(newLocalSong); // Add to in-memory library
         processAndSortSongs();
-        Gurasuraisu.showPopup(`Successfully saved "${songToSave.name}" to your library!`);
+        Gurasuraisu.showPopup(`Saved "${songToSave.name}" to Library`);
 
     } catch (error) {
         console.error("Failed to save SoundCloud track to library:", error);
-        Gurasuraisu.showPopup("Error: Could not save song.");
+        Gurasuraisu.showPopup("Could not save song");
     }
 }
 
@@ -4621,7 +4619,7 @@ async function playSoundcloudTrack(trackId, playContext) {
                 id: trackData.id,
                 name: trackData.title,
                 artist: trackData.user.username,
-                album: 'SoundCloud',
+                album: trackData.title,
                 albumArt: trackData.artwork_url ? trackData.artwork_url.replace('-large', '-t500x500') : generateRandomGradient(),
                 storage: 'soundcloud',
                 streamUrl: finalStreamUrl
