@@ -4354,7 +4354,7 @@ async function playSong(song, playContext = null) {
             }
         }
 
-        if (!fileUrl && !(song.storage.startsWith('youtubemusic')))
+        if (!fileUrl) {
             Gurasuraisu.showPopup(`Could not find file for "${song.name}"`);
             isPlayerLoading = false;
             playNextSong();
