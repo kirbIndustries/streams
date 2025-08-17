@@ -1927,7 +1927,7 @@
         </button>
         <button class="tab-btn" data-view="integrations" id="integrations-tab" style="display: none;">
             <span class="material-symbols-rounded">podcasts</span>
-            New
+            New (Beta)
         </button>
         <button class="tab-btn" data-view="search">
             <span class="material-symbols-rounded">search</span>
@@ -2359,6 +2359,7 @@
         let youtubePlayer = null;
         let isYoutubePlayerReady = false;
         let isYouTubeApiInjected = false;
+        let youtubeProgressInterval = null;
 
         function sanitize(str) {
             if (!str) return '';
@@ -4298,6 +4299,7 @@ function openSongContextMenu(event, songId) {
 }
 
 async function playSong(song, playContext = null) {
+    clearInterval(youtubeProgressInterval); // <-- ADD THIS LINE to stop any active YT loops
     if (isPlayerLoading || !song) return;
 
     // --- QUEUE LOGIC (Unchanged) ---
@@ -4970,21 +4972,34 @@ function onPlayerReady(event) {
 }
 
 function onPlayerStateChange(event) {
-    if (event.data === YT.PlayerState.ENDED) {
-        playNextSong();
-    } else if (event.data === YT.PlayerState.PLAYING) {
-        // Update player state
-        if (currentlyPlayingSong && currentlyPlayingSong.storage === 'youtube') {
-            playPauseIcon.textContent = 'pause';
-            playPauseBtn.classList.add('playing');
-            Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
+    // Stop any existing interval to ensure a clean state
+    clearInterval(youtubeProgressInterval);
+
+    if (event.data === YT.PlayerState.PLAYING) {
+        // Update UI to playing state
+        playPauseIcon.textContent = 'pause';
+        playPauseBtn.classList.add('playing');
+        updateMiniplayerUI(currentlyPlayingSong, 'playing');
+        updateMediaSessionPlaybackState('playing');
+        Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
+        if (!document.body.classList.contains('reduce-animations')) {
+            document.querySelector('.background-blur').classList.add('rotating');
         }
+        
+        // Start the progress polling loop
+        youtubeProgressInterval = setInterval(updateYouTubeProgress, 250);
+
     } else if (event.data === YT.PlayerState.PAUSED) {
-        if (currentlyPlayingSong && currentlyPlayingSong.storage === 'youtube') {
-            playPauseIcon.textContent = 'play_arrow';
-            playPauseBtn.classList.remove('playing');
-            Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
-        }
+        // Update UI to paused state
+        playPauseIcon.textContent = 'play_arrow';
+        playPauseBtn.classList.remove('playing');
+        updateMiniplayerUI(currentlyPlayingSong, 'paused');
+        updateMediaSessionPlaybackState('paused');
+        Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
+
+    } else if (event.data === YT.PlayerState.ENDED) {
+        // Stop the loop and play the next song
+        playNextSong();
     }
 }
 
@@ -5724,37 +5739,22 @@ audioPlayer.addEventListener('timeupdate', async () => {
 
 playPauseBtn.addEventListener('click', () => {
     if (audioContext && audioContext.state === 'suspended') audioContext.resume();
-    if (!currentSongId) return;
+    if (!currentSongId || !currentlyPlayingSong) return;
 
     if (!isVisualizerInitialized) initVisualizer();
 
-    if (audioPlayer.paused) {
-        if ('mediaSession' in navigator && navigator.mediaSession.metadata === null) {
-            const song = currentlyPlayingSong;
-            if (song) {
-                updateMediaSessionMetadata(song);
-                Gurasuraisu.registerMediaSession(
-                    { title: song.name, artist: song.artist, album: song.album, artwork: [{ src: song.albumArt }] },
-                    ['playPause', 'next', 'prev']
-                );
-            }
-        }
-        
-        // Handle YouTube tracks differently
-        if (currentlyPlayingSong && currentlyPlayingSong.storage === 'youtube') {
-            if (youtubePlayer && isYoutubePlayerReady) {
-                youtubePlayer.playVideo();
-                playPauseIcon.textContent = 'pause';
-                playPauseBtn.classList.add('playing');
-                updateMiniplayerUI(currentlyPlayingSong, 'playing');
-                if (!document.body.classList.contains('reduce-animations')) {
-                    document.querySelector('.background-blur').classList.add('rotating');
-                }
-                updateMediaSessionPlaybackState('playing');
-                Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
-            }
+    // --- FIX STARTS HERE: Check which player is active ---
+    if (currentlyPlayingSong.storage === 'youtube') {
+        if (!youtubePlayer || !isYoutubePlayerReady) return;
+        const playerState = youtubePlayer.getPlayerState();
+        if (playerState === YT.PlayerState.PLAYING) {
+            youtubePlayer.pauseVideo();
         } else {
-            // Handle local and SoundCloud tracks
+            youtubePlayer.playVideo();
+        }
+    } else {
+        // This is the original logic for local/SoundCloud tracks, which is still correct.
+        if (audioPlayer.paused) {
             audioPlayer.play().then(() => {
                 playPauseIcon.textContent = 'pause';
                 playPauseBtn.classList.add('playing');
@@ -5765,20 +5765,7 @@ playPauseBtn.addEventListener('click', () => {
                 updateMediaSessionPlaybackState('playing');
                 Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
             }).catch(error => console.error("Play failed:", error));
-        }
-    } else {
-        // Handle YouTube tracks differently
-        if (currentlyPlayingSong && currentlyPlayingSong.storage === 'youtube') {
-            if (youtubePlayer && isYoutubePlayerReady) {
-                youtubePlayer.pauseVideo();
-                playPauseIcon.textContent = 'play_arrow';
-                playPauseBtn.classList.remove('playing');
-                updateMiniplayerUI(currentlyPlayingSong, 'paused');
-                updateMediaSessionPlaybackState('paused');
-                Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
-            }
         } else {
-            // Handle local and SoundCloud tracks
             audioPlayer.pause();
             playPauseIcon.textContent = 'play_arrow';
             playPauseBtn.classList.remove('playing');
@@ -5788,16 +5775,50 @@ playPauseBtn.addEventListener('click', () => {
         }
     }
 });
+
+function updateYouTubeProgress() {
+    if (!youtubePlayer || !currentlyPlayingSong || currentlyPlayingSong.storage !== 'youtube') return;
+    
+    const currentTime = youtubePlayer.getCurrentTime();
+    const duration = youtubePlayer.getDuration();
+    
+    if (isNaN(duration) || duration <= 0) return;
+
+    // Update main progress bar and time displays
+    const percentage = (currentTime / duration) * 100;
+    progress.style.width = `${percentage}%`;
+    updateTimeDisplays(currentTime, duration);
+    
+    // Update miniplayer progress bar
+    const scaledPercentage = (percentage / 100) * 93;
+    miniplayerProgress.style.width = `${scaledPercentage}%`;
+
+    updatePageTitle(); // Also keep the page title's time updated
+}
         
 nextBtn.addEventListener('click', () => playNextSong({ userInitiated: true }));
 prevBtn.addEventListener('click', () => playPreviousSong());
 
 function seekAudio(e) {
-    if(isNaN(audioPlayer.duration)) return;
-    const rect = progressBar.getBoundingClientRect();
-    const clickX = Math.max(0, Math.min(e.clientX, rect.right)) - rect.left;
-    const percent = Math.max(0, Math.min(1, clickX / rect.width));
-    audioPlayer.currentTime = percent * audioPlayer.duration;
+    // --- FIX STARTS HERE: Check which player is active ---
+    if (currentlyPlayingSong && currentlyPlayingSong.storage === 'youtube') {
+        if (!youtubePlayer || !isYoutubePlayerReady) return;
+        const duration = youtubePlayer.getDuration();
+        if (isNaN(duration) || duration <= 0) return;
+
+        const rect = progressBar.getBoundingClientRect();
+        const clickX = Math.max(0, Math.min(e.clientX, rect.right)) - rect.left;
+        const percent = Math.max(0, Math.min(1, clickX / rect.width));
+        const seekTime = percent * duration;
+        youtubePlayer.seekTo(seekTime, true);
+    } else {
+        // Original logic for local/SoundCloud
+        if(isNaN(audioPlayer.duration)) return;
+        const rect = progressBar.getBoundingClientRect();
+        const clickX = Math.max(0, Math.min(e.clientX, rect.right)) - rect.left;
+        const percent = Math.max(0, Math.min(1, clickX / rect.width));
+        audioPlayer.currentTime = percent * audioPlayer.duration;
+    }
 }
 
 function handleProgressDrag(e) { if (isDragging) seekAudio(e.touches ? e.touches[0] : e); }
