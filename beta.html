@@ -6088,12 +6088,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
         document.getElementById('saveIntegrations').addEventListener('click', saveSoundcloudSettings);
-
-        const soundcloudSearchInput = document.getElementById('soundcloudSearchInput');
-        soundcloudSearchInput.addEventListener('input', () => {
-            clearTimeout(soundcloudSearchTimeout);
-            soundcloudSearchTimeout = setTimeout(searchSoundCloud, 300);
-        });
         
         document.getElementById('soundcloud-results-grid').addEventListener('click', e => {
             const trackCard = e.target.closest('.item-card[data-track-id]');
