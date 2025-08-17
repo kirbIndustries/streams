@@ -2358,6 +2358,7 @@
         let lastYoutubeSearchResults = []; // To store API results for filtering
         let youtubePlayer = null;
         let isYoutubePlayerReady = false;
+        let isYouTubeApiInjected = false;
 
         function sanitize(str) {
             if (!str) return '';
@@ -4925,39 +4926,43 @@ async function playSoundcloudTrack(trackId, playContext) {
 }
 
 // YouTube Player Functions
+// This function now ONLY injects the script tag, and only does it ONCE.
 function initYouTubePlayer() {
-    if (youtubePlayer || !isYoutubeEnabled) return;
-    
-    // Load YouTube IFrame API
+    // If the API script is already being loaded or is loaded, do nothing.
+    if (isYouTubeApiInjected || !isYoutubeEnabled) return;
+
+    isYouTubeApiInjected = true; // Set the flag immediately
     const tag = document.createElement('script');
     tag.src = 'https://www.youtube.com/iframe_api';
     const firstScriptTag = document.getElementsByTagName('script')[0];
     firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-    
-    // YouTube API will call this function when ready
-    window.onYouTubeIframeAPIReady = function() {
-        youtubePlayer = new YT.Player('youtube-player', {
-            height: '1',
-            width: '1',
-            videoId: '',
-            playerVars: {
-                'playsinline': 1,
-                'controls': 0,
-                'disablekb': 1,
-                'fs': 0,
-                'modestbranding': 1,
-                'rel': 0,
-                'showinfo': 0,
-                'origin': window.location.origin
-            },
-            events: {
-                'onReady': onPlayerReady,
-                'onStateChange': onPlayerStateChange,
-                'onError': onPlayerError
-            }
-        });
-    };
 }
+
+// This is the GLOBAL callback function that the YouTube API script will call
+// automatically once it has loaded.
+window.onYouTubeIframeAPIReady = function() {
+    console.log("YouTube IFrame API is ready.");
+    youtubePlayer = new YT.Player('youtube-player', {
+        height: '1',
+        width: '1',
+        videoId: '', // Will be set by loadVideoById
+        playerVars: {
+            'playsinline': 1,
+            'controls': 0,
+            'disablekb': 1,
+            'fs': 0,
+            'modestbranding': 1,
+            'rel': 0,
+            'showinfo': 0,
+            'origin': window.location.origin
+        },
+        events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange,
+            'onError': onPlayerError
+        }
+    });
+};
 
 function onPlayerReady(event) {
     isYoutubePlayerReady = true;
