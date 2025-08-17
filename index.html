@@ -1938,9 +1938,9 @@
         <div class="page-content-wrapper">
             <div class="library-controls" id="soundcloud-controls">
                 <div class="filter-container" id="soundcloud-filter-container" style="max-width: 246px;">
-                    <button class="filter-btn-sc active" data-filter="albums" style="border-radius: 25px 10px 10px 25px;">Albums</button>
+                    <button class="filter-btn-sc" data-filter="albums" style="border-radius: 25px 10px 10px 25px;">Albums</button>
                     <button class="filter-btn-sc" data-filter="artists">Artists</button>
-                    <button class="filter-btn-sc" data-filter="tracks" style="border-radius: 10px 25px 25px 10px;">Songs</button>
+                    <button class="filter-btn-sc active" data-filter="tracks" style="border-radius: 10px 25px 25px 10px;">Songs</button>
                 </div>
                 <div class="search-container" id="soundcloud-offline-search-container" style="display: none; max-width: 246px; margin: 0px;">
                     <span class="material-symbols-rounded search-icon">search</span>
@@ -2756,6 +2756,10 @@ function setupLongPressListeners(container) {
 
     function handlePressEnd(e) {
         clearTimeout(longPressTimer);
+        // If it was a long press, prevent the subsequent click event
+        if (isLongPress) {
+            e.preventDefault();
+        }
         // If it was NOT a long press, treat it as a regular click
         if (!isLongPress) {
             // Find the item that was originally clicked on mouseup/touchend
@@ -4183,11 +4187,30 @@ function rebuildQueueFromCurrentView() {
     console.log(`Queue rebuilt from ${activeView} view. ${playQueue.length} songs.`);
     isQueueUserModified = false; 
 }
-
+        
 function addToQueue(songId, position = 'last') {
     isQueueUserModified = true; // Flag that the user is now manually curating the queue
-    const song = songs.find(s => s.id === songId);
-    if (!song) return;
+    
+    // FIX: Find song from multiple possible sources
+    let song = songs.find(s => s.id === songId);
+    if (!song && lastSoundcloudSearchResults.length > 0) { // If not in local library, check soundcloud results
+         const track = lastSoundcloudSearchResults.find(t => t.id === songId);
+         if (track) {
+            song = {
+                id: track.id,
+                name: track.title,
+                artist: track.user.username,
+                album: 'SoundCloud',
+                albumArt: getHighResArtwork(track.artwork_url),
+                storage: 'soundcloud'
+            };
+         }
+    }
+
+    if (!song) {
+        console.error("Could not find song to add to queue with ID:", songId);
+        return;
+    }
 
     if (playQueue.length === 0) {
         rebuildQueueFromCurrentView();
@@ -4195,7 +4218,7 @@ function addToQueue(songId, position = 'last') {
     }
     
     if (currentQueueIndex === -1) {
-        currentQueueIndex = playQueue.length - 1;
+        currentQueueIndex = playQueue.length > 0 ? playQueue.length -1 : 0;
     }
     
     if (position === 'next') {
@@ -4225,10 +4248,41 @@ function openSongContextMenu(targetElement, songId) {
         contextMenu.classList.remove('visible');
     };
 
-    const rect = targetElement.getBoundingClientRect(); // Use the passed element
-    contextMenu.style.top = `${rect.bottom}px`;
-    contextMenu.style.left = `${rect.left - contextMenu.offsetWidth + rect.width}px`;
-    contextMenu.classList.add('visible');
+    contextMenu.classList.add('visible'); // Make visible before measuring to get dimensions
+    const rect = targetElement.getBoundingClientRect();
+    const menuWidth = contextMenu.offsetWidth;
+    const menuHeight = contextMenu.offsetHeight;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let top = rect.bottom;
+    let left = rect.right - menuWidth; // Align to the right edge of the target
+
+    // Adjust for viewport boundaries
+    if (left < 0) {
+        left = rect.left; // If it overflows left, align to the left edge instead
+    }
+    if (top + menuHeight > viewportHeight) {
+        top = rect.top - menuHeight; // If it overflows bottom, open upwards
+    }
+    
+    contextMenu.style.top = `${top}px`;
+    contextMenu.style.left = `${left}px`;
+
+    // Add a one-time listener to close the menu when clicking elsewhere
+    // Use a timeout to prevent the current click from being captured
+    setTimeout(() => {
+        const closeMenuOnClickOutside = (e) => {
+            if (!contextMenu.contains(e.target)) {
+                contextMenu.classList.remove('visible');
+                document.removeEventListener('click', closeMenuOnClickOutside, true);
+                document.removeEventListener('contextmenu', closeMenuOnClickOutside, true);
+            }
+        };
+        // Use the capture phase (true) to catch the click before it bubbles to other elements
+        document.addEventListener('click', closeMenuOnClickOutside, true);
+        document.addEventListener('contextmenu', closeMenuOnClickOutside, true);
+    }, 0);
 }
 
 async function playSong(song, playContext = null) {
@@ -4860,7 +4914,12 @@ function addQueueItemEventListeners() {
             const songId = parseFloat(item.dataset.id);
             const song = playQueue.find(s => s.id === songId);
             if (song) {
-                playSong(song, playQueue);
+                // FIX: Use the right player function for the song type and pass the queue context
+                if (song.storage === 'soundcloud') {
+                    playSoundcloudTrack(song.id, playQueue);
+                } else {
+                    playSong(song, playQueue);
+                }
             }
         });
     });
@@ -4938,7 +4997,8 @@ function updateQueueFromDOM() {
     const newQueueOrder = [];
     document.querySelectorAll('.queue-item').forEach(item => {
         const songId = parseFloat(item.dataset.id);
-        const song = songs.find(s => s.id === songId);
+        // FIX: Search within the current playQueue, which contains local and streamed songs
+        const song = playQueue.find(s => s.id === songId);
         if (song) newQueueOrder.push(song);
     });
 
@@ -5248,11 +5308,12 @@ window.addEventListener("load", async () => {
             const { id, progress } = JSON.parse(savedData);
             const song = songs.find(s => s.id === id);
             if (song) {
+                currentSongId = song.id;
+                currentlyPlayingSong = song;
                 updatePlayerUI(song);
                 updateMiniplayerUI(song, 'paused');
                 playPauseIcon.textContent = 'play_arrow';
                 playPauseBtn.classList.remove('playing');
-                currentSongId = song.id;
                 isQueueUserModified = false;
                 updatePlayQueue();
                 const fileUrl = await getSongFileUrl(song);
