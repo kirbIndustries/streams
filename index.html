@@ -5628,7 +5628,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const handleSongActionsClick = (e) => {
             const actionButton = e.target.closest('.song-item-actions');
             if (actionButton) {
-                e.stopPropagation(); // Prevent the song from playing
                 const songId = parseFloat(actionButton.dataset.id);
                 openSongContextMenu(e, songId);
             }
