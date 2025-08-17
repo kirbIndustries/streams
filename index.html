@@ -4793,7 +4793,14 @@ function addQueueItemEventListeners() {
             const songId = parseFloat(item.dataset.id);
             const song = playQueue.find(s => s.id === songId);
             if (song) {
-                playSong(song, playQueue);
+                // **THE FIX:** Check the song's storage type and call the correct playback function.
+                if (song.storage === 'soundcloud') {
+                    // This is a SoundCloud song, so use the dedicated function.
+                    playSoundcloudTrack(song.id, playQueue);
+                } else {
+                    // This is a local song, so use the standard play function.
+                    playSong(song, playQueue);
+                }
             }
         });
     });
