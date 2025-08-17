@@ -2096,6 +2096,10 @@
                 <input type="text" id="ytmApiKey" placeholder="YouTube Data API Key" class="search-input" style="padding-left: 15px;">
                 YouTube playback streams video in the background and may consume more data.
             </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px;">
+                <button id="saveIntegrations" class="filter-btn">Save</button>
+                <button id="closeFoldersModal" class="filter-btn active">Close</button>
+            </div>
         </div>
     </div>
 
@@ -4551,6 +4555,37 @@ function openManageFoldersModal() {
     document.getElementById('soundcloudClientId').value = soundcloudClientId;
     document.getElementById('soundcloudToggle').checked = isSoundcloudEnabled;
     openModal(manageFoldersModal);
+}
+
+async function saveIntegrations() {
+    // Read values from the form
+    soundcloudClientId = document.getElementById('soundcloudClientId').value.trim();
+    isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
+    ytmApiKey = document.getElementById('ytmApiKey').value.trim();
+    isYtmEnabled = document.getElementById('ytmToggle').checked;
+
+    // Save all settings to the database
+    const tx = db.transaction('config', 'readwrite');
+    await Promise.all([
+        tx.objectStore('config').put({ key: 'soundcloudClientId', value: soundcloudClientId }),
+        tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled }),
+        tx.objectStore('config').put({ key: 'ytmApiKey', value: ytmApiKey }),
+        tx.objectStore('config').put({ key: 'isYtmEnabled', value: isYtmEnabled })
+    ]);
+    
+    // Update the UI based on the new settings
+    const newMusicTab = document.getElementById('new-music-tab');
+    if (isSoundcloudEnabled || isYtmEnabled) {
+        newMusicTab.style.display = 'flex';
+        if (isYtmEnabled) {
+            // If the YouTube API wasn't loaded before, load it now
+            if (!window.YT) {
+                loadYouTubeIframeAPI();
+            }
+        }
+    } else {
+        newMusicTab.style.display = 'none';
+    }
 }
 
 async function saveSoundcloudSettings() {
