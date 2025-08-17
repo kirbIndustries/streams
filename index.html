@@ -2733,8 +2733,9 @@ function setupLongPressListeners(container) {
     let longPressTimer;
     let isLongPress = false;
     let startX, startY;
+    let moved = false; // Flag to track if the touch/mouse has moved significantly
     const LONG_PRESS_DURATION = 500;
-    const MOVE_THRESHOLD = 10; // Pixels
+    const MOVE_THRESHOLD = 10; // Pixels a user can move before it's considered a scroll
 
     const handlePressStart = (e) => {
         const musicItem = e.target.closest('.music-item[data-id], .item-card[data-id]');
@@ -2743,22 +2744,28 @@ function setupLongPressListeners(container) {
         startX = e.touches ? e.touches[0].clientX : e.clientX;
         startY = e.touches ? e.touches[0].clientY : e.clientY;
         isLongPress = false;
+        moved = false; // Reset on new touch start
 
         longPressTimer = setTimeout(() => {
-            isLongPress = true;
-            const songId = parseFloat(musicItem.dataset.id);
-            openSongContextMenu(musicItem, songId);
+            if (!moved) { // Only trigger long press if user hasn't scrolled
+                isLongPress = true;
+                const songId = parseFloat(musicItem.dataset.id);
+                openSongContextMenu(musicItem, songId);
+            }
         }, LONG_PRESS_DURATION);
     };
 
     const handlePressMove = (e) => {
+        // If the timer has already been cleared (e.g., by a long press), we don't need to do anything
         if (!longPressTimer) return;
 
         const currentX = e.touches ? e.touches[0].clientX : e.clientX;
         const currentY = e.touches ? e.touches[0].clientY : e.clientY;
 
+        // Check if the movement exceeds our threshold
         if (Math.abs(currentX - startX) > MOVE_THRESHOLD || Math.abs(currentY - startY) > MOVE_THRESHOLD) {
-            clearTimeout(longPressTimer);
+            moved = true; // It's a scroll
+            clearTimeout(longPressTimer); // Cancel the long press timer
             longPressTimer = null;
         }
     };
@@ -2766,9 +2773,15 @@ function setupLongPressListeners(container) {
     const handlePressEnd = (e) => {
         clearTimeout(longPressTimer);
 
+        // If it was a long press, stop the event from bubbling up as a click
         if (isLongPress) {
             e.preventDefault();
             e.stopPropagation();
+            return;
+        }
+        
+        // If the touch moved, it was a scroll, not a click, so do nothing.
+        if (moved) {
             return;
         }
 
@@ -2793,6 +2806,8 @@ function setupLongPressListeners(container) {
     container.removeEventListener('touchmove', handlePressMove, { passive: true });
     container.removeEventListener('mouseup', handlePressEnd);
     container.removeEventListener('touchend', handlePressEnd);
+    container.removeEventListener('mouseleave', handlePressEnd); // Handle mouse leaving the element
+    container.removeEventListener('touchcancel', handlePressEnd); // Handle cancelled touches
 
     // Add new listeners
     container.addEventListener('mousedown', handlePressStart);
@@ -2801,6 +2816,8 @@ function setupLongPressListeners(container) {
     container.addEventListener('touchmove', handlePressMove, { passive: true });
     container.addEventListener('mouseup', handlePressEnd);
     container.addEventListener('touchend', handlePressEnd);
+    container.addEventListener('mouseleave', handlePressEnd);
+    container.addEventListener('touchcancel', handlePressEnd);
 }
         
         function isAudioFile(file) {
@@ -5668,7 +5685,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (backButton) {
                 const artistName = backButton.dataset.artistName;
-                const artistAlbums = groupSongsByAlbum(songs.filter(s => s.artist === artistName));
+                const artistAlbums = groupSongsByAlbum(songs.filter(s => s.albumArtist === artistName));
                 const contentHtml = `<div class="item-grid">${artistAlbums.map(album => {
                     const albumId = `${album.artist}::${album.originalAlbum}`;
                     return `
