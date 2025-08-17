@@ -3936,7 +3936,7 @@ async function renderOfflineSoundcloudView() {
         }
 
         if (allCachedItems.length === 0) {
-            resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No SoundCloud songs are cached for offline playback.</p></div>`;
+            resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No SoundCloud songs are cached</p></div>`;
             return;
         }
         
@@ -4184,7 +4184,7 @@ async function playSong(song, playContext = null) {
         } else if (song.streamUrl) { // Case 2: Streaming a new SoundCloud song
             fileUrl = song.streamUrl;
             audioPlayer.crossOrigin = "anonymous";
-            disconnectAudioGraph(); // Visualizer disabled for live stream
+            connectAudioGraph();
         } else { // Case 3: Playing a local file
             fileUrl = await getSongFileUrl(song);
             audioPlayer.removeAttribute('crossorigin');
@@ -4192,7 +4192,7 @@ async function playSong(song, playContext = null) {
         }
 
         if (!fileUrl) {
-            Gurasuraisu.showPopup(`Could not find file for "${song.name}". It may have been moved.`);
+            Gurasuraisu.showPopup(`Could not find file for "${song.name}"`);
             isPlayerLoading = false;
             playNextSong();
             return;
@@ -4553,7 +4553,7 @@ async function saveSoundcloudTrackToLibrary() {
             id: newLocalId,
             name: songToSave.name,
             artist: songToSave.artist,
-            album: songToSave.album,
+            album: songToSave.name,
             albumArtist: songToSave.artist, // Assume artist is album artist for SC
             storage: 'indexeddb',
             handleName: `${songToSave.name}.mp3`,
@@ -5733,6 +5733,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Show/hide menu items based on song type
             document.getElementById('menuEditMetadata').style.display = isLocal ? 'flex' : 'none';
             document.getElementById('menuDeleteSong').style.display = isLocal ? 'flex' : 'none';
+            document.getElementById('menuAddToPlaylist').style.display = isLocal ? 'flex' : 'none';
 
             // Show "Save to Library" ONLY for SoundCloud songs.
             document.getElementById('menuSaveToLibrary').style.display = isLocal ? 'none' : 'flex';
