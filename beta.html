@@ -2496,7 +2496,7 @@ function renderSearchResults() {
 
 function renderSoundcloudSearchResults() {
     const resultsGrid = document.getElementById('soundcloud-results-grid');
-    if (lastSoundcloudSearchResults.length === 0) {
+    if (!lastSoundcloudSearchResults || lastSoundcloudSearchResults.length === 0) {
         resultsGrid.innerHTML = '<div class="no-results" style="grid-column: 1 / -1;"><p>No results found.</p></div>';
         return;
     }
@@ -2554,7 +2554,7 @@ function renderIntegrationsSearchResults() {
     const allResults = [];
     
     // Add SoundCloud results with source indicator
-    if (isSoundcloudEnabled && lastSoundcloudSearchResults.length > 0) {
+    if (isSoundcloudEnabled && lastSoundcloudSearchResults && lastSoundcloudSearchResults.length > 0) {
         const soundcloudResults = lastSoundcloudSearchResults.map(track => ({
             ...track,
             source: 'soundcloud',
@@ -2567,7 +2567,7 @@ function renderIntegrationsSearchResults() {
     }
     
     // Add YouTube results with source indicator
-    if (isYoutubeEnabled && lastYoutubeSearchResults.length > 0) {
+    if (isYoutubeEnabled && lastYoutubeSearchResults && lastYoutubeSearchResults.length > 0) {
         const youtubeResults = lastYoutubeSearchResults.map(video => ({
             ...video,
             source: 'youtube',
@@ -2597,7 +2597,7 @@ function renderIntegrationsSearchResults() {
                 <div class="item-card-subtitle">${sanitize(item.displayArtist)}</div>
             </div>
             ${item.isSaved ? '<div class="saved-indicator">✓</div>' : ''}
-            ${item.source === 'youtube' ? '<div class="source-indicator youtube">YT</div>' : '<div class="source-indicator soundcloud">SC</div>'}
+            ${(isSoundcloudEnabled && isYoutubeEnabled) ? (item.source === 'youtube' ? '<div class="source-indicator youtube">YT</div>' : '<div class="source-indicator soundcloud">SC</div>') : ''}
             <div class="cloud-indicator">
                 <span class="material-symbols-rounded">cloud</span>
             </div>
@@ -4583,7 +4583,7 @@ function toggleIntegrationsTab() {
     }
 }
 
-async function searchSoundCloud() {
+async function searchSoundCloud(skipRender = false) {
     const query = document.getElementById('soundcloudSearchInput').value.trim();
     const resultsGrid = document.getElementById('soundcloud-results-grid');
     if (!query) {
@@ -4596,7 +4596,9 @@ async function searchSoundCloud() {
         return;
     }
 
-    resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
+    if (!skipRender) {
+        resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:-16}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
+    }
 
     try {
         const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=100`);
@@ -4604,16 +4606,23 @@ async function searchSoundCloud() {
         
         const data = await response.json();
         lastSoundcloudSearchResults = data.collection;
-        renderSoundcloudSearchResults(); // New renderer function
+        
+        if (!skipRender) {
+            renderSoundcloudSearchResults(); // Only render if not called from integrations search
+        }
 
     } catch (error) {
         console.error('SoundCloud Search Error:', error);
-        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Error searching SoundCloud</p></div>`;
+        if (!skipRender) {
+            resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Error searching SoundCloud</p></div>`;
+        }
     }
 }
 
 async function searchYouTube(query) {
-    if (!query || !youtubeApiKey) return [];
+    if (!query || !youtubeApiKey) {
+        return [];
+    }
     
     try {
         const response = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=50&q=${encodeURIComponent(query)}&type=video&key=${youtubeApiKey}`);
@@ -4654,6 +4663,8 @@ function handleOfflineYouTubeTrack() {
 
 async function searchIntegrations() {
     const query = document.getElementById('soundcloudSearchInput').value.trim();
+    const resultsGrid = document.getElementById('soundcloud-results-grid');
+    
     if (!query) {
         lastSoundcloudSearchResults = [];
         lastYoutubeSearchResults = [];
@@ -4661,15 +4672,21 @@ async function searchIntegrations() {
         return;
     }
 
-    // Search both platforms simultaneously
-    const [soundcloudResults, youtubeResults] = await Promise.all([
-        isSoundcloudEnabled ? searchSoundCloud(query) : Promise.resolve([]),
-        isYoutubeEnabled ? searchYouTube(query) : Promise.resolve([])
-    ]);
+    // Show loading message
+    resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:-16}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
 
-    lastSoundcloudSearchResults = soundcloudResults;
-    lastYoutubeSearchResults = youtubeResults;
+    // Search both platforms simultaneously
+    if (isSoundcloudEnabled) {
+        // SoundCloud search will update lastSoundcloudSearchResults but skip rendering
+        await searchSoundCloud(true);
+    }
     
+    if (isYoutubeEnabled) {
+        const youtubeResults = await searchYouTube(query);
+        lastYoutubeSearchResults = youtubeResults;
+    }
+    
+    // Render unified results
     renderIntegrationsSearchResults();
 }
 
@@ -5585,6 +5602,11 @@ window.addEventListener("load", async () => {
         youtubeApiKey = ytKeyResult ? ytKeyResult.value : '';
         isYoutubeEnabled = ytEnabledResult ? ytEnabledResult.value : false;
         toggleIntegrationsTab();
+        
+        // Initialize YouTube player if enabled
+        if (isYoutubeEnabled) {
+            initYouTubePlayer();
+        }
 
         await loadSongsAndPlaylists();
         await scanForNewSongs();
@@ -6113,9 +6135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         shardContainer = document.getElementById('distortion-container');
         initializeShards(); 
         initVisualizer();
-        if (isYoutubeEnabled) {
-            initYouTubePlayer();
-        }
+        // YouTube player will be initialized after settings are loaded
         setupMediaSessionActions();
 
         document.getElementById('shuffleBtn').addEventListener('click', toggleShuffle);
@@ -6256,26 +6276,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         
             if (trackCard) {
                 // Build the context from the current search results
-                const playContext = lastSoundcloudSearchResults.map(track => ({
-                    id: track.id,
-                    name: track.title,
-                    artist: track.user.username,
-                    album: 'SoundCloud',
-                    albumArt: getHighResArtwork(track.artwork_url),
-                    storage: 'soundcloud'
-                }));
-                playSoundcloudTrack(trackCard.dataset.trackId, playContext);
+                if (lastSoundcloudSearchResults && lastSoundcloudSearchResults.length > 0) {
+                    const playContext = lastSoundcloudSearchResults.map(track => ({
+                        id: track.id,
+                        name: track.title,
+                        artist: track.user.username,
+                        album: 'SoundCloud',
+                        albumArt: getHighResArtwork(track.artwork_url),
+                        storage: 'soundcloud'
+                    }));
+                    playSoundcloudTrack(trackCard.dataset.trackId, playContext);
+                }
             } else if (videoCard) {
                 // Build the context from the current search results
-                const playContext = lastYoutubeSearchResults.map(video => ({
-                    id: video.id,
-                    name: parseYouTubeTitle(video.snippet.title),
-                    artist: video.snippet.channelTitle,
-                    album: video.snippet.title,
-                    albumArt: video.snippet.thumbnails.high.url,
-                    storage: 'youtube'
-                }));
-                playYouTubeTrack(videoCard.dataset.videoId, playContext);
+                if (lastYoutubeSearchResults && lastYoutubeSearchResults.length > 0) {
+                    const playContext = lastYoutubeSearchResults.map(video => ({
+                        id: video.id,
+                        name: parseYouTubeTitle(video.snippet.title),
+                        artist: video.snippet.channelTitle,
+                        album: video.snippet.title,
+                        albumArt: video.snippet.thumbnails.high.url,
+                        storage: 'youtube'
+                    }));
+                    playYouTubeTrack(videoCard.dataset.videoId, playContext);
+                }
             } else if (cachedCard) {
                 const trackId = parseFloat(cachedCard.dataset.cachedId);
                 // When playing from offline view, the context is all other visible offline songs
@@ -6293,7 +6317,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (artistCard) {
                 // An artist was clicked in the online search view
                 const artistName = artistCard.dataset.artistName;
-                const artistTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
+                if (lastSoundcloudSearchResults && lastSoundcloudSearchResults.length > 0) {
+                    const artistTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
                 
                 const contentHtml = `<div class="item-list">${artistTracks.map(track => { // <-- track is defined here
                     // **THE FIX:** Use the 'track' object from the map, not 'songObject'.
@@ -6311,28 +6336,31 @@ document.addEventListener('DOMContentLoaded', async () => {
                     `}).join('')}</div>`;
                 
                 openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
+                }
             } else if (albumCard) {
                 // An album was clicked in the online search view
                 const albumName = albumCard.dataset.albumName;
-                const albumTracks = lastSoundcloudSearchResults.filter(t => t.title.split('-')[0].trim() === albumName);
-                const representativeArtist = albumTracks.length > 0 ? albumTracks[0].user.username : '';
-        
-                const contentHtml = `<div class="item-list">${albumTracks.map(track => { // <-- track is defined here
-                    // **THE FIX:** Use the 'track' object from the map, not 'songObject'.
-                    const artwork = getHighResArtwork(track.artwork_url);
-                    return `
-                    <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
-                         <div class="song-info">
-                            <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
-                            <div>
-                                <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                if (lastSoundcloudSearchResults && lastSoundcloudSearchResults.length > 0) {
+                    const albumTracks = lastSoundcloudSearchResults.filter(t => t.title.split('-')[0].trim() === albumName);
+                    const representativeArtist = albumTracks.length > 0 ? albumTracks[0].user.username : '';
+            
+                    const contentHtml = `<div class="item-list">${albumTracks.map(track => { // <-- track is defined here
+                        // **THE FIX:** Use the 'track' object from the map, not 'songObject'.
+                        const artwork = getHighResArtwork(track.artwork_url);
+                        return `
+                        <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
+                             <div class="song-info">
+                                <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                                <div>
+                                    <div class="song-title">${sanitize(track.title)}</div>
+                                    <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    `}).join('')}</div>`;
-        
-                openDrawer(albumName, representativeArtist, contentHtml);
+                        `}).join('')}</div>`;
+            
+                    openDrawer(albumName, representativeArtist, contentHtml);
+                }
             }
         });
     
