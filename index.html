@@ -3943,16 +3943,22 @@ async function renderOfflineSoundcloudView() {
                 item.metadata.artist.toLowerCase().includes(query)
             );
         }
-
-        if (allCachedItems.length === 0) {
-            resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No SoundCloud songs are cached</p></div>`;
+        
+        if (filteredItems.length === 0) {
+            if (query) {
+                // If there was a search query, show a "no results" message.
+                resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No cached songs match "${sanitize(query)}"</p></div>`;
+            } else {
+                // If there was no query, it means the cache is empty.
+                resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No SoundCloud songs are cached</p></div>`;
+            }
             return;
         }
         
         // Sort by most recently played
-        allCachedItems.sort((a, b) => b.timestamp - a.timestamp);
+        filteredItems.sort((a, b) => b.timestamp - a.timestamp);
 
-        const resultsHtml = allCachedItems.map(entry => {
+        const resultsHtml = filteredItems.map(entry => {
             const track = entry.metadata;
             return `
             <div class="music-item" data-cached-id="${track.id}" style="cursor: pointer;">
