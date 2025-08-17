@@ -5810,7 +5810,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 playSoundcloudTrack(trackCard.dataset.trackId, playContext);
             } else if (cachedCard) {
                 const trackId = parseFloat(cachedCard.dataset.cachedId);
-                // **THE FIX:** When playing from offline view, the context is all other visible offline songs
+                // When playing from offline view, the context is all other visible offline songs
                 const contextNodes = document.querySelectorAll('#soundcloud-results-grid .music-item[data-cached-id]');
                 const playContext = Array.from(contextNodes).map(node => {
                     return {
@@ -5827,39 +5827,42 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const artistName = artistCard.dataset.artistName;
                 const artistTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
                 
-                const contentHtml = `<div class="item-list">${artistTracks.map(track => `
+                const contentHtml = `<div class="item-list">${artistTracks.map(track => { // <-- track is defined here
+                    // **THE FIX:** Use the 'track' object from the map, not 'songObject'.
+                    const artwork = getHighResArtwork(track.artwork_url);
+                    return `
                     <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
                          <div class="song-info">
-                            <img src="${songObject.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                            <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
                                 <div class="song-title">${sanitize(track.title)}</div>
                                 <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
                             </div>
                         </div>
                     </div>
-                `).join('')}</div>`;
+                    `}).join('')}</div>`;
                 
                 openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
             } else if (albumCard) {
                 // An album was clicked in the online search view
                 const albumName = albumCard.dataset.albumName;
-                // Filter tracks using the same simple parsing logic as the renderer
                 const albumTracks = lastSoundcloudSearchResults.filter(t => t.title.split('-')[0].trim() === albumName);
-                
-                // Find a representative artist for the subtitle
                 const representativeArtist = albumTracks.length > 0 ? albumTracks[0].user.username : '';
         
-                const contentHtml = `<div class="item-list">${albumTracks.map(track => `
+                const contentHtml = `<div class="item-list">${albumTracks.map(track => { // <-- track is defined here
+                    // **THE FIX:** Use the 'track' object from the map, not 'songObject'.
+                    const artwork = getHighResArtwork(track.artwork_url);
+                    return `
                     <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
                          <div class="song-info">
-                            <img src="${songObject.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                            <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
                                 <div class="song-title">${sanitize(track.title)}</div>
                                 <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
                             </div>
                         </div>
                     </div>
-                `).join('')}</div>`;
+                    `}).join('')}</div>`;
         
                 openDrawer(albumName, representativeArtist, contentHtml);
             }
