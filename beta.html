@@ -4300,113 +4300,105 @@ function openSongContextMenu(event, songId) {
     contextMenu.classList.add('visible');
 }
 
+// Replace the entire old playSong function with this one.
 async function playSong(song, playContext = null) {
     if (isPlayerLoading || !song) return;
 
-    // --- NEW QUEUE LOGIC ---
+    // --- 1. Set up the queue ---
     if (playContext && Array.isArray(playContext)) {
-        // PRIORITY 1: A new context was explicitly provided. This ALWAYS overwrites the old queue.
         playQueue = [...playContext];
-        isQueueUserModified = false; // This is a new, app-generated queue.
+        isQueueUserModified = false;
     } else if (isQueueUserModified) {
-        // PRIORITY 2: No new context was given, and the user has a custom queue. We must protect it.
         if (!playQueue.some(s => s.id === song.id)) {
-            // The song isn't in the custom queue, so add it to play next.
             playQueue.splice(currentQueueIndex + 1, 0, song);
         }
     } else {
-        // PRIORITY 3 (FALLBACK): No context and no custom queue. Rebuild from the current view.
         rebuildQueueFromCurrentView();
     }
     
     isPlayerLoading = true;
 
     try {
-        audioPlayer.pause();
+        // --- 2. Universal Setup for any song type ---
         song.hasBeenLogged = false;
         currentlyPlayingSong = song;
-
+        currentSongId = song.id;
+        currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
+        
+        // Stop any active polling intervals from previous players
         clearInterval(ytProgressInterval);
         
-        let fileUrl;
-        // This logic now cleanly handles all cases
-        if (song.storage === 'youtubemusic' || song.storage === 'youtubemusic_saved') {
+        // Update the main UI immediately
+        updatePlayerUI(song);
+        updateMiniplayerUI(song, 'paused');
+        updateMediaSessionMetadata(song);
+        
+        // --- 3. Handle Playback based on Storage Type ---
+        const isYouTubeTrack = song.storage === 'youtubemusic' || song.storage === 'youtubemusic_saved';
+
+        if (isYouTubeTrack) {
+            // --- YouTube Playback Logic ---
             document.getElementById('yt-player-container').style.visibility = 'visible';
-            audioPlayer.pause();
+            audioPlayer.pause(); // Ensure HTML audio is paused
+            
+            // Connect visualizer before playback starts
+            connectAudioGraph();
+            
+            // The onPlayerStateChange event will handle the rest of the UI updates
             ytPlayer.loadVideoById(song.id || song.youtubeId);
-            connectAudioGraph(); // Visualizer works with YouTube audio too now
-            } else {
-                document.getElementById('yt-player-container').style.visibility = 'hidden';
-                ytPlayer.stopVideo(); // Stop any active YouTube video
-                if (song.blobUrl) { // Case 1: Playing a cached SoundCloud song
-                    fileUrl = song.blobUrl;
-                    audioPlayer.removeAttribute('crossorigin');
-                    connectAudioGraph(); // Visualizer works!
-                } else if (song.streamUrl) { // Case 2: Streaming a new SoundCloud song
-                    fileUrl = song.streamUrl;
-                    audioPlayer.crossOrigin = "anonymous";
-                    connectAudioGraph();
-                } else { // Case 3: Playing a local file
-                    fileUrl = await getSongFileUrl(song);
-                    audioPlayer.removeAttribute('crossorigin');
-                    connectAudioGraph();
-                }
+
+        } else {
+            // --- Standard Audio (Local, SoundCloud) Playback Logic ---
+            document.getElementById('yt-player-container').style.visibility = 'hidden';
+            ytPlayer.stopVideo(); // Ensure YT player is stopped
+
+            let fileUrl;
+            if (song.blobUrl) { // Cached SoundCloud
+                fileUrl = song.blobUrl;
+                audioPlayer.removeAttribute('crossorigin');
+                connectAudioGraph();
+            } else if (song.streamUrl) { // Streamed SoundCloud
+                fileUrl = song.streamUrl;
+                audioPlayer.crossOrigin = "anonymous";
+                disconnectAudioGraph(); // Disconnect for live SC streams
+            } else { // Local File
+                fileUrl = await getSongFileUrl(song);
+                audioPlayer.removeAttribute('crossorigin');
+                connectAudioGraph();
             }
-        }
 
-        if (!fileUrl) {
-            Gurasuraisu.showPopup(`Could not find file for "${song.name}"`);
-            isPlayerLoading = false;
-            playNextSong();
-            return;
-        }
+            // **THE FIX:** Correctly bracketed error handling.
+            if (!fileUrl) {
+                Gurasuraisu.showPopup(`Could not find file for "${song.name}"`);
+                isPlayerLoading = false;
+                playNextSong();
+                return;
+            }
 
-        if (song.storage !== 'youtubemusic' && song.storage !== 'youtubemusic_saved') {
+            if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
+                URL.revokeObjectURL(audioPlayer.src);
+            }
+            
             audioPlayer.src = fileUrl;
             audioPlayer.load();
             await audioPlayer.play();
-        }
-        
-        currentSongId = song.id;
-        currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
 
-        // Revoke old blob URL if it exists
-        if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
-            URL.revokeObjectURL(audioPlayer.src);
+            // Manually update UI for standard audio after play() is called
+            playPauseIcon.textContent = 'pause';
+            playPauseBtn.classList.add('playing');
+            Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
+            updateMiniplayerUI(song, 'playing');
         }
 
-        // Now set the source, which triggers the browser to fetch it using the attributes we just set.
-        audioPlayer.src = fileUrl;
-        audioPlayer.load(); // Explicitly call load() to ensure the new source is processed.
-        
-        // Update both the main player and the miniplayer
-        updatePlayerUI(song);
-        updateMiniplayerUI(song, 'paused'); // Initially show as paused
-        updateMediaSessionMetadata(song);
-
-        // Register media session
-        Gurasuraisu.registerMediaSession(
-            { title: song.name, artist: song.artist, artwork: [{ src: song.albumArt }] },
-            ['playPause', 'next', 'prev']
-        );
-
+        // --- 4. Post-Playback Actions for all song types ---
         if (isPanelVisible) {
-            if (panelContent === 'lyrics') {
-                renderLyrics();
-            } else if (panelContent === 'queue') {
-                renderQueue(); // Re-render queue to update the '.active' highlight
-                scrollToCurrentSongInQueue(); // Scroll to new song
+            if (panelContent === 'lyrics') renderLyrics();
+            else if (panelContent === 'queue') {
+                renderQueue();
+                scrollToCurrentSongInQueue();
             }
         }
-
-        await audioPlayer.play();
-
         proactivelyCacheNextInQueue();
-
-        playPauseIcon.textContent = 'pause';
-        playPauseBtn.classList.add('playing');
-        Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
-        updateMiniplayerUI(song, 'playing');
 
     } catch (error) {
         if (error.name !== 'AbortError') console.error("Failed to play song:", song.name, error);
