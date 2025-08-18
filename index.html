@@ -5271,12 +5271,16 @@ function updateMediaSessionPlaybackState(state) {
 }
 
 function updateMediaSessionPositionState() {
-    if (!('mediaSession' in navigator) || isNaN(audioPlayer.duration)) return;
-    navigator.mediaSession.setPositionState({
-        duration: audioPlayer.duration,
-        playbackRate: audioPlayer.playbackRate,
-        position: audioPlayer.currentTime,
-    });
+    if (!('mediaSession' in navigator) || !isFinite(audioPlayer.duration)) return;
+    try {
+        navigator.mediaSession.setPositionState({
+            duration: audioPlayer.duration,
+            playbackRate: audioPlayer.playbackRate,
+            position: audioPlayer.currentTime,
+        });
+    } catch (error) {
+        console.error("Error setting media session position state:", error);
+    }
 }
 
 function setupMediaSessionActions() {
@@ -5559,6 +5563,9 @@ audioPlayer.addEventListener('ended', () => {
     audioPlayer.isFading = false;
     playNextSong(); 
 });
+
+audioPlayer.addEventListener('durationchange', updateMediaSessionPositionState);
+audioPlayer.addEventListener('loadedmetadata', updateMediaSessionPositionState);
 
 document.addEventListener('DOMContentLoaded', async () => {
     try {
