@@ -5233,10 +5233,8 @@ function groupSongsByAlbum(songsToRender) {
 async function updateMediaSessionMetadata(song) {
     if (!('mediaSession' in navigator) || !song || !song.albumArt) return;
 
-    if (currentMediaSessionArtBlobUrl) {
-        URL.revokeObjectURL(currentMediaSessionArtBlobUrl);
-        currentMediaSessionArtBlobUrl = null;
-    }
+    const oldBlobUrl = currentMediaSessionArtBlobUrl; // Store the old URL to revoke later
+    currentMediaSessionArtBlobUrl = null; // Clear the global reference
 
     let artworkSrc = song.albumArt;
 
@@ -5245,12 +5243,15 @@ async function updateMediaSessionMetadata(song) {
             const response = await fetch(song.albumArt);
             const blob = await response.blob();
             artworkSrc = URL.createObjectURL(blob);
-            currentMediaSessionArtBlobUrl = artworkSrc;
+            currentMediaSessionArtBlobUrl = artworkSrc; // Assign the new blob URL to the global reference
         } catch (e) {
             console.error("Failed to create blob URL for media session artwork", e);
+            // If creation fails, we can fall back to the (potentially long) data URI
+            artworkSrc = song.albumArt;
         }
     }
 
+    // Assign the new metadata to the media session
     navigator.mediaSession.metadata = new MediaMetadata({
         title: song.name,
         artist: song.artist,
@@ -5264,6 +5265,11 @@ async function updateMediaSessionMetadata(song) {
             { src: artworkSrc, sizes: '512x512', type: 'image/png' },
         ]
     });
+
+    // Now that the new metadata is set, it's safe to revoke the old URL
+    if (oldBlobUrl) {
+        URL.revokeObjectURL(oldBlobUrl);
+    }
 }
 
 function updateMediaSessionPlaybackState(state) {
