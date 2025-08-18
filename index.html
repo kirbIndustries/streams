@@ -2645,7 +2645,7 @@ function resetPlayer() {
     document.querySelector('.background-blur').classList.remove('rotating');
 
     musicTitle.textContent = 'No song playing';
-    musicArtist.textContent = '&nbsp;';
+    musicArtist.innerHTML = '&nbsp;';
     
     updateTimeDisplays();
     playPauseIcon.textContent = 'play_arrow';
@@ -2656,13 +2656,19 @@ function resetPlayer() {
 
     Gurasuraisu.clearMediaSession();
 
-    connectAudioGraph();
-    document.querySelector('.lyrics-button').style.display = ''; // Ensure lyrics button is visible on reset
+    // Revoke any existing blob URL to prevent memory leaks
+    if (currentMediaSessionArtBlobUrl) {
+        URL.revokeObjectURL(currentMediaSessionArtBlobUrl);
+        currentMediaSessionArtBlobUrl = null;
+    }
 
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = null;
         navigator.mediaSession.playbackState = 'none';
     }
+
+    connectAudioGraph();
+    document.querySelector('.lyrics-button').style.display = ''; // Ensure lyrics button is visible on reset
     
     if (activeView === 'now-playing') {
         setView(lastMainView);
@@ -4392,7 +4398,7 @@ async function playSong(song, playContext = null) {
         // Update both the main player and the miniplayer
         updatePlayerUI(song);
         updateMiniplayerUI(song, 'paused'); // Initially show as paused
-        updateMediaSessionMetadata(song);
+        await updateMediaSessionMetadata(song);
 
         // Register media session
         Gurasuraisu.registerMediaSession(
@@ -5231,43 +5237,55 @@ function groupSongsByAlbum(songsToRender) {
 }
 
 async function updateMediaSessionMetadata(song) {
-    if (!('mediaSession' in navigator) || !song || !song.albumArt) return;
+    if (!('mediaSession' in navigator)) return;
 
-    const oldBlobUrl = currentMediaSessionArtBlobUrl; // Store the old URL to revoke later
-    currentMediaSessionArtBlobUrl = null; // Clear the global reference
-
-    let artworkSrc = song.albumArt;
-
-    if (song.albumArt.startsWith('data:')) {
-        try {
-            const response = await fetch(song.albumArt);
-            const blob = await response.blob();
-            artworkSrc = URL.createObjectURL(blob);
-            currentMediaSessionArtBlobUrl = artworkSrc; // Assign the new blob URL to the global reference
-        } catch (e) {
-            console.error("Failed to create blob URL for media session artwork", e);
-            // If creation fails, we can fall back to the (potentially long) data URI
-            artworkSrc = song.albumArt;
-        }
-    }
-
-    // Assign the new metadata to the media session
-    navigator.mediaSession.metadata = new MediaMetadata({
+    // Phase 1: Immediately update text metadata, reusing the old artwork temporarily.
+    // This prevents the notification from disappearing.
+    const metadata = {
         title: song.name,
         artist: song.artist,
         album: song.album,
+    };
+
+    const temporaryArtworkSrc = currentMediaSessionArtBlobUrl || song.albumArt;
+    
+    navigator.mediaSession.metadata = new MediaMetadata({
+        ...metadata,
+        artwork: [{ src: temporaryArtworkSrc, sizes: '512x512', type: 'image/png' }]
+    });
+
+    // Phase 2: Asynchronously create the new blob URL and update the artwork.
+    const oldBlobUrl = currentMediaSessionArtBlobUrl;
+    let newBlobUrl = null;
+
+    if (song.albumArt && song.albumArt.startsWith('data:')) {
+        try {
+            const response = await fetch(song.albumArt);
+            const blob = await response.blob();
+            newBlobUrl = URL.createObjectURL(blob);
+        } catch (e) {
+            console.error("Failed to create blob URL for media session artwork", e);
+        }
+    }
+    
+    currentMediaSessionArtBlobUrl = newBlobUrl;
+
+    // Update the metadata again, this time with the final, correct artwork.
+    const finalArtworkSrc = newBlobUrl || song.albumArt;
+    navigator.mediaSession.metadata = new MediaMetadata({
+        ...metadata,
         artwork: [
-            { src: artworkSrc, sizes: '96x96', type: 'image/png' },
-            { src: artworkSrc, sizes: '128x128', type: 'image/png' },
-            { src: artworkSrc, sizes: '192x192', type: 'image/png' },
-            { src: artworkSrc, sizes: '256x256', type: 'image/png' },
-            { src: artworkSrc, sizes: '384x384', type: 'image/png' },
-            { src: artworkSrc, sizes: '512x512', type: 'image/png' },
+            { src: finalArtworkSrc, sizes: '96x96', type: 'image/png' },
+            { src: finalArtworkSrc, sizes: '128x128', type: 'image/png' },
+            { src: finalArtworkSrc, sizes: '192x192', type: 'image/png' },
+            { src: finalArtworkSrc, sizes: '256x256', type: 'image/png' },
+            { src: finalArtworkSrc, sizes: '384x384', type: 'image/png' },
+            { src: finalArtworkSrc, sizes: '512x512', type: 'image/png' },
         ]
     });
 
-    // Now that the new metadata is set, it's safe to revoke the old URL
-    if (oldBlobUrl) {
+    // Now that the new artwork is in place, it's safe to revoke the old URL.
+    if (oldBlobUrl && oldBlobUrl !== newBlobUrl) {
         URL.revokeObjectURL(oldBlobUrl);
     }
 }
