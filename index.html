@@ -3437,20 +3437,33 @@ async function initializeMusicAi() {
 
 // Helper function to find a song object from a string like "Artist - Title"
 function findSongByString(artistTitleString, additionalSongs = []) {
-    const [artist, title] = artistTitleString.split(' - ').map(s => s.trim().toLowerCase());
-    if (!artist || !title) return null;
+    if (!artistTitleString) return null;
 
-    // Search local library first
-    const localMatch = songs.find(song => 
-        song.artist.toLowerCase() === artist && song.name.toLowerCase() === title
-    );
-    if (localMatch) return localMatch;
+    const fullLibrary = [...songs, ...additionalSongs];
+    const cleanInput = artistTitleString.trim().toLowerCase();
 
-    // If not found, search the temporary list (e.g., SoundCloud recommendations)
-    const additionalMatch = additionalSongs.find(song => 
-        song.artist.toLowerCase() === artist && song.name.toLowerCase() === title
+    // --- New, More Robust Matching Logic ---
+
+    // 1. First, try for a perfect "Artist - Title" match.
+    const lastHyphenIndex = cleanInput.lastIndexOf(' - ');
+    if (lastHyphenIndex > 0) {
+        const artist = cleanInput.substring(0, lastHyphenIndex).trim();
+        const title = cleanInput.substring(lastHyphenIndex + 3).trim();
+        const perfectMatch = fullLibrary.find(song =>
+            song.artist.toLowerCase() === artist && song.name.toLowerCase() === title
+        );
+        if (perfectMatch) return perfectMatch;
+    }
+
+    // 2. If no perfect match, fall back to a more flexible "contains" search.
+    // This is great for when the AI returns just a title or a slightly incorrect format.
+    const partialMatch = fullLibrary.find(song => 
+        song.name.toLowerCase().includes(cleanInput) || 
+        cleanInput.includes(song.name.toLowerCase())
     );
-    return additionalMatch || null;
+    if (partialMatch) return partialMatch;
+
+    return null; // Return null if no match is found after all attempts.
 }
 
 const availableMusicFunctions = {
