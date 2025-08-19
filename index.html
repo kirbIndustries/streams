@@ -4493,24 +4493,22 @@ async function playSong(song, playContext = null) {
     
     // --- REVISED QUEUE LOGIC FOR PERSISTENT AUTOPLAY ---
     if (playContext && Array.isArray(playContext)) {
-        // This block now ONLY runs when a user starts playback on a new context (song, album, etc.).
-        // It does NOT run for playNext/playPrevious.
-        const newQueue = [...playContext];
-        isQueueUserModified = false;
+        // This block runs ONLY when a user starts a new playback context (new song, album, etc).
+        const wasAutoplayEnabled = isAutoplayEnabled; // Remember the current autoplay state.
 
-        if (isAutoplayEnabled) {
-            // If autoplay is on, find any autoplay songs from the OLD queue.
-            const existingAutoplaySongs = playQueue.filter(s => autoplaySongIds.has(s.id));
-            // The new queue is the user's new context followed by the old autoplay songs.
-            playQueue = [...newQueue, ...existingAutoplaySongs];
-        } else {
-            // If autoplay is off, the new queue is just the new context.
-            playQueue = newQueue;
-            autoplaySongIds.clear(); // Make sure autoplay songs are cleared if toggled off.
+        // 1. Always replace the queue with the new context.
+        playQueue = [...playContext];
+        isQueueUserModified = false;
+        
+        // 2. Clear any old autoplay songs from the tracking set.
+        autoplaySongIds.clear();
+
+        // 3. If autoplay was on before, immediately generate new songs for the new queue.
+        if (wasAutoplayEnabled) {
+            await generateAutoplaySongs();
         }
     } else if (playQueue.length === 0) {
-        // This is a fallback. If playSong is called without a context and the queue is empty,
-        // build a queue from the current library view.
+        // Fallback for an empty queue remains the same.
         rebuildQueueFromCurrentView();
     }
     
@@ -5228,7 +5226,7 @@ function updateQueueFromDOM() {
     renderQueue();
 }
         
-function playNextSong({ userInitiated = false, isTransition = false } = {}) {
+async function playNextSong({ userInitiated = false, isTransition = false } = {}) {
     if (userInitiated && repeatMode === 'one') toggleRepeat();
     if (!userInitiated && !isTransition && repeatMode === 'one') {
         audioPlayer.currentTime = 0;
@@ -5236,11 +5234,14 @@ function playNextSong({ userInitiated = false, isTransition = false } = {}) {
         return;
     }
     if (!playQueue || playQueue.length === 0) return;
+    
     currentQueueIndex++;
     
-    // If we've reached the end and autoplay is on, generate new songs.
+    // If we have reached the end of the queue AND autoplay is enabled...
     if (isAutoplayEnabled && currentQueueIndex >= playQueue.length) {
-        generateAutoplaySongs(); // This will add songs and re-render the queue.
+        // ...await the generation of new songs. This ensures the queue is populated
+        // before the function continues. The generate function already handles clearing old songs.
+        await generateAutoplaySongs(); 
     }
 
     if (currentQueueIndex >= playQueue.length) {
@@ -5297,8 +5298,28 @@ function cleanupBlobs() {
 function toggleShuffle() {
     isShuffleEnabled = !isShuffleEnabled;
     document.getElementById("shuffleBtn").classList.toggle("active", isShuffleEnabled);
-    isQueueUserModified = false;
-    updatePlayQueue();
+
+    if (playQueue.length <= 1) return; // No need to shuffle if queue is small
+
+    if (isShuffleEnabled) {
+        // When shuffle is turned ON, shuffle the current queue but keep the playing song at the top.
+        const currentSong = playQueue[currentQueueIndex];
+        let songsToShuffle = playQueue.filter(song => song.id !== currentSongId);
+        
+        shuffleArray(songsToShuffle); // Use the utility function we added previously
+
+        // Rebuild the queue with the current song first, followed by the shuffled list.
+        playQueue = [currentSong, ...songsToShuffle];
+        currentQueueIndex = 0; // The current song is now at the start of the shuffled queue.
+        isQueueUserModified = true; // Shuffling is a user modification of the queue order.
+    }
+    // Note: When shuffle is turned OFF, we do not re-sort the queue. It remains in its
+    // current shuffled order until a new song/album is played.
+
+    // Re-render the queue panel if it's open to show the new shuffled order.
+    if (isPanelVisible && panelContent === 'queue') {
+        renderQueue();
+    }
 }
 
 function updateShuffleButtonState() {
@@ -5713,7 +5734,7 @@ playPauseBtn.addEventListener('click', async () => {
     }
 });
         
-nextBtn.addEventListener('click', () => playNextSong({ userInitiated: true }));
+nextBtn.addEventListener('click', async () => await playNextSong({ userInitiated: true }));
 prevBtn.addEventListener('click', () => playPreviousSong());
 
 function seekAudio(e) {
