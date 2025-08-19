@@ -6345,54 +6345,56 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         document.body.addEventListener('click', async (e) => {
-    // AI Playlist Creation Button
-    if (e.target.id === 'aiCreatePlaylistBtn') {
-        const promptInput = document.getElementById('aiPlaylistPrompt');
-        const prompt = promptInput.value.trim();
-        if (!prompt) return;
-
-        e.target.textContent = 'Thinking...';
-        e.target.disabled = true;
-
-        const fullPrompt = `${prompt}\n\nLibrary:\n${formatLibraryForPrompt()}`;
-        const result = await musicAiModel.generateContent(fullPrompt);
-        const call = result.response.functionCalls()?.[0];
-        if (call && call.name === 'createPlaylist') {
-            availableMusicFunctions.createPlaylist(call.args);
-        } else {
-            Gurasuraisu.showPopup("GuraAI was unable to create a playlist from that prompt.");
-        }
-        promptInput.value = '';
-        e.target.textContent = 'Create';
-        e.target.disabled = false;
-    }
-
-    // AI Home Page Prompt Buttons
-    if (e.target.matches('#ai-prompt-buttons .action-btn')) {
-        const prompt = e.target.dataset.prompt;
-        Gurasuraisu.showPopup("GuraAI is thinking...");
-        const fullPrompt = `${prompt}\n\nLibrary:\n${formatLibraryForPrompt()}`;
-        const result = await musicAiModel.generateContent(fullPrompt);
-        const call = result.response.functionCalls()?.[0];
+            // AI Playlist Creation Button
+            if (e.target.id === 'aiCreatePlaylistBtn') {
+                const promptInput = document.getElementById('aiPlaylistPrompt');
+                const prompt = promptInput.value.trim();
+                if (!prompt) return;
         
-        if (call && call.name === 'createPlaylist') {
-             availableMusicFunctions.createPlaylist(call.args);
-        } else if (call && call.name === 'getSongRecommendations') {
-            const songs = call.args.songs.map(findSongByString).filter(Boolean);
-            const contentHtml = `<div class="item-list">${songs.map(song => `...`).join('')}</div>`; // This part is just a placeholder to show results
-             openDrawer("GuraAI Recommendations", prompt, `<div class="item-list">${songs.map(song => `
-                <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
-                     <div class="song-info">
-                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
-                        <div>
-                            <div class="song-title">${sanitize(song.name)}</div>
-                            <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
-                        </div>
-                    </div>
-                </div>`).join('')}</div>`);
-        } else {
-             Gurasuraisu.showPopup("GuraAI could not process that request.");
-        }
+                e.target.textContent = 'Thinking...';
+                e.target.disabled = true;
+        
+                const fullPrompt = `${prompt}\n\nLibrary:\n${formatLibraryForPrompt()}`;
+                const result = await musicAiModel.generateContent(fullPrompt);
+                const call = result.response.functionCalls()?.[0];
+                if (call && call.name === 'createPlaylist') {
+                    availableMusicFunctions.createPlaylist(call.args);
+                } else {
+                    Gurasuraisu.showPopup("GuraAI was unable to create a playlist from that prompt.");
+                }
+                promptInput.value = '';
+                e.target.textContent = 'Create';
+                e.target.disabled = false;
+            }
+        
+            // AI Home Page Prompt Buttons
+            if (e.target.matches('#ai-prompt-buttons .action-btn')) {
+                const prompt = e.target.dataset.prompt;
+                Gurasuraisu.showPopup("GuraAI is thinking...");
+                const fullPrompt = `${prompt}\n\nLibrary:\n${formatLibraryForPrompt()}`;
+                const result = await musicAiModel.generateContent(fullPrompt);
+                const call = result.response.functionCalls()?.[0];
+                
+                if (call && call.name === 'createPlaylist') {
+                     availableMusicFunctions.createPlaylist(call.args);
+                } else if (call && call.name === 'getSongRecommendations') {
+                    const songs = call.args.songs.map(findSongByString).filter(Boolean);
+                    const contentHtml = `<div class="item-list">${songs.map(song => `...`).join('')}</div>`; // This part is just a placeholder to show results
+                     openDrawer("GuraAI Recommendations", prompt, `<div class="item-list">${songs.map(song => `
+                        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                             <div class="song-info">
+                                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                                <div>
+                                    <div class="song-title">${sanitize(song.name)}</div>
+                                    <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
+                                </div>
+                            </div>
+                        </div>`).join('')}</div>`);
+                } else {
+                     Gurasuraisu.showPopup("GuraAI could not process that request.");
+                }
+            }
+        });
         
         setupLongPressListeners(document.getElementById('library-grid'));
         setupLongPressListeners(document.getElementById('search-results-grid'));
