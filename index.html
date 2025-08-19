@@ -3684,7 +3684,7 @@ async function renderHomePage() {
     // --- 2. Build "Listen Again" Section (Rotation Logic Fixed) ---
     const listenAgainSongs = [];
     if (localTopSongs.length > 0) {
-        listenAgainIndex = (listenAgainIndex + 1) % Math.max(1, localTopSongs.length - 3); // Cycle through top songs
+        listenAgainIndex = (listenAgainIndex + 1) % Math.max(1, localTopSongs.length - 10); // Cycle through top songs
         localStorage.setItem('listenAgainIndex', listenAgainIndex);
         for (let i = 0; i < 4 && (listenAgainIndex + i) < localTopSongs.length; i++) {
             listenAgainSongs.push(localTopSongs[listenAgainIndex + i]);
@@ -3729,7 +3729,7 @@ async function renderHomePage() {
     // --- 4. Build "Similar To..." Sections (New Feature) ---
     let similarSectionsHtml = '';
     if (isSoundcloudEnabled && isScRecommendationsEnabled && soundcloudClientId && localTopSongs.length > 0) {
-        const seedSongs = shuffleArray([...localTopSongs]).slice(0, 3); // Pick 3 random top songs as seeds
+        const seedSongs = shuffleArray([...localTopSongs]).slice(0, 20); // Pick 20 random top songs as seeds
         for (const seed of seedSongs) {
             try {
                 const query = `${seed.artist} ${seed.name}`;
