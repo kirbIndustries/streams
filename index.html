@@ -2920,16 +2920,21 @@ function generateRandomGradient() {
     return canvas.toDataURL('image/jpeg', 0.9);
 }
 
-function updateLocalSongLookup() {
-    localSongLookup.clear();
-    for (const song of songs) {
-        // Create a consistent, case-insensitive key from artist and title
+function updateLocalSongLookup(songsToAdd, options = {}) {
+    if (options.clear) {
+        localSongLookup.clear();
+        console.log("Local song lookup map cleared.");
+    }
+    if (!Array.isArray(songsToAdd)) return; // Safety check
+
+    for (const song of songsToAdd) {
         const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
+        // Only add the song if this key doesn't already exist.
+        // This prioritizes the first-added version in case of library inconsistencies.
         if (!localSongLookup.has(uniqueKey)) {
             localSongLookup.set(uniqueKey, song);
         }
     }
-    console.log(`Local song lookup map updated with ${localSongLookup.size} entries.`);
 }
         
 async function preloadSongs(files) {
@@ -3170,7 +3175,7 @@ async function addSongs(files, storageType) {
     } else if (activeView === 'home') {
         renderHomePage();
     }
-    updateLocalSongLookup();
+    updateLocalSongLookup(newSongs);
 }
 
 async function scanForNewSongs() {
@@ -4382,98 +4387,72 @@ function removeAutoplaySongs() {
 }
 
 async function generateAutoplaySongs() {
-    // Use the currently playing song as context if the queue is empty, otherwise use the whole queue.
     const contextQueue = playQueue.length > 0 ? playQueue : (currentlyPlayingSong ? [currentlyPlayingSong] : []);
     if (contextQueue.length === 0) return;
 
-    // Always clear previous autoplay songs before generating new ones.
     removeAutoplaySongs(); 
 
-    const userQueueSongIds = new Set(playQueue.map(s => s.id)); // IDs of songs the user has added.
-    const contextArtists = new Set();
-    const contextGenres = new Set();
-
-    contextQueue.forEach(song => {
-        contextArtists.add(song.artist);
-        if (song.genre) contextGenres.add(song.genre);
+    // --- Master Deduplication Logic ---
+    // 1. Create a master set of unique keys for ALL songs the user "owns" or has in their current queue.
+    const ownedSongKeys = new Set(localSongLookup.keys());
+    playQueue.forEach(song => {
+        const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
+        ownedSongKeys.add(uniqueKey);
     });
+    const userQueueSongIds = new Set(playQueue.map(s => s.id));
+    // ---
 
-    let localRecommendations = [];
+    const contextArtists = new Set(contextQueue.map(s => s.artist).filter(Boolean));
+    const contextGenres = new Set(contextQueue.map(s => s.genre).filter(Boolean));
+
+    // Get Local Recommendations (filtered to exclude songs already in queue)
+    const localRecommendations = songs.filter(song => 
+        !userQueueSongIds.has(song.id) && 
+        (contextArtists.has(song.artist) || contextGenres.has(song.genre))
+    );
+
     let soundcloudRecommendations = [];
-
-    // --- 1. Get Local Library Recommendations ---
-    const artistMatches = songs.filter(song => contextArtists.has(song.artist));
-    const genreMatches = songs.filter(song => contextGenres.has(song.genre));
-    localRecommendations = [...artistMatches, ...genreMatches];
-
-    // --- 2. Get SoundCloud Recommendations (if enabled) by performing MULTIPLE searches ---
     if (isSoundcloudEnabled && soundcloudClientId) {
-        // Create a unique list of search terms from the queue's context.
         const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
-        
-        // Create an array of fetch promises, one for each search term.
         const promises = searchTerms.map(term => 
-            fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=15`)
+            fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=20`)
+                .then(res => res.ok ? res.json() : { collection: [] })
+                .catch(() => ({ collection: [] })) // Handle network errors gracefully
         );
+        const results = await Promise.all(promises);
+        const allTracks = results.flatMap(data => data.collection);
 
-        try {
-            // Run all searches in parallel for speed.
-            const responses = await Promise.all(promises);
-            // Parse the JSON from each successful response. If a search fails, treat it as an empty result.
-            const jsonPromises = responses.map(res => res.ok ? res.json() : Promise.resolve({ collection: [] }));
-            const results = await Promise.all(jsonPromises);
-            
-            // Flatten the array of arrays of tracks into a single array.
-            const allTracks = results.flatMap(data => data.collection);
-
-            soundcloudRecommendations = allTracks.map(track => ({
+        // Filter SoundCloud results against our master "owned" set.
+        soundcloudRecommendations = allTracks
+            .map(track => ({
                 id: track.id,
                 name: track.title,
                 artist: track.user.username,
                 album: 'SoundCloud Autoplay',
                 albumArt: getHighResArtwork(track.artwork_url),
                 storage: 'soundcloud',
-            }));
-        } catch (error) {
-            console.error("SoundCloud Autoplay fetch failed:", error);
-        }
+                // Add the key here for efficient checking
+                uniqueKey: `${(track.user.username || '').toLowerCase().trim()}::${(track.title || '').toLowerCase().trim()}`
+            }))
+            .filter(song => !ownedSongKeys.has(song.uniqueKey));
     }
 
-    // --- 3. Combine and Deduplicate all recommendations ---
-    const allRecommendations = [...localRecommendations, ...soundcloudRecommendations];
-    const uniqueSongs = new Map();
-
-    // First, process local recommendations. They get priority in the map.
-    localRecommendations.forEach(song => {
-        if (userQueueSongIds.has(song.id)) return;
-        const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
-        if (!uniqueSongs.has(uniqueKey)) {
-            uniqueSongs.set(uniqueKey, song);
+    // Combine and perform a final deduplication on the combined recommendation pool
+    const finalRecommendationsMap = new Map();
+    [...localRecommendations, ...soundcloudRecommendations].forEach(song => {
+        const uniqueKey = song.uniqueKey || `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
+        if (!finalRecommendationsMap.has(uniqueKey)) {
+            finalRecommendationsMap.set(uniqueKey, song);
         }
     });
 
-    // Next, process SoundCloud recommendations. They will only be added if a local version isn't already in the map.
-    soundcloudRecommendations.forEach(song => {
-        if (userQueueSongIds.has(song.id)) return;
-        const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
-        if (!uniqueSongs.has(uniqueKey)) { // This check now prevents adding an SC duplicate
-            uniqueSongs.set(uniqueKey, song);
-        }
-    });
+    let finalRecommendations = shuffleArray(Array.from(finalRecommendationsMap.values())).slice(0, 20);
     
-    let finalRecommendations = Array.from(uniqueSongs.values());
-
-    // --- 4. Shuffle and slice the final list ---
-    shuffleArray(finalRecommendations);
-    finalRecommendations = finalRecommendations.slice(0, 20);
-    
-    // --- 5. Add the new autoplay songs to the queue and the tracking Set ---
     if (finalRecommendations.length > 0) {
         finalRecommendations.forEach(song => autoplaySongIds.add(song.id));
         playQueue.push(...finalRecommendations);
     }
 
-    // Re-render the queue to show the new songs.
     renderQueue();
 }
 
@@ -4959,7 +4938,7 @@ async function saveSoundcloudTrackToLibrary() {
         
         songs.push(newLocalSong); // Add to in-memory library
         processAndSortSongs();
-        updateLocalSongLookup();
+        updateLocalSongLookup([newLocalSong]); 
         Gurasuraisu.showPopup(`Saved "${songToSave.name}" to Library`);
 
     } catch (error) {
@@ -6432,7 +6411,7 @@ async function loadSongsAndPlaylists() {
         songs = Array.isArray(loadedSongs) ? loadedSongs : [];
         songs.forEach(song => { if (!song.dateAdded) song.dateAdded = song.id; });
         processAndSortSongs();
-        updateLocalSongLookup();
+        updateLocalSongLookup(songs, { clear: true });
 
         const playlistTx = db.transaction('playlists', 'readonly');
         const playlistRequest = playlistTx.objectStore('playlists').getAll();
