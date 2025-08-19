@@ -1881,6 +1881,19 @@
             width: 18px;
             height: 18px;
         }
+
+        #drawer-delete-playlist-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.7;
+            transition: opacity 0.2s, background-color 0.2s;
+        }
     </style>
 </head>
 <body data-app-name="Music">
@@ -2382,12 +2395,30 @@
             return array;
         }
 
-function openDrawer(title, subtitle, contentHtml) {
-    // Clear any pending close timeout to prevent the drawer from closing immediately
+function openDrawer(title, subtitle, contentHtml, context = {}) {
     clearTimeout(closeDrawerTimeout);
 
-    document.getElementById('drawer-title').textContent = sanitize(title);
-    document.getElementById('drawer-subtitle').textContent = sanitize(subtitle);
+    const drawerTitleEl = document.getElementById('drawer-title');
+    const drawerSubtitleEl = document.getElementById('drawer-subtitle');
+
+    drawerTitleEl.textContent = sanitize(title);
+    
+    // Check the context to see if we should add a delete button
+    if (context.type === 'playlist' && context.id) {
+        // If it's a playlist, add the subtitle and the delete button side-by-side
+        drawerSubtitleEl.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <span>${sanitize(subtitle)}</span>
+                <button id="drawer-delete-playlist-btn" data-playlist-id="${context.id}" title="Delete Playlist">
+                    <span class="material-symbols-rounded">delete_forever</span>
+                </button>
+            </div>
+        `;
+    } else {
+        // Otherwise, just show the normal subtitle
+        drawerSubtitleEl.textContent = sanitize(subtitle);
+    }
+
     drawerContent.innerHTML = contentHtml;
     drawer.classList.add('open');
     drawerOverlay.classList.add('visible');
@@ -4170,20 +4201,27 @@ function renderPlaylistSongs(playlistId) {
     });
 }
         
-async function deletePlaylist(playlistId, event) {
-    event.stopPropagation(); 
+async function deletePlaylist(playlistId) {
     const playlist = playlists.find(p => p.id === playlistId);
     if (!playlist) return;
 
-    if (confirm(`Are you sure you want to delete the playlist "${playlist.name}"?`)) {
+    if (confirm(`Are you sure you want to permanently delete the playlist "${playlist.name}"?`)) {
+        // 1. Remove the playlist from the in-memory array.
         playlists = playlists.filter(p => p.id !== playlistId);
 
+        // 2. Remove the playlist from the IndexedDB database.
         const tx = db.transaction('playlists', 'readwrite');
         tx.objectStore('playlists').delete(playlistId);
         await tx.done;
 
-        showPopupMessage(`Playlist "${playlist.name}" deleted`);
-        renderPlaylists(); 
+        // 3. Close the drawer, as its content is now invalid.
+        closeDrawer();
+
+        // 4. Notify the user and refresh the library view.
+        Gurasuraisu.showPopup(`Playlist "${playlist.name}" deleted`);
+        if (activeView === 'library') {
+            renderLibraryPage(); 
+        }
     }
 }
 
@@ -6204,7 +6242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             </div>
                         </div>
                     </div>`).join('')}</div>`;
-                openDrawer(playlist.name, `${playlistSongs.length} songs`, contentHtml); // Pass details
+                openDrawer(playlist.name, `${playlistSongs.length} songs`, contentHtml, { type: 'playlist', id: playlistId }); // Pass details
             }
         });
 
@@ -6395,6 +6433,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                         </div>`).join('')}</div>`);
                 } else {
                      Gurasuraisu.showPopup("GuraAI could not process that request.");
+                }
+            }
+
+            if (e.target.closest('#drawer-delete-playlist-btn')) {
+                const button = e.target.closest('#drawer-delete-playlist-btn');
+                const playlistId = parseInt(button.dataset.playlistId, 10);
+                if (playlistId) {
+                    deletePlaylist(playlistId);
                 }
             }
         });
