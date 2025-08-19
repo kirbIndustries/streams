@@ -3735,7 +3735,7 @@ async function renderHomePage() {
 
     let sections = [];
     if (isSoundcloudEnabled && isScRecommendationsEnabled && soundcloudClientId && localTopSongs.length > 0) {
-        const seedSongs = shuffleArray([...localTopSongs]).slice(0, 3);
+        const seedSongs = shuffleArray([...localTopSongs]).slice(0, 20);
         seedSongs.forEach(seed => {
             sections.push(`<div class="lazy-load-section" data-section-type="similar-to" data-seed-artist="${sanitize(seed.artist)}" data-seed-name="${sanitize(seed.name)}"></div>`);
         });
