@@ -4424,17 +4424,24 @@ async function generateAutoplaySongs() {
     const allRecommendations = [...localRecommendations, ...soundcloudRecommendations];
     const uniqueSongs = new Map();
 
-    allRecommendations.forEach(song => {
-        // First, filter out any song that is already in the user's part of the queue.
+    // First, process local recommendations. They get priority in the map.
+    localRecommendations.forEach(song => {
         if (userQueueSongIds.has(song.id)) return;
-
-        // Use a key of "artist + title" to catch duplicates across platforms (e.g., local and SC version of same song).
         const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
         if (!uniqueSongs.has(uniqueKey)) {
             uniqueSongs.set(uniqueKey, song);
         }
     });
 
+    // Next, process SoundCloud recommendations. They will only be added if a local version isn't already in the map.
+    soundcloudRecommendations.forEach(song => {
+        if (userQueueSongIds.has(song.id)) return;
+        const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
+        if (!uniqueSongs.has(uniqueKey)) { // This check now prevents adding an SC duplicate
+            uniqueSongs.set(uniqueKey, song);
+        }
+    });
+    
     let finalRecommendations = Array.from(uniqueSongs.values());
 
     // --- 4. Shuffle and slice the final list ---
