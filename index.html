@@ -6423,7 +6423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const prompt = promptInput.value.trim();
                 if (!prompt) return;
         
-                e.target.textContent = 'Thinking...';
+                e.target.htmlContent = '<svg width="18" height="18" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg>';
                 e.target.disabled = true;
         
                 const fullPrompt = `${prompt}\n\nLibrary:\n${formatLibraryForPrompt()}`;
@@ -6435,14 +6435,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     Gurasuraisu.showPopup("GuraAI was unable to create a playlist from that prompt.");
                 }
                 promptInput.value = '';
-                e.target.textContent = 'Create';
+                e.target.htmlContent = '<span class="material-symbols-rounded" style="font-size: 18px;">add</span>';
                 e.target.disabled = false;
             }
         
             // --- AI Home Page Prompt Bar & Dynamic Buttons ---
             const handleHomeAiPrompt = async (prompt) => {
                 if (!prompt || !musicAiModel) return;
-                Gurasuraisu.showPopup("GuraAI is thinking...");
                 const fullPrompt = `${prompt}\n\nLibrary:\n${formatSongsForAiPrompt(songs)}`;
                 try {
                     const result = await musicAiModel.generateContent(fullPrompt);
