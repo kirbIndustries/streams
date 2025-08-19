@@ -3936,20 +3936,24 @@ async function renderHomePage() {
     if (isGuraAiEnabled && musicAiModel && songs.length > 5) {
         let dynamicPromptsHtml = '';
         try {
-            // Ask the AI to generate three creative prompt ideas based on the library
-            const prompt = `Based on the user's library, suggest 3 short, creative, and varied prompts a user could ask a music AI.
-            Library:\n${formatSongsForAiPrompt(songs.slice(0, 50))}`; // Send a sample of the library
+            // THE NEW, IMPROVED PROMPT
+            const prompt = `Based on the user's library, suggest 3 short, action-oriented prompts for buttons. The prompts should inspire the user to create a playlist or discover music. Good examples: "Create a workout playlist", "Songs for a rainy day", "Show me my best rock songs". Bad examples: "Play Artist - Song Title".
+
+            Library Sample:\n${formatSongsForAiPrompt(songs.slice(0, 50))}`;
             
             const result = await musicAiModel.generateContent(prompt);
             const call = result.response.functionCalls()?.[0];
 
-            if (call && (call.name === 'createPlaylist' || call.name === 'getSongRecommendations')) {
-                const promptIdeas = call.args.songs.slice(0, 3); // The AI will put prompts in the 'songs' field
+            if (call && call.name === 'createPlaylist' && call.args.songs) {
+                // We're re-using the 'songs' field to get the AI's text suggestions for prompts
+                const promptIdeas = call.args.songs.slice(0, 3);
                 dynamicPromptsHtml = promptIdeas.map(p => `<button class="action-btn" data-prompt="${sanitize(p)}">${sanitize(p)}</button>`).join('');
+            } else {
+                 // Fallback to static prompts if AI fails
+                dynamicPromptsHtml = `<button class="action-btn" data-prompt="Create a high-energy playlist">High-energy Playlist</button><button class="action-btn" data-prompt="Find some relaxing songs">Relaxing Songs</button><button class="action-btn" data-prompt="Recommend a genre I might like">Suggest a Genre</button>`;
             }
         } catch (e) {
             console.error("AI dynamic prompt generation failed", e);
-            // Fallback to static prompts on error
             dynamicPromptsHtml = `<button class="action-btn" data-prompt="Create a workout playlist">Workout Playlist</button><button class="action-btn" data-prompt="Find songs for a rainy day">Rainy Day Mix</button>`;
         }
 
