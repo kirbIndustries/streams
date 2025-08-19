@@ -3455,7 +3455,7 @@ function findSongByString(artistTitleString, additionalSongs = []) {
 
 const availableMusicFunctions = {
     createPlaylist: async ({ playlistName, songs: songStrings }) => {
-        const songIds = songStrings.map(findSongByString).filter(Boolean).map(s => s.id);
+        const songIds = songStrings.map(s => findSongByString(s)).filter(Boolean).map(s => s.id);
         
         if (songIds.length === 0) {
             Gurasuraisu.showPopup(`GuraAI couldn't find matching songs.`);
@@ -6451,7 +6451,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (call && call.name === 'createPlaylist') {
                         availableMusicFunctions.createPlaylist(call.args);
                     } else if (call && call.name === 'getSongRecommendations') {
-                        const recommendedSongs = call.args.songs.map(findSongByString).filter(Boolean);
+                        const recommendedSongs = call.args.songs.map(s => findSongByString(s)).filter(Boolean);
                         if (recommendedSongs.length > 0) {
                              const contentHtml = `<div class="item-list">${recommendedSongs.map(song => `
                                 <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
