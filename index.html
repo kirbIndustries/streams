@@ -3932,65 +3932,40 @@ async function renderHomePage() {
     }).join('');
 
     // --- GuraAI Dynamic Content (only shown if enabled) ---
-    let aiSectionsHtml = '';
-    if (isGuraAiEnabled && musicAiModel && songs.length > 10) {
+    let aiPromptAreaHtml = '';
+    if (isGuraAiEnabled && musicAiModel && songs.length > 5) {
+        let dynamicPromptsHtml = '';
         try {
-            const prompt = `Analyze the user's library and create two recommendation categories.
-            1. A category named "Songs You Might Like" with 8 songs.
-            2. A category named "Because you like ${recentlyPlayedSongs[0].artist}" with 8 songs similar to that artist.
+            // Ask the AI to generate three creative prompt ideas based on the library
+            const prompt = `Based on the user's library, suggest 3 short, creative, and varied prompts a user could ask a music AI.
+            Library:\n${formatSongsForAiPrompt(songs.slice(0, 50))}`; // Send a sample of the library
             
-            Full Library:\n${formatLibraryForPrompt()}`;
-
             const result = await musicAiModel.generateContent(prompt);
-            const calls = result.response.functionCalls();
-            
-            if (calls && calls.length > 0) {
-                const aiRecommendations = calls.flatMap(call => call.args.songs)
-                    .map(findSongByString)
-                    .filter(Boolean);
+            const call = result.response.functionCalls()?.[0];
 
-                const category1 = aiRecommendations.slice(0, 8);
-                const category2 = aiRecommendations.slice(8, 16);
-
-                aiSectionsHtml = `
-                    <div>
-                        <h2 class="section-title">Songs You Might Like</h2>
-                        <div class="item-grid">${category1.map(song => `
-                            <div class="item-card" data-id="${song.id}">
-                                <img src="${song.albumArt}" class="item-card-art">
-                                <div class="item-card-info">
-                                    <div class="item-card-title">${sanitize(song.name)}</div>
-                                    <div class="item-card-subtitle">${sanitize(song.artist)}</div>
-                                </div>
-                            </div>`).join('')}
-                        </div>
-                    </div>
-                    <div>
-                        <h2 class="section-title">Because you like ${recentlyPlayedSongs[0].artist}</h2>
-                        <div class="item-grid">${category2.map(song => `
-                             <div class="item-card" data-id="${song.id}">
-                                <img src="${song.albumArt}" class="item-card-art">
-                                <div class="item-card-info">
-                                    <div class="item-card-title">${sanitize(song.name)}</div>
-                                    <div class="item-card-subtitle">${sanitize(song.artist)}</div>
-                                </div>
-                            </div>`).join('')}
-                        </div>
-                    </div>
-                `;
+            if (call && (call.name === 'createPlaylist' || call.name === 'getSongRecommendations')) {
+                const promptIdeas = call.args.songs.slice(0, 3); // The AI will put prompts in the 'songs' field
+                dynamicPromptsHtml = promptIdeas.map(p => `<button class="action-btn" data-prompt="${sanitize(p)}">${sanitize(p)}</button>`).join('');
             }
-        } catch(e) { console.error("AI Home Page generation failed", e); }
-    }
+        } catch (e) {
+            console.error("AI dynamic prompt generation failed", e);
+            // Fallback to static prompts on error
+            dynamicPromptsHtml = `<button class="action-btn" data-prompt="Create a workout playlist">Workout Playlist</button><button class="action-btn" data-prompt="Find songs for a rainy day">Rainy Day Mix</button>`;
+        }
 
-    const aiPromptsHtml = isGuraAiEnabled ? `
-        <div id="ai-prompt-buttons" style="text-align: center; margin-bottom: 20px;">
-            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
-                <button class="action-btn" data-prompt="Create a playlist of my most played rock songs.">Create a rock playlist</button>
-                <button class="action-btn" data-prompt="Recommend me some upbeat songs for working out.">Find workout songs</button>
-                <button class="action-btn" data-prompt="Give me a genre that I might like based on my library.">Suggest a new genre</button>
+        aiPromptAreaHtml = `
+            <div id="ai-prompt-area" style="text-align:center; padding: 20px 0 40px 0;">
+                <h2 class="section-title">Ask GuraAI</h2>
+                <div id="ai-dynamic-prompts" style="display:flex; flex-wrap:wrap; justify-content:center; gap:10px; margin-bottom: 20px;">
+                    ${dynamicPromptsHtml}
+                </div>
+                <div id="ai-prompt-bar" style="display:flex; gap:10px; max-width:600px; margin:0 auto;">
+                    <input type="text" id="aiPromptInput" placeholder="Or type your own request..." class="library-search-input" style="padding-left:15px;">
+                    <button id="aiPromptSubmit" class="action-btn" style="height:auto;">Go</button>
+                </div>
             </div>
-        </div>
-    ` : '';
+        `;
+    }
 
     homeView.innerHTML = `
     <div class="page-content-wrapper">
@@ -6460,32 +6435,48 @@ document.addEventListener('DOMContentLoaded', async () => {
                 e.target.disabled = false;
             }
         
-            // AI Home Page Prompt Buttons
-            if (e.target.matches('#ai-prompt-buttons .action-btn')) {
-                const prompt = e.target.dataset.prompt;
+            // --- AI Home Page Prompt Bar & Dynamic Buttons ---
+            const handleHomeAiPrompt = async (prompt) => {
+                if (!prompt || !musicAiModel) return;
                 Gurasuraisu.showPopup("GuraAI is thinking...");
-                const fullPrompt = `${prompt}\n\nLibrary:\n${formatLibraryForPrompt()}`;
-                const result = await musicAiModel.generateContent(fullPrompt);
-                const call = result.response.functionCalls()?.[0];
-                
-                if (call && call.name === 'createPlaylist') {
-                     availableMusicFunctions.createPlaylist(call.args);
-                } else if (call && call.name === 'getSongRecommendations') {
-                    const songs = call.args.songs.map(findSongByString).filter(Boolean);
-                    const contentHtml = `<div class="item-list">${songs.map(song => `...`).join('')}</div>`; // This part is just a placeholder to show results
-                     openDrawer("GuraAI Recommendations", prompt, `<div class="item-list">${songs.map(song => `
-                        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
-                             <div class="song-info">
-                                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
-                                <div>
-                                    <div class="song-title">${sanitize(song.name)}</div>
-                                    <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
-                                </div>
-                            </div>
-                        </div>`).join('')}</div>`);
-                } else {
-                     Gurasuraisu.showPopup("GuraAI could not process that request.");
+                const fullPrompt = `${prompt}\n\nLibrary:\n${formatSongsForAiPrompt(songs)}`;
+                try {
+                    const result = await musicAiModel.generateContent(fullPrompt);
+                    const call = result.response.functionCalls()?.[0];
+        
+                    if (call && call.name === 'createPlaylist') {
+                        availableMusicFunctions.createPlaylist(call.args);
+                    } else if (call && call.name === 'getSongRecommendations') {
+                        const recommendedSongs = call.args.songs.map(findSongByString).filter(Boolean);
+                        if (recommendedSongs.length > 0) {
+                             const contentHtml = `<div class="item-list">${recommendedSongs.map(song => `
+                                <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                                     <div class="song-info">
+                                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                                        <div><div class="song-title">${sanitize(song.name)}</div><div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div></div>
+                                    </div>
+                                </div>`).join('')}</div>`;
+                            openDrawer("GuraAI Recommendations", prompt, contentHtml);
+                        } else {
+                             Gurasuraisu.showPopup("GuraAI couldn't find any matching songs for that.");
+                        }
+                    } else {
+                        Gurasuraisu.showPopup("GuraAI could not process that request.");
+                    }
+                } catch (err) {
+                    console.error("Error handling Home AI Prompt:", err);
+                    Gurasuraisu.showPopup("An error occurred with the AI request.");
                 }
+            };
+        
+            if (e.target.id === 'aiPromptSubmit') {
+                const input = document.getElementById('aiPromptInput');
+                handleHomeAiPrompt(input.value.trim());
+                input.value = '';
+            }
+        
+            if (e.target.matches('#ai-dynamic-prompts .action-btn')) {
+                handleHomeAiPrompt(e.target.dataset.prompt);
             }
 
             if (e.target.closest('#drawer-delete-playlist-btn')) {
