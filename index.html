@@ -5495,15 +5495,17 @@ function addQueueItemEventListeners() {
             const songId = parseFloat(item.dataset.id);
             const song = playQueue.find(s => s.id === songId);
             if (song) {
-                // FIX: Use the right player function for the song type and pass the queue context
+                // --- THE FIX ---
+                // We now call the play functions with "null" as the context.
+                // This tells the player to find the song in the EXISTING queue
+                // instead of creating a new one.
                 if (song.storage === 'soundcloud') {
-                    playSoundcloudTrack(song.id, playQueue);
+                    playSoundcloudTrack(song.id, null);
                 } else {
-                    playSong(song, playQueue);
+                    playSong(song, null);
                 }
             }
         });
-    });
 
     document.querySelectorAll('.remove-from-queue-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
