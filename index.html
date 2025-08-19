@@ -282,7 +282,7 @@
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
             gap: 20px;
-            margin-bottom: 40px
+            padding-bottom: 125px;
         }
         .item-card {
             background-color: transparent; /* Cards will be minimal */
@@ -1210,7 +1210,7 @@
           filter: brightness(1.5);
         }
 
-        #soundcloudToggle, #scRecsToggle {
+        #soundcloudToggle {
             appearance: none;
             width: 50px;
             height: 32px;
@@ -1223,7 +1223,7 @@
             cursor: pointer;
         }
         
-        #soundcloudToggle::before, #scRecsToggle::before {
+        #soundcloudToggle::before {
             content: '';
             position: absolute;
             width: 18px;
@@ -1237,11 +1237,11 @@
             border: 1px solid var(--glass-border);
         }
         
-        #soundcloudToggle:checked, #scRecsToggle:checked {
+        #soundcloudToggle:checked {
             background-color: var(--secondary-text-color);
         }
         
-        #soundcloudToggle:checked::before, #scRecsToggle:checked::before {
+        #soundcloudToggle:checked::before {
             width: 22px;
             height: 22px;
             background-color: var(--background-color);
@@ -2146,15 +2146,11 @@
                     <label for="soundcloudToggle">Enable SoundCloud Streaming</label>
                     <input type="checkbox" id="soundcloudToggle">
                 </div>
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="scRecsToggle">SoundCloud Recommendations</label>
-                    <input type="checkbox" id="scRecsToggle">
-                </div>
                 <input type="text" id="soundcloudClientId" placeholder="SoundCloud Client ID" class="search-input" style="padding-left: 15px;">
                 <small>You will need to disable CORS to use SoundCloud streaming. A browser extension may be required.</small>
             </div>
 
-            <div style="display: flex; justify-content: flex-end; margin-top: 25px; gap: 10px;">
+            <div style="display: flex; justify-content: flex-end; margin-top: 25px;">
                 <button id="saveIntegrations" class="filter-btn">Save</button>
                 <button id="closeFoldersModal" class="filter-btn active">Close</button>
             </div>
@@ -2348,19 +2344,7 @@
         let playlistModal, sleepTimerModal;
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let activeAlbum = null; // Will store { artist, name } of the selected album
-        let libraryCurrentPage = 1;
-        const ITEMS_PER_PAGE = 30; // Number of items to load at a time
-        let viewObserver; // A single, reusable IntersectionObserver for all views
 
-        let currentSearchResults = [];
-        let searchCurrentPage = 1;
-
-        let soundcloudCurrentOffset = 0;
-        const SOUNDCLOUD_PAGE_LIMIT = 25; // Items per SoundCloud API call
-
-        let queueCurrentPage = 1;
-        const QUEUE_ITEMS_PER_PAGE = 40;
-        
         // --- SoundCloud variables ---
         let soundcloudClientId = '';
         let isSoundcloudEnabled = false;
@@ -2475,52 +2459,43 @@ function getHighResArtwork(url) {
 }
         
 function renderSearchResults() {
-    searchCurrentPage = 1;
-    if (viewObserver) viewObserver.disconnect();
-
     const searchGrid = document.getElementById('search-results-grid');
     const query = document.getElementById('searchInput').value.toLowerCase();
-    
     if (!query) {
-        currentSearchResults = [];
         searchGrid.innerHTML = '';
         return;
     }
 
-    currentSearchResults = songs.filter(s => s.name.toLowerCase().includes(query) || s.artist.toLowerCase().includes(query) || s.album.toLowerCase().includes(query));
-    searchGrid.innerHTML = ''; // Clear previous results
+    const results = songs.filter(s => 
+        s.name.toLowerCase().includes(query) ||
+        s.artist.toLowerCase().includes(query) ||
+        s.album.toLowerCase().includes(query)
+    );
 
-    if (currentSearchResults.length === 0) {
+    if (results.length === 0) {
         searchGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No results found for "${query}"</p></div>`;
         return;
     }
     
-    renderMoreSearchResults();
-}
+    // For now, just show a list of matching songs
+    const resultsHtml = results.map(song => `
+        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+             <div class="song-info">
+                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                <div>
+                    <div class="song-title" style="white-space: normal;">${sanitize(song.name)}</div>
+                    <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    searchGrid.className = 'item-list'; // Search results are a list
+    searchGrid.innerHTML = resultsHtml;
 
-function renderMoreSearchResults() {
-    const searchGrid = document.getElementById('search-results-grid');
-    const startIndex = (searchCurrentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    const itemsToRender = currentSearchResults.slice(startIndex, endIndex);
-
-    const resultsHtml = itemsToRender.map(song => `<div class="music-item" data-id="${song.id}" style="cursor: pointer;"><div class="song-info"><img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;"><div><div class="song-title" style="white-space: normal;">${sanitize(song.name)}</div><div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div></div></div></div>`).join('');
-    searchGrid.insertAdjacentHTML('beforeend', resultsHtml);
-
-    if (endIndex < currentSearchResults.length) {
-        const sentinel = document.createElement('div');
-        sentinel.id = 'search-sentinel';
-        searchGrid.appendChild(sentinel);
-
-        viewObserver = new IntersectionObserver(entries => {
-            if (entries[0].isIntersecting) {
-                viewObserver.disconnect();
-                searchCurrentPage++;
-                renderMoreSearchResults();
-            }
-        }, { rootMargin: '200px' });
-        viewObserver.observe(sentinel);
-    }
+    requestAnimationFrame(() => {
+        const searchView = document.getElementById('search-view');
+        searchView.scrollTop = scrollPositions.search;
+    });
 }
 
 function renderSoundcloudSearchResults() {
@@ -3689,206 +3664,226 @@ async function getArtColors(imageUrl) {
 async function renderHomePage() {
     const homeView = document.getElementById('home-view');
     if (!homeView) return;
-    if (viewObserver) viewObserver.disconnect();
-    homeView.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
 
-    // --- 1. Fetch Local Data ---
-    const topSongsPromise = db.transaction('songs', 'readonly').objectStore('songs').index('playCount').getAll();
-    const historyPromise = db.transaction('playHistory', 'readonly').objectStore('playHistory').getAll();
-    const [localTopSongs, history] = await Promise.all([promiseIDBRequest(topSongsPromise), promiseIDBRequest(historyPromise)]);
-    localTopSongs.sort((a,b) => (b.playCount || 0) - (a.playCount || 0));
-    history.sort((a,b) => b.timestamp - a.timestamp);
+    // --- 1. Fetch all necessary data asynchronously ---
+    const topSongsPromise = new Promise(resolve => {
+        const tx = db.transaction('songs', 'readonly');
+        const index = tx.objectStore('songs').index('playCount');
+        const req = index.getAll();
+        req.onsuccess = () => resolve(req.result.sort((a,b) => (b.playCount || 0) - (a.playCount || 0)).slice(0, 10));
+    });
 
-    // --- 2. Build Highlights ---
+    const historyPromise = new Promise(resolve => {
+        const tx = db.transaction('playHistory', 'readonly');
+        const store = tx.objectStore('playHistory');
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result.sort((a,b) => b.timestamp - a.timestamp));
+    });
+
+    const [topSongs, history] = await Promise.all([topSongsPromise, historyPromise]);
+    // --- 2. Select 4 unique songs for the highlights ---
+    
+    const highlightSongs = new Set();
     const listenAgainSongs = [];
-    if (localTopSongs.length > 0) {
-        listenAgainIndex = (listenAgainIndex + 1) % Math.max(1, localTopSongs.length - 3);
+    if (topSongs.length > 0) {
+        listenAgainIndex = (listenAgainIndex + 1) % Math.min(topSongs.length, 10);
         localStorage.setItem('listenAgainIndex', listenAgainIndex);
-        for (let i = 0; i < 4 && (listenAgainIndex + i) < localTopSongs.length; i++) {
-            listenAgainSongs.push(localTopSongs[listenAgainIndex + i]);
+        listenAgainSongs.push(topSongs[listenAgainIndex]);
+        if (topSongs.length > 1) {
+            listenAgainSongs.push(topSongs[(listenAgainIndex + 1) % topSongs.length]);
+        }
+        if (topSongs.length > 2) {
+            listenAgainSongs.push(topSongs[(listenAgainIndex + 2) % topSongs.length]);
+        }
+        if (topSongs.length > 3) {
+            listenAgainSongs.push(topSongs[(listenAgainIndex + 3) % topSongs.length]);
         }
     }
-    const localRecsPool = songs.filter(s => !listenAgainSongs.some(ls => ls.id === s.id));
-    shuffleArray(localRecsPool);
-    
-    let scRecs = [];
-    if (isSoundcloudEnabled && isScRecommendationsEnabled && soundcloudClientId && songs.length > 0) {
-        const query = [...new Set(localTopSongs.slice(0, 5).map(s => s.artist))].join(' ');
-        try {
-            const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=20`);
-            const data = await response.json();
-            scRecs = data.collection.map(track => ({
-                id: track.id, name: track.title, artist: track.user.username,
-                albumArt: getHighResArtwork(track.artwork_url), storage: 'soundcloud',
-            })).slice(0, 4);
-        } catch (e) { console.error("Failed to fetch SC highlights:", e); }
+    listenAgainSongs.forEach(s => highlightSongs.add(s));
+
+    const recommendations = songs.filter(s => !listenAgainSongs.some(ls => ls.id === s.id));
+    for (let i = 0; i < 4 && recommendations.length > 0; i++) {
+        const randomIndex = Math.floor(Math.random() * recommendations.length);
+        highlightSongs.add(recommendations.splice(randomIndex, 1)[0]);
     }
     
-    const localRecs = localRecsPool.slice(0, scRecs.length > 0 ? 4 : 8);
-    const highlightSongs = [...listenAgainSongs, ...localRecs, ...scRecs];
-    const highlightsHtml = highlightSongs.map((song, i) => { /* ... HTML generation unchanged ... */ return `<div class="highlight-card" data-id="${song.id}" data-storage="${song.storage || 'local'}" id="highlight-${i+1}"><img src="${song.albumArt}"><div class="highlight-card-info"><div class="highlight-card-label">${song.storage === 'soundcloud' ? 'Discover on SoundCloud' : (listenAgainSongs.includes(song) ? 'Listen Again' : 'From Your Library')}</div><div class="highlight-card-title">${sanitize(song.name)}</div><div class="highlight-card-subtitle">${sanitize(song.artist)}</div></div><span class="material-symbols-rounded highlight-card-play">play_circle</span></div>`; }).join('');
+    // --- 3. Build the HTML ---
+    const highlights = Array.from(highlightSongs);
+    const highlightsHtml = highlights.map((song, i) => {
+        const isListenAgain = listenAgainSongs.includes(song);
+        return `
+        <div class="highlight-card" data-id="${song.id}" id="highlight-${i+1}">
+            <img src="${song.albumArt}">
+            <div class="highlight-card-info">
+                <div class="highlight-card-label">${isListenAgain ? 'Listen Again' : 'From Your Library'}</div>
+                <div class="highlight-card-title">${sanitize(song.name)}</div>
+                <div class="highlight-card-subtitle">${sanitize(song.artist)}</div>
+            </div>
+            <span class="material-symbols-rounded highlight-card-play">play_circle</span>
+        </div>`;
+    }).join('');
 
-    // --- 3. Build Placeholders for Other Sections ---
     const recentSongIds = [...new Set(history.map(h => h.songId))];
-    const recentAlbums = [...new Map(recentSongIds.map(id => songs.find(s => s.id === id)).filter(Boolean).map(song => [`${song.albumArtist}::${song.album}`, song])).values()].slice(0, 40);
-    const recentlyPlayedHtml = recentAlbums.length > 0 ? `<div><h2 class="section-title">Recently Played</h2><div class="item-grid">${recentAlbums.map(song => `<div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}"><img src="${song.albumArt}" class="item-card-art"><div class="item-card-info"><div class="item-card-title">${sanitize(song.album)}</div><div class="item-card-subtitle">${sanitize(song.albumArtist)}</div></div></div>`).join('')}</div></div>` : '';
-
-    let sections = [];
-    if (isSoundcloudEnabled && isScRecommendationsEnabled && soundcloudClientId && localTopSongs.length > 0) {
-        const seedSongs = shuffleArray([...localTopSongs]).slice(0, 20);
-        seedSongs.forEach(seed => {
-            sections.push(`<div class="lazy-load-section" data-section-type="similar-to" data-seed-artist="${sanitize(seed.artist)}" data-seed-name="${sanitize(seed.name)}"></div>`);
-        });
-    }
-    const genres = [...new Set(songs.map(s => s.genre).filter(Boolean))];
-    genres.forEach(genre => {
-        sections.push(`<div class="lazy-load-section" data-section-type="genre" data-genre-name="${sanitize(genre)}"></div>`);
-    });
-    shuffleArray(sections);
-
-    // --- 4. Final Assembly ---
-    homeView.innerHTML = `<div class="page-content-wrapper"><div class="highlight-grid">${highlightsHtml}</div>${recentlyPlayedHtml}${sections.join('')}</div>`;
-    
-    highlightSongs.forEach((song, i) => {
-        const card = document.getElementById(`highlight-${i+1}`);
-        if (card) getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
-    });
-
-    // --- 5. Setup Lazy Loading for Sections ---
-    setupHomeViewObserver();
-    requestAnimationFrame(() => { homeView.scrollTop = scrollPositions.home; });
-}
-
-function setupHomeViewObserver() {
-    if (viewObserver) viewObserver.disconnect();
-    const sections = document.querySelectorAll('.lazy-load-section');
-    if (sections.length === 0) return;
-
-    viewObserver = new IntersectionObserver(async (entries, observer) => {
-        for (const entry of entries) {
-            if (entry.isIntersecting) {
-                const section = entry.target;
-                observer.unobserve(section); // Load only once
-                
-                const type = section.dataset.sectionType;
-                if (type === 'genre') {
-                    const genre = section.dataset.genreName;
-                    const genreSongs = shuffleArray(songs.filter(s => s.genre === genre)).slice(0, 8);
-                    section.innerHTML = `<h2 class="section-title">${sanitize(genre)}</h2><div class="item-grid">${genreSongs.map(song => `<div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}"><img src="${song.albumArt}" class="item-card-art"><div class="item-card-info"><div class="item-card-title">${sanitize(song.album)}</div><div class="item-card-subtitle">${sanitize(song.albumArtist)}</div></div></div>`).join('')}</div>`;
-                } else if (type === 'similar-to') {
-                    const artist = section.dataset.seedArtist;
-                    const name = section.dataset.seedName;
-                    const query = `${artist} ${name}`;
-                    try {
-                        const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=20`);
-                        const data = await response.json();
-                        const similarTracks = data.collection.filter(track => !songs.some(s => s.name === track.title)).slice(0, 8);
-                        if (similarTracks.length > 0) {
-                            section.innerHTML = `<h2 class="section-title">Similar to ${sanitize(name)}</h2><div class="item-grid">${similarTracks.map(track => `<div class="item-card" data-id="${track.id}" data-storage="soundcloud"><img src="${getHighResArtwork(track.artwork_url)}" class="item-card-art"><div class="item-card-info"><div class="item-card-title">${sanitize(track.title)}</div><div class="item-card-subtitle">${sanitize(track.user.username)}</div></div></div>`).join('')}</div>`;
-                        }
-                    } catch(e) { console.error("Failed to lazy-load similar tracks", e); }
-                }
-            }
+    const recentlyPlayedSongs = recentSongIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+    const recentAlbums = [];
+    const recentAlbumIds = new Set();
+    for (const song of recentlyPlayedSongs) {
+        const albumId = `${song.albumArtist}::${song.album}`;
+        if (!recentAlbumIds.has(albumId)) {
+            recentAlbumIds.add(albumId);
+            recentAlbums.push(song); // Use the song object as a representative for the album
         }
-    }, { rootMargin: '200px' });
+        if (recentAlbums.length >= 40) break; // Limit to 40 albums
+    }
+    const recentlyPlayedHtml = recentAlbums.map(song => `
+         <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
+            <img src="${song.albumArt}" class="item-card-art">
+            <div class="item-card-info">
+                <div class="item-card-title">${sanitize(song.album)}</div>
+                <div class="item-card-subtitle">${sanitize(song.albumArtist)}</div>
+            </div>
+        </div>
+    `).join('');
+    
+    const genres = [...new Set(songs.map(s => s.genre).filter(Boolean))];
+    const genreSectionsHtml = genres.map(genre => {
+        const genreSongs = songs.filter(s => s.genre === genre).slice(0, 8);
+        return `
+        <div>
+            <h2 class="section-title">${sanitize(genre)}</h2>
+            <div class="item-grid">${genreSongs.map(song => `
+                <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
+                    <img src="${song.albumArt}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${sanitize(song.album)}</div>
+                        <div class="item-card-subtitle">${sanitize(song.albumArtist)}</div>
+                    </div>
+                </div>
+            `).join('')}</div> 
+        </div>`;
+    }).join('');
 
-    sections.forEach(section => viewObserver.observe(section));
+    homeView.innerHTML = `
+    <div class="page-content-wrapper">
+        <div class="highlight-grid">${highlightsHtml}</div>
+        <div>
+            <h2 class="section-title">Recently Played</h2>
+            <div class="item-grid">${recentlyPlayedHtml}</div>
+        </div>
+        ${genreSectionsHtml}
+    </div>`;
+    
+    // --- 4. Asynchronously Apply Gradients ---
+    highlights.forEach((song, i) => {
+        const card = document.getElementById(`highlight-${i+1}`);
+        if (card) {
+            getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
+        }
+    });
+
+    requestAnimationFrame(() => {
+        const homeView = document.getElementById('home-view');
+        homeView.scrollTop = scrollPositions.home;
+    });
 }
-        
-function renderLibraryPage() {
-    libraryCurrentPage = 1; // Reset to the first page
-    if (viewObserver) viewObserver.disconnect(); // Disconnect any previous observer
 
+function renderLibraryPage() {
+    const libraryView = document.getElementById('library-view');
     const libraryGrid = document.getElementById('library-grid');
     if (!libraryGrid) return;
-    libraryGrid.innerHTML = ''; // Clear the grid for the new view
 
-    if (songs.length === 0) {
-        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">library_music</span><p>Your library is empty.</p></div>`;
+    // --- RENDER MAIN LIBRARY VIEW ---
+    const searchFilteredSongs = songs; // No search bar here anymore
+
+    if (searchFilteredSongs.length === 0) {
+        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">library_music</span><p>Your library is empty.</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Click "Add Music" to get started.</p></div>`;
         return;
     }
     
-    renderMoreLibraryItems(); // Render the first batch of items
-}
+    let itemsHtml = ''; // Declare itemsHtml here
 
-function renderMoreLibraryItems() {
-    const libraryGrid = document.getElementById('library-grid');
-    const sentinel = document.getElementById('library-sentinel');
-    if (sentinel) sentinel.remove(); // Remove the old loading trigger
-
-    let allItems = [];
-    let isListMode = false;
-
-    // --- 1. Get the correctly sorted and filtered list of all items ---
     switch (currentFilter) {
         case 'artists':
             libraryGrid.className = 'item-grid';
             const artistsMap = new Map();
-            songs.forEach(song => {
-                if (!artistsMap.has(song.artist)) artistsMap.set(song.artist, song.albumArt);
+            searchFilteredSongs.forEach(song => {
+                const artist = song.artist || 'Unknown Artist';
+                if (!artistsMap.has(artist)) {
+                    artistsMap.set(artist, song.albumArt);
+                }
             });
-            allItems = Array.from(artistsMap.entries());
-            if (currentSortMode === 'alpha') allItems.sort((a, b) => a[0].localeCompare(b[0]));
+            let artistsList = Array.from(artistsMap.entries());
+            if (currentSortMode === 'alpha') artistsList.sort((a, b) => a[0].localeCompare(b[0]));
+            
+            itemsHtml = artistsList.map(([artist, art]) => `
+                <div class="item-card" data-artist-name="${artist}">
+                    <img src="${art || generateRandomGradient()}" alt="${artist}" class="item-card-art" style="border-radius: 50%;">
+                    <div class="item-card-info" style="text-align: center;">
+                        <div class="item-card-title">${sanitize(artist)}</div>
+                    </div>
+                </div>`).join('');
             break;
+        
         case 'songs':
-            libraryGrid.className = 'item-list';
-            isListMode = true;
-            allItems = [...songs];
-            if (currentSortMode === 'alpha') allItems.sort((a,b) => a.name.localeCompare(b.name));
-            else allItems.sort((a,b) => b.dateAdded - a.dateAdded);
+            libraryGrid.className = 'item-list'; // Enforce list view
+            const sortedSongs = [...searchFilteredSongs]; // Create a copy to sort
+             if (currentSortMode === 'alpha') searchFilteredSongs.sort((a,b) => a.name.localeCompare(b.name));
+             else searchFilteredSongs.sort((a,b) => b.dateAdded - a.dateAdded);
+
+            itemsHtml = searchFilteredSongs.map(song => `
+                <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                     <div class="song-info">
+                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                        <div>
+                            <div class="song-title" style="white-space: normal;">${sanitize(song.name)}</div>
+                            <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
             break;
+
         case 'playlists':
-            libraryGrid.className = 'item-grid';
-            allItems = [...playlists];
+            libraryGrid.className = 'item-grid'; // Enforce grid view
+            itemsHtml = playlists.map(p => {
+                const playlistSongs = p.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+                const art = playlistSongs.length > 0 ? playlistSongs[0].albumArt : generateRandomGradient();
+                return `
+                <div class="item-card" data-playlist-id="${p.id}">
+                    <img src="${art}" alt="${p.name}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${sanitize(p.name)}</div>
+                        <div class="item-card-subtitle">${playlistSongs.length} songs</div>
+                    </div>
+                </div>`;
+            }).join('');
             break;
+
         case 'albums':
         default:
-            libraryGrid.className = 'item-grid';
-            allItems = groupSongsByAlbum(songs);
+            libraryGrid.className = 'item-grid'; // Enforce grid view
+            const albums = groupSongsByAlbum(searchFilteredSongs);
+            itemsHtml = albums.map(album => {
+                const albumId = `${album.artist}::${album.originalAlbum}`;
+                return `
+                <div class="item-card" data-album-id="${albumId}">
+                    <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${sanitize(album.name)}</div>
+                        <div class="item-card-subtitle">${sanitize(album.artist)}</div>
+                    </div>
+                </div>`;
+            }).join('');
             break;
     }
     
-    // --- 2. Get the specific "page" of items to render now ---
-    const startIndex = (libraryCurrentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    const itemsToRender = allItems.slice(startIndex, endIndex);
+    libraryGrid.innerHTML = itemsHtml;
 
-    if (itemsToRender.length === 0 && libraryCurrentPage === 1) {
-        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No items found for this filter.</p></div>`;
-        return;
-    }
-
-    // --- 3. Generate and append the HTML for the new items ---
-    const itemsHtml = itemsToRender.map(item => {
-        // This is a condensed version of your original rendering logic
-        if (currentFilter === 'artists') return `<div class="item-card" data-artist-name="${item[0]}"><img src="${item[1] || generateRandomGradient()}" class="item-card-art" style="border-radius: 50%;"><div class="item-card-info" style="text-align: center;"><div class="item-card-title">${sanitize(item[0])}</div></div></div>`;
-        if (isListMode) return `<div class="music-item" data-id="${item.id}" style="cursor: pointer;"><div class="song-info"><img src="${item.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;"><div><div class="song-title" style="white-space: normal;">${sanitize(item.name)}</div><div class="album-artist" style="font-size: 0.8em;">${sanitize(item.artist)}</div></div></div></div>`;
-        if (currentFilter === 'playlists') {
-            const playlistSongs = item.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
-            return `<div class="item-card" data-playlist-id="${item.id}"><img src="${playlistSongs.length > 0 ? playlistSongs[0].albumArt : generateRandomGradient()}" class="item-card-art"><div class="item-card-info"><div class="item-card-title">${sanitize(item.name)}</div><div class="item-card-subtitle">${playlistSongs.length} songs</div></div></div>`;
-        }
-        // Default to albums
-        return `<div class="item-card" data-album-id="${item.artist}::${item.originalAlbum}"><img src="${item.albumArt}" class="item-card-art"><div class="item-card-info"><div class="item-card-title">${sanitize(item.name)}</div><div class="item-card-subtitle">${sanitize(item.artist)}</div></div></div>`;
-    }).join('');
-
-    libraryGrid.insertAdjacentHTML('beforeend', itemsHtml);
-    
-    // --- 4. Set up the observer for the *next* page ---
-    if (endIndex < allItems.length) {
-        const newSentinel = document.createElement('div');
-        newSentinel.id = 'library-sentinel';
-        libraryGrid.appendChild(newSentinel);
-
-        viewObserver = new IntersectionObserver(entries => {
-            if (entries[0].isIntersecting) {
-                viewObserver.disconnect();
-                libraryCurrentPage++;
-                renderMoreLibraryItems();
-            }
-        }, { rootMargin: '200px' }); // Load next batch when 200px from the bottom
-
-        viewObserver.observe(newSentinel);
-    }
+    // --- SCROLL RESTORATION LOGIC ---
+    requestAnimationFrame(() => {
+        const libraryView = document.getElementById('library-view');
+        libraryView.scrollTop = scrollPositions.library;
+    });
 }
         
 function renderPlaylists() {
@@ -4219,56 +4214,6 @@ function renderQueue() {
 
     makeQueueItemsDraggable();
     addQueueItemEventListeners();
-}
-
-function renderMoreQueueItems() {
-    const container = document.querySelector('#lyrics-queue-panel .queue-list-container');
-    if (!container) return;
-
-    const startIndex = (queueCurrentPage - 1) * QUEUE_ITEMS_PER_PAGE;
-    const endIndex = startIndex + QUEUE_ITEMS_PER_PAGE;
-    const itemsToRender = playQueue.slice(startIndex, endIndex);
-
-    const queueHtml = itemsToRender.map((song, index) => {
-        const trueIndex = startIndex + index; // Calculate the actual index in the full playQueue array
-        return `
-            <div class="music-item queue-item ${song.id === currentSongId ? "active" : ""}" data-queue-index="${trueIndex}" data-id="${song.id}">
-                <div class="song-info">
-                    <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 6px; margin: 0 5px;">
-                    <div class="song-title">${sanitize(song.name)}</div>
-                    <span class="song-artist-queue">${song.artist}</span>
-                    <button class="remove-from-queue-btn" data-queue-index="${trueIndex}">
-                        <span class="material-symbols-rounded" style="font-size: 14px;">cancel</span>
-                    </button>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    container.insertAdjacentHTML('beforeend', queueHtml);
-
-    // Re-attach all event listeners. This is the simplest way to ensure new items are interactive.
-    makeQueueItemsDraggable();
-    addQueueItemEventListeners();
-
-    // Set up the observer to trigger loading the next batch of items
-    if (endIndex < playQueue.length) {
-        const sentinel = document.createElement('div');
-        sentinel.id = 'queue-sentinel';
-        container.appendChild(sentinel);
-
-        viewObserver = new IntersectionObserver(entries => {
-            if (entries[0].isIntersecting) {
-                viewObserver.disconnect(); // Stop observing the current sentinel
-                queueCurrentPage++;
-                renderMoreQueueItems(); // Load the next page
-            }
-        }, { 
-            root: document.getElementById('lyrics-queue-panel'), // Observe scrolling within the panel itself
-            rootMargin: '100px' 
-        });
-        viewObserver.observe(sentinel);
-    }
 }
 
 function scrollToCurrentSongInQueue() {
@@ -4788,24 +4733,22 @@ function openManageFoldersModal() {
     // Populate SoundCloud settings
     document.getElementById('soundcloudClientId').value = soundcloudClientId;
     document.getElementById('soundcloudToggle').checked = isSoundcloudEnabled;
-    document.getElementById('scRecsToggle').checked = isScRecommendationsEnabled; // Add this line
     openModal(manageFoldersModal);
 }
 
-async function saveIntegrationSettings() {
+async function saveSoundcloudSettings() {
     soundcloudClientId = document.getElementById('soundcloudClientId').value.trim();
     isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
-    isScRecommendationsEnabled = document.getElementById('scRecsToggle').checked; // Add this line
 
     const tx = db.transaction('config', 'readwrite');
     await Promise.all([
         tx.objectStore('config').put({ key: 'soundcloudClientId', value: soundcloudClientId }),
-        tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled }),
-        tx.objectStore('config').put({ key: 'isScRecommendationsEnabled', value: isScRecommendationsEnabled }) // Add this line
+        tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled })
     ]);
     
     toggleSoundcloudTab();
 }
+
 function toggleSoundcloudTab() {
     const tab = document.getElementById('soundcloud-tab');
     if (tab) {
@@ -4813,44 +4756,33 @@ function toggleSoundcloudTab() {
     }
 }
 
-async function searchSoundCloud(isNewSearch = true) {
-    if (isNewSearch) {
-        soundcloudCurrentOffset = 0;
-        lastSoundcloudSearchResults = [];
-        document.getElementById('soundcloud-results-grid').innerHTML = '';
-        if (viewObserver) viewObserver.disconnect();
-    }
-
+async function searchSoundCloud() {
     const query = document.getElementById('soundcloudSearchInput').value.trim();
     const resultsGrid = document.getElementById('soundcloud-results-grid');
-    if (!query || !soundcloudClientId) return;
+    if (!query) {
+        resultsGrid.innerHTML = '';
+        lastSoundcloudSearchResults = [];
+        return;
+    }
+    if (!soundcloudClientId) {
+        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>SoundCloud Client ID is not set</p></div>`;
+        return;
+    }
+
+    resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
 
     try {
-        const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=${SOUNDCLOUD_PAGE_LIMIT}&offset=${soundcloudCurrentOffset}`);
+        const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=100`);
         if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
         
         const data = await response.json();
-        const newTracks = data.collection;
-        lastSoundcloudSearchResults.push(...newTracks);
-        
-        const resultsHtml = newTracks.map(track => `<div class="item-card" data-track-id="${track.id}"><img src="${getHighResArtwork(track.artwork_url)}" class="item-card-art"><div class="item-card-info"><div class="item-card-title">${sanitize(track.title)}</div><div class="item-card-subtitle">${sanitize(track.user.username)}</div></div></div>`).join('');
-        resultsGrid.insertAdjacentHTML('beforeend', resultsHtml);
-        
-        soundcloudCurrentOffset += SOUNDCLOUD_PAGE_LIMIT;
+        lastSoundcloudSearchResults = data.collection;
+        renderSoundcloudSearchResults(); // New renderer function
 
-        if (newTracks.length === SOUNDCLOUD_PAGE_LIMIT) {
-            const sentinel = document.createElement('div');
-            sentinel.id = 'sc-sentinel';
-            resultsGrid.appendChild(sentinel);
-            viewObserver = new IntersectionObserver(entries => {
-                if (entries[0].isIntersecting) {
-                    viewObserver.disconnect();
-                    searchSoundCloud(false);
-                }
-            }, { rootMargin: '200px' });
-            viewObserver.observe(sentinel);
-        }
-    } catch (error) { console.error('SoundCloud Search Error:', error); }
+    } catch (error) {
+        console.error('SoundCloud Search Error:', error);
+        resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Error searching SoundCloud</p></div>`;
+    }
 }
 
 // This is a new helper function to manage the cache size
@@ -5625,15 +5557,12 @@ window.addEventListener("load", async () => {
         const configTx = db.transaction('config', 'readonly');
         const scIdReq = configTx.objectStore('config').get('soundcloudClientId');
         const scEnabledReq = configTx.objectStore('config').get('isSoundcloudEnabled');
-        const scRecsReq = configTx.objectStore('config').get('isScRecommendationsEnabled');
         
         const scIdResult = await new Promise(r => { scIdReq.onsuccess = () => r(scIdReq.result) });
         const scEnabledResult = await new Promise(r => { scEnabledReq.onsuccess = () => r(scEnabledReq.result) });
-        const scRecsResult = await new Promise(r => { scRecsReq.onsuccess = () => r(scRecsReq.result) });
         
         soundcloudClientId = scIdResult ? scIdResult.value : '';
         isSoundcloudEnabled = scEnabledResult ? scEnabledResult.value : false;
-        isScRecommendationsEnabled = scRecsResult ? scRecsResult.value : false;
         toggleSoundcloudTab();
 
         await loadSongsAndPlaylists();
@@ -5893,29 +5822,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         
         document.getElementById('home-view').addEventListener('click', (e) => {
-            // This selector now correctly targets highlight cards AND the new SoundCloud item cards
-            const card = e.target.closest('.highlight-card[data-id], .item-card[data-id]');
+            const highlightCard = e.target.closest('.highlight-card[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
-
-            if (card) {
-                const songId = card.dataset.id;
-                const storageType = card.dataset.storage;
-
-                if (storageType === 'soundcloud') {
-                    playSoundcloudTrack(songId); // Play as a single track
-                } else {
-                    const localSong = songs.find(s => s.id === parseFloat(songId));
-                    if (localSong) {
-                        playSong(localSong, [localSong]); // Play local song as a single track
-                    }
+    
+            if (highlightCard) {
+                const songId = parseFloat(highlightCard.dataset.id);
+                const song = songs.find(s => s.id === songId);
+                if (song) {
+                    // Play this single song as its own context
+                    playSong(song, [song]);
                 }
             } else if (albumCard) {
-                // This handles clicks on local library albums from the "Recently Played" or "Genre" sections
                 const albumId = albumCard.dataset.albumId;
                 const [artist, albumName] = albumId.split('::');
-                const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName);
-                if (albumSongs.length > 0) {
-                    playSong(albumSongs[0], albumSongs); // Play the full album
+                // When playing from a "Recently Played" album card, play the first song of that album
+                const songToPlay = songs.find(s => s.albumArtist === artist && s.album === albumName);
+                if(songToPlay) {
+                    // The context is all songs from that album
+                    const albumContext = songs.filter(s => s.albumArtist === artist && s.album === albumName);
+                    playSong(songToPlay, albumContext);
                 }
             }
         });
@@ -6076,10 +6001,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.querySelector('.filter-container .filter-btn.active').classList.remove('active');
                 btn.classList.add('active');
                 currentFilter = btn.dataset.filter;
-                if (activeView === 'library') {
-                    // This now calls the new renderer which handles resetting the page count
-                    renderLibraryPage(); 
-                }
+                if (activeView === 'library') renderLibraryPage();
             });
         });
 
@@ -6250,7 +6172,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
 
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
-        document.getElementById('saveIntegrations').addEventListener('click', saveIntegrationSettings);
+        document.getElementById('saveIntegrations').addEventListener('click', saveSoundcloudSettings);
 
         const soundcloudSearchInput = document.getElementById('soundcloudSearchInput');
         soundcloudSearchInput.addEventListener('input', () => {
