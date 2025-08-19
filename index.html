@@ -3393,7 +3393,7 @@ async function initializeMusicAi() {
         }];
         
         musicAiModel = genAI.getGenerativeModel({
-            model: "gemini-1.5-flash-latest", // Using a powerful model for better selections
+            model: "gemini-2.5-flash", // Using a powerful model for better selections
             tools: tools,
             systemInstruction: systemInstruction,
         });
@@ -3991,19 +3991,6 @@ function renderLibraryPage() {
     
     let itemsHtml = ''; // Declare itemsHtml here
 
-    let aiPlaylistSection = '';
-    if (isGuraAiEnabled && musicAiModel) {
-        aiPlaylistSection = `
-            <div id="ai-playlist-creator" style="margin: 0 auto 20px auto; max-width: 600px; text-align: center; background: var(--search-background); padding: 15px; border-radius: 20px; border: 1px solid var(--glass-border);">
-                <h3 style="margin-bottom: 10px;">Create a Playlist with GuraAI</h3>
-                <div style="display: flex; gap: 10px;">
-                    <input type="text" id="aiPlaylistPrompt" placeholder="e.g., Upbeat rock for a workout" class="library-search-input" style="padding-left: 15px;">
-                    <button id="aiCreatePlaylistBtn" class="action-btn" style="height: auto;">Create</button>
-                </div>
-            </div>
-        `;
-    }
-
     switch (currentFilter) {
         case 'artists':
             libraryGrid.className = 'item-grid';
@@ -4046,7 +4033,9 @@ function renderLibraryPage() {
             break;
 
         case 'playlists':
-            libraryGrid.className = 'item-grid'; // Enforce grid view
+            libraryGrid.className = 'item-grid';
+            
+            // Generate the HTML for the user's existing playlists first
             itemsHtml = playlists.map(p => {
                 const playlistSongs = p.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
                 const art = playlistSongs.length > 0 ? playlistSongs[0].albumArt : generateRandomGradient();
@@ -4059,6 +4048,21 @@ function renderLibraryPage() {
                     </div>
                 </div>`;
             }).join('');
+        
+            // Now, generate the AI creator section ONLY if AI is enabled
+            if (isGuraAiEnabled && musicAiModel) {
+                const aiPlaylistSection = `
+                    <div id="ai-playlist-creator" style="grid-column: 1 / -1; margin: 20px auto 0 auto; max-width: 600px; text-align: center; background: var(--search-background); padding: 15px; border-radius: 20px; border: 1px solid var(--glass-border);">
+                        <h3 style="margin-bottom: 10px;">Create a Playlist with GuraAI</h3>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="aiPlaylistPrompt" placeholder="e.g., Upbeat rock for a workout" class="library-search-input" style="padding-left: 15px;">
+                            <button id="aiCreatePlaylistBtn" class="action-btn" style="height: auto;">Create</button>
+                        </div>
+                    </div>
+                `;
+                // Append the AI section to the end of the playlists HTML
+                itemsHtml += aiPlaylistSection;
+            }
             break;
 
         case 'albums':
@@ -4079,8 +4083,8 @@ function renderLibraryPage() {
             break;
     }
     
-    libraryGrid.insertAdjacentHTML('beforebegin', aiPlaylistSection);
-
+    libraryGrid.innerHTML = itemsHtml;
+    
     // --- SCROLL RESTORATION LOGIC ---
     requestAnimationFrame(() => {
         const libraryView = document.getElementById('library-view');
