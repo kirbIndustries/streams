@@ -3399,7 +3399,7 @@ async function initializeMusicAi() {
             "functionDeclarations": [
                 {
                     "name": "createPlaylist",
-                    "description": "Creates a new playlist based on a user's descriptive prompt (e.g., 'a workout playlist').",
+                    "description": "Creates a new playlist.",
                     "parameters": {
                         "type": "OBJECT",
                         "properties": {
@@ -4093,11 +4093,10 @@ function renderLibraryPage() {
             // Now, generate the AI creator section ONLY if AI is enabled
             if (isGuraAiEnabled && musicAiModel) {
                 const aiPlaylistSection = `
-                    <div id="ai-playlist-creator" style="grid-column: 1 / -1; margin: 20px auto 0 auto; max-width: 600px; text-align: center; background: var(--search-background); padding: 15px; border-radius: 20px; border: 1px solid var(--glass-border);">
-                        <h3 style="margin-bottom: 10px;">Create a Playlist with GuraAI</h3>
+                    <div id="ai-playlist-creator" style="grid-column: 1 / -1; margin: 20px auto 0 auto; max-width: 600px; text-align: center;">
                         <div style="display: flex; gap: 10px;">
-                            <input type="text" id="aiPlaylistPrompt" placeholder="e.g., Upbeat rock for a workout" class="library-search-input" style="padding-left: 15px;">
-                            <button id="aiCreatePlaylistBtn" class="action-btn" style="height: auto;">Create</button>
+                            <input type="text" id="aiPlaylistPrompt" placeholder="Create a Playlist with GuraAI" class="library-search-input" style="padding-left: 15px;">
+                            <button id="aiCreatePlaylistBtn" class="action-btn" style="height: auto;"><span class="material-symbols-rounded" style="font-size: 18px;">add</span></button>
                         </div>
                     </div>
                 `;
