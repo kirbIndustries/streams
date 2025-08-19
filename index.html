@@ -3979,27 +3979,45 @@ async function renderHomePage() {
 
 async function updateAiHomePagePrompts() {
     const promptsContainer = document.getElementById('ai-dynamic-prompts');
-    if (!promptsContainer) return; // Exit if the placeholder isn't on the page
+    if (!promptsContainer) return;
 
-    // You can add a subtle loading indicator here if you wish
-    promptsContainer.innerHTML = `<span style="font-size: 14px; color: var(--secondary-text-color);">GuraAI is thinking...</span>`;
+    promptsContainer.innerHTML = `<button class="action-btn" data-prompt="Create a high-energy playlist">High-energy Playlist</button><button class="action-btn" data-prompt="Find some relaxing songs">Relaxing Songs</button><button class="action-btn" data-prompt="Recommend a genre I might like">Suggest a Genre</button>`;
 
     let dynamicPromptsHtml = '';
     try {
-        const prompt = `Based on the user's library, suggest 3 short, action-oriented prompts for buttons. The prompts should inspire the user to create a playlist or discover music. Good examples: "Create a workout playlist", "Songs for a rainy day", "Show me my best rock songs". Bad examples: "Play Artist - Song Title".
+        // A slightly stronger prompt encouraging the correct format
+        const prompt = `Based on the user's library, suggest 3 short, action-oriented prompts for buttons to help them discover music. YOU MUST format your response by calling the 'createPlaylist' function and putting the 3 prompts inside the 'songs' array.
 
         Library Sample:\n${formatSongsForAiPrompt(songs.slice(0, 50))}`;
         
         const result = await musicAiModel.generateContent(prompt);
-        const call = result.response.functionCalls()?.[0];
+        const response = result.response;
+        const call = response.functionCalls()?.[0];
+        let promptIdeas = [];
 
-        if (call && (call.name === 'createPlaylist' || call.name === 'getSongRecommendations') && call.args.songs) {
-            // AI returned valid prompts
-            const promptIdeas = call.args.songs.slice(0, 3);
+        // --- THE FIX: Intelligent Fallback Logic ---
+        if (call && call.name === 'createPlaylist' && call.args.songs) {
+            // Path 1: The AI worked perfectly and used the function tool.
+            console.log("AI responded with a function call.");
+            promptIdeas = call.args.songs.slice(0, 3);
+        } else {
+            // Path 2: The AI responded with plain text. We will parse it.
+            console.log("AI responded with plain text, parsing fallback.");
+            const textResponse = response.text();
+            if (textResponse) {
+                // Parse a string like: "Prompt 1", "Prompt 2", "Prompt 3"
+                promptIdeas = textResponse.split(',') // Split by comma
+                                        .map(p => p.trim().replace(/"/g, '')) // Remove whitespace and quotes
+                                        .filter(p => p.length > 5) // Filter out any empty strings
+                                        .slice(0, 3);
+            }
+        }
+
+        if (promptIdeas.length > 0) {
             dynamicPromptsHtml = promptIdeas.map(p => `<button class="action-btn" data-prompt="${sanitize(p)}">${sanitize(p)}</button>`).join('');
         } else {
-            // Fallback if AI fails or returns unexpected data
-            throw new Error("AI did not return valid prompts.");
+            // This now only runs if both the function call AND text parsing fail.
+            throw new Error("AI did not return any valid prompts in any format.");
         }
     } catch (e) {
         console.error("AI dynamic prompt generation failed:", e);
