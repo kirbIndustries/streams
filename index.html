@@ -3664,58 +3664,71 @@ async function getArtColors(imageUrl) {
 async function renderHomePage() {
     const homeView = document.getElementById('home-view');
     if (!homeView) return;
+    homeView.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
 
-    // --- 1. Fetch all necessary data asynchronously ---
-    const topSongsPromise = new Promise(resolve => {
-        const tx = db.transaction('songs', 'readonly');
-        const index = tx.objectStore('songs').index('playCount');
-        const req = index.getAll();
-        req.onsuccess = () => resolve(req.result.sort((a,b) => (b.playCount || 0) - (a.playCount || 0)).slice(0, 10));
-    });
+    // --- 1. Fetch Local Data (Top Songs & History) ---
+    const topSongsPromise = db.transaction('songs', 'readonly').objectStore('songs').index('playCount').getAll();
+    const historyPromise = db.transaction('playHistory', 'readonly').objectStore('playHistory').getAll();
 
-    const historyPromise = new Promise(resolve => {
-        const tx = db.transaction('playHistory', 'readonly');
-        const store = tx.objectStore('playHistory');
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result.sort((a,b) => b.timestamp - a.timestamp));
-    });
+    const [localTopSongs, history] = await Promise.all([
+        promiseIDBRequest(topSongsPromise),
+        promiseIDBRequest(historyPromise)
+    ]);
+    localTopSongs.sort((a,b) => (b.playCount || 0) - (a.playCount || 0));
 
-    const [topSongs, history] = await Promise.all([topSongsPromise, historyPromise]);
-    // --- 2. Select 4 unique songs for the highlights ---
-    
-    const highlightSongs = new Set();
-    const listenAgainSongs = [];
-    if (topSongs.length > 0) {
-        listenAgainIndex = (listenAgainIndex + 1) % Math.min(topSongs.length, 10);
-        localStorage.setItem('listenAgainIndex', listenAgainIndex);
-        listenAgainSongs.push(topSongs[listenAgainIndex]);
-        if (topSongs.length > 1) {
-            listenAgainSongs.push(topSongs[(listenAgainIndex + 1) % topSongs.length]);
-        }
-        if (topSongs.length > 2) {
-            listenAgainSongs.push(topSongs[(listenAgainIndex + 2) % topSongs.length]);
-        }
-        if (topSongs.length > 3) {
-            listenAgainSongs.push(topSongs[(listenAgainIndex + 3) % topSongs.length]);
+    // --- 2. Fetch SoundCloud Recommendations (if enabled) ---
+    let scRecommendations = [];
+    if (isSoundcloudEnabled && isScRecommendationsEnabled && soundcloudClientId && songs.length > 0) {
+        // Create a query based on top artists and genres from the user's library
+        const topArtists = [...new Set(localTopSongs.slice(0, 5).map(s => s.artist))];
+        const topGenres = [...new Set(songs.map(s => s.genre).filter(Boolean))].slice(0, 3);
+        const query = [...topArtists, ...topGenres].join(' ');
+
+        try {
+            const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=50`);
+            const data = await response.json();
+            scRecommendations = data.collection.map(track => ({
+                id: track.id,
+                name: track.title,
+                artist: track.user.username,
+                albumArt: getHighResArtwork(track.artwork_url),
+                storage: 'soundcloud', // Critical for the click handler
+            }));
+        } catch (e) {
+            console.error("Failed to fetch SoundCloud recommendations:", e);
         }
     }
+
+    // --- 3. Combine and Select Songs for Highlights ---
+    const highlightSongs = new Set();
+    const listenAgainSongs = localTopSongs.slice(0, 4); // "Listen Again" is always from local top songs
     listenAgainSongs.forEach(s => highlightSongs.add(s));
 
-    const recommendations = songs.filter(s => !listenAgainSongs.some(ls => ls.id === s.id));
-    for (let i = 0; i < 4 && recommendations.length > 0; i++) {
-        const randomIndex = Math.floor(Math.random() * recommendations.length);
-        highlightSongs.add(recommendations.splice(randomIndex, 1)[0]);
+    // Create a combined pool of other local songs and SC recommendations
+    const recommendationPool = [
+        ...songs.filter(s => !listenAgainSongs.some(ls => ls.id === s.id)), // Other local songs
+        ...scRecommendations
+    ];
+    shuffleArray(recommendationPool); // Shuffle the combined pool
+
+    // Fill the rest of the highlight grid from the shuffled pool
+    let i = 0;
+    while (highlightSongs.size < 8 && i < recommendationPool.length) {
+        highlightSongs.add(recommendationPool[i]);
+        i++;
     }
-    
-    // --- 3. Build the HTML ---
+
+    // --- 4. Build the HTML ---
     const highlights = Array.from(highlightSongs);
     const highlightsHtml = highlights.map((song, i) => {
         const isListenAgain = listenAgainSongs.includes(song);
+        const label = song.storage === 'soundcloud' ? 'Discover on SoundCloud' : (isListenAgain ? 'Listen Again' : 'From Your Library');
+        // Add data-storage attribute to distinguish song types
         return `
-        <div class="highlight-card" data-id="${song.id}" id="highlight-${i+1}">
+        <div class="highlight-card" data-id="${song.id}" data-storage="${song.storage || 'local'}" id="highlight-${i+1}">
             <img src="${song.albumArt}">
             <div class="highlight-card-info">
-                <div class="highlight-card-label">${isListenAgain ? 'Listen Again' : 'From Your Library'}</div>
+                <div class="highlight-card-label">${label}</div>
                 <div class="highlight-card-title">${sanitize(song.name)}</div>
                 <div class="highlight-card-subtitle">${sanitize(song.artist)}</div>
             </div>
@@ -3725,16 +3738,8 @@ async function renderHomePage() {
 
     const recentSongIds = [...new Set(history.map(h => h.songId))];
     const recentlyPlayedSongs = recentSongIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
-    const recentAlbums = [];
-    const recentAlbumIds = new Set();
-    for (const song of recentlyPlayedSongs) {
-        const albumId = `${song.albumArtist}::${song.album}`;
-        if (!recentAlbumIds.has(albumId)) {
-            recentAlbumIds.add(albumId);
-            recentAlbums.push(song); // Use the song object as a representative for the album
-        }
-        if (recentAlbums.length >= 40) break; // Limit to 40 albums
-    }
+    const recentAlbums = [...new Map(recentlyPlayedSongs.map(song => [`${song.albumArtist}::${song.album}`, song])).values()].slice(0, 40);
+    
     const recentlyPlayedHtml = recentAlbums.map(song => `
          <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
             <img src="${song.albumArt}" class="item-card-art">
@@ -3745,24 +3750,6 @@ async function renderHomePage() {
         </div>
     `).join('');
     
-    const genres = [...new Set(songs.map(s => s.genre).filter(Boolean))];
-    const genreSectionsHtml = genres.map(genre => {
-        const genreSongs = songs.filter(s => s.genre === genre).slice(0, 8);
-        return `
-        <div>
-            <h2 class="section-title">${sanitize(genre)}</h2>
-            <div class="item-grid">${genreSongs.map(song => `
-                <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
-                    <img src="${song.albumArt}" class="item-card-art">
-                    <div class="item-card-info">
-                        <div class="item-card-title">${sanitize(song.album)}</div>
-                        <div class="item-card-subtitle">${sanitize(song.albumArtist)}</div>
-                    </div>
-                </div>
-            `).join('')}</div> 
-        </div>`;
-    }).join('');
-
     homeView.innerHTML = `
     <div class="page-content-wrapper">
         <div class="highlight-grid">${highlightsHtml}</div>
@@ -3770,21 +3757,15 @@ async function renderHomePage() {
             <h2 class="section-title">Recently Played</h2>
             <div class="item-grid">${recentlyPlayedHtml}</div>
         </div>
-        ${genreSectionsHtml}
     </div>`;
     
-    // --- 4. Asynchronously Apply Gradients ---
+    // Asynchronously apply background gradients to cards
     highlights.forEach((song, i) => {
         const card = document.getElementById(`highlight-${i+1}`);
-        if (card) {
-            getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
-        }
+        if (card) getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
     });
 
-    requestAnimationFrame(() => {
-        const homeView = document.getElementById('home-view');
-        homeView.scrollTop = scrollPositions.home;
-    });
+    requestAnimationFrame(() => { homeView.scrollTop = scrollPositions.home; });
 }
 
 function renderLibraryPage() {
@@ -4733,6 +4714,7 @@ function openManageFoldersModal() {
     // Populate SoundCloud settings
     document.getElementById('soundcloudClientId').value = soundcloudClientId;
     document.getElementById('soundcloudToggle').checked = isSoundcloudEnabled;
+    document.getElementById('scRecsToggle').checked = isScRecommendationsEnabled; // Add this line
     openModal(manageFoldersModal);
 }
 
@@ -5830,21 +5812,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             const albumCard = e.target.closest('.item-card[data-album-id]');
     
             if (highlightCard) {
-                const songId = parseFloat(highlightCard.dataset.id);
-                const song = songs.find(s => s.id === songId);
-                if (song) {
-                    // Play this single song as its own context
-                    playSong(song, [song]);
+                const songId = highlightCard.dataset.id;
+                const storageType = highlightCard.dataset.storage;
+
+                if (storageType === 'soundcloud') {
+                    // If it's a SoundCloud track, play it directly
+                    playSoundcloudTrack(songId); // Pass only the ID to play as a single track
+                } else {
+                    // If it's a local track, find it in the library and play it
+                    const localSong = songs.find(s => s.id === parseFloat(songId));
+                    if (localSong) {
+                        playSong(localSong, [localSong]); // Play as a single track
+                    }
                 }
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
                 const [artist, albumName] = albumId.split('::');
-                // When playing from a "Recently Played" album card, play the first song of that album
-                const songToPlay = songs.find(s => s.albumArtist === artist && s.album === albumName);
-                if(songToPlay) {
-                    // The context is all songs from that album
-                    const albumContext = songs.filter(s => s.albumArtist === artist && s.album === albumName);
-                    playSong(songToPlay, albumContext);
+                const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName);
+                if (albumSongs.length > 0) {
+                    playSong(albumSongs[0], albumSongs); // Play the album
                 }
             }
         });
