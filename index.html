@@ -3436,10 +3436,21 @@ async function initializeMusicAi() {
 }
 
 // Helper function to find a song object from a string like "Artist - Title"
-function findSongByString(artistTitleString) {
-    const [artist, title] = artistTitleString.split(' - ').map(s => s.trim());
+function findSongByString(artistTitleString, additionalSongs = []) {
+    const [artist, title] = artistTitleString.split(' - ').map(s => s.trim().toLowerCase());
     if (!artist || !title) return null;
-    return songs.find(song => song.artist === artist && song.name === title);
+
+    // Search local library first
+    const localMatch = songs.find(song => 
+        song.artist.toLowerCase() === artist && song.name.toLowerCase() === title
+    );
+    if (localMatch) return localMatch;
+
+    // If not found, search the temporary list (e.g., SoundCloud recommendations)
+    const additionalMatch = additionalSongs.find(song => 
+        song.artist.toLowerCase() === artist && song.name.toLowerCase() === title
+    );
+    return additionalMatch || null;
 }
 
 const availableMusicFunctions = {
@@ -4711,24 +4722,66 @@ async function generateAutoplaySongs() {
     renderQueue();
 }
 
+function formatSongsForAiPrompt(songList) {
+    if (!songList || songList.length === 0) return "No songs available.";
+    // Provide more context: Title, Artist, Genre, and Source (SoundCloud or Local)
+    return songList.map(s => 
+        `Title: ${s.name}, Artist: ${s.artist}, Genre: ${s.genre || 'Unknown'}, Source: ${s.storage === 'soundcloud' ? 'SoundCloud' : 'Local'}`
+    ).join('\n');
+}
+
 async function generateAiAutoplaySongs() {
-    if (!musicAiModel) return []; // AI not ready
+    if (!musicAiModel) return [];
 
     const contextQueue = playQueue.length > 0 ? playQueue : (currentlyPlayingSong ? [currentlyPlayingSong] : []);
     if (contextQueue.length === 0) return [];
+
+    // --- Build Comprehensive Context for AI ---
+    let comprehensiveLibrary = [...songs];
+    const userQueueSongIds = new Set(playQueue.map(s => s.id));
+
+    // 1. If SoundCloud is enabled, fetch potential recommendations to add to the AI's knowledge base.
+    if (isSoundcloudEnabled && soundcloudClientId) {
+        const contextArtists = new Set(contextQueue.map(s => s.artist).filter(Boolean));
+        const contextGenres = new Set(contextQueue.map(s => s.genre).filter(Boolean));
+        const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
+        
+        const promises = searchTerms.map(term =>
+            fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=10`)
+                .then(res => res.ok ? res.json() : { collection: [] })
+                .catch(() => ({ collection: [] }))
+        );
+        const results = await Promise.all(promises);
+        const scTracks = results.flatMap(data => data.collection).map(track => ({
+            id: track.id, name: track.title, artist: track.user.username,
+            album: 'SoundCloud', albumArt: getHighResArtwork(track.artwork_url), storage: 'soundcloud', genre: track.genre
+        }));
+
+        // Add SoundCloud tracks to the library if they aren't duplicates of local songs
+        scTracks.forEach(scSong => {
+            const uniqueKey = `${scSong.artist.toLowerCase().trim()}::${scSong.name.toLowerCase().trim()}`;
+            if (!localSongLookup.has(uniqueKey)) {
+                comprehensiveLibrary.push(scSong);
+            }
+        });
+    }
     
-    const historyPrompt = `Based on the user's current queue:\n${formatLibraryForPrompt(contextQueue)}\n\nSelect 20 similar songs from their full library below.`;
-    const libraryPrompt = formatLibraryForPrompt(songs);
-    const fullPrompt = `${historyPrompt}\n\nFull Library:\n${libraryPrompt}`;
+    // 2. Create a precise prompt for the AI
+    const queuePrompt = `The user's current queue contains:\n${formatSongsForAiPrompt(contextQueue)}`;
+    const libraryPrompt = `Here is the comprehensive library of available songs (Local and SoundCloud):\n${formatSongsForAiPrompt(comprehensiveLibrary)}`;
+    const instructionPrompt = `\nSelect up to 20 songs from the comprehensive library that are similar to the user's queue. CRITICAL: Do NOT include any songs that are already in the queue.`;
+    
+    const fullPrompt = `${queuePrompt}\n\n${libraryPrompt}\n\n${instructionPrompt}`;
 
     try {
         const result = await musicAiModel.generateContent(fullPrompt);
         const call = result.response.functionCalls()?.[0];
 
         if (call && call.name === 'getSongRecommendations') {
+            // Find the full song objects from the AI's string recommendations
             const recommendedSongs = call.args.songs
-                .map(findSongByString)
-                .filter(Boolean); // Find song objects and filter out any nulls
+                .map(songString => findSongByString(songString, comprehensiveLibrary))
+                .filter(song => song && !userQueueSongIds.has(song.id)); // Final check for duplicates
             return recommendedSongs;
         }
     } catch (error) {
