@@ -3670,64 +3670,50 @@ async function renderHomePage() {
     if (!homeView) return;
     homeView.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
 
-    // --- 1. Fetch Local Data (Top Songs & History) ---
+    // --- 1. Fetch Local Data ---
     const topSongsPromise = db.transaction('songs', 'readonly').objectStore('songs').index('playCount').getAll();
     const historyPromise = db.transaction('playHistory', 'readonly').objectStore('playHistory').getAll();
-
+    
     const [localTopSongs, history] = await Promise.all([
         promiseIDBRequest(topSongsPromise),
         promiseIDBRequest(historyPromise)
     ]);
     localTopSongs.sort((a,b) => (b.playCount || 0) - (a.playCount || 0));
+    history.sort((a,b) => b.timestamp - a.timestamp);
 
-    // --- 2. Fetch SoundCloud Recommendations (if enabled) ---
-    let scRecommendations = [];
-    if (isSoundcloudEnabled && isScRecommendationsEnabled && soundcloudClientId && songs.length > 0) {
-        // Create a query based on top artists and genres from the user's library
-        const topArtists = [...new Set(localTopSongs.slice(0, 5).map(s => s.artist))];
-        const topGenres = [...new Set(songs.map(s => s.genre).filter(Boolean))].slice(0, 3);
-        const query = [...topArtists, ...topGenres].join(' ');
-
-        try {
-            const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=50`);
-            const data = await response.json();
-            scRecommendations = data.collection.map(track => ({
-                id: track.id,
-                name: track.title,
-                artist: track.user.username,
-                albumArt: getHighResArtwork(track.artwork_url),
-                storage: 'soundcloud', // Critical for the click handler
-            }));
-        } catch (e) {
-            console.error("Failed to fetch SoundCloud recommendations:", e);
+    // --- 2. Build "Listen Again" Section (Rotation Logic Fixed) ---
+    const listenAgainSongs = [];
+    if (localTopSongs.length > 0) {
+        listenAgainIndex = (listenAgainIndex + 1) % Math.max(1, localTopSongs.length - 3); // Cycle through top songs
+        localStorage.setItem('listenAgainIndex', listenAgainIndex);
+        for (let i = 0; i < 4 && (listenAgainIndex + i) < localTopSongs.length; i++) {
+            listenAgainSongs.push(localTopSongs[listenAgainIndex + i]);
         }
     }
 
-    // --- 3. Combine and Select Songs for Highlights ---
-    const highlightSongs = new Set();
-    const listenAgainSongs = localTopSongs.slice(0, 4); // "Listen Again" is always from local top songs
-    listenAgainSongs.forEach(s => highlightSongs.add(s));
-
-    // Create a combined pool of other local songs and SC recommendations
-    const recommendationPool = [
-        ...songs.filter(s => !listenAgainSongs.some(ls => ls.id === s.id)), // Other local songs
-        ...scRecommendations
-    ];
-    shuffleArray(recommendationPool); // Shuffle the combined pool
-
-    // Fill the rest of the highlight grid from the shuffled pool
-    let i = 0;
-    while (highlightSongs.size < 12 && i < recommendationPool.length) {
-        highlightSongs.add(recommendationPool[i]);
-        i++;
+    // --- 3. Build Main "Highlights" Section (SC Integration Fixed) ---
+    let highlightSongs = [...listenAgainSongs];
+    if (isSoundcloudEnabled && isScRecommendationsEnabled && soundcloudClientId && songs.length > 0) {
+        const topArtists = [...new Set(localTopSongs.slice(0, 5).map(s => s.artist))];
+        const query = topArtists.join(' ');
+        try {
+            const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=20`);
+            const data = await response.json();
+            const scRecs = data.collection.map(track => ({
+                id: track.id, name: track.title, artist: track.user.username,
+                albumArt: getHighResArtwork(track.artwork_url), storage: 'soundcloud',
+            }));
+            highlightSongs.push(...scRecs);
+        } catch (e) { console.error("Failed to fetch SC highlights:", e); }
     }
-
-    // --- 4. Build the HTML ---
-    const highlights = Array.from(highlightSongs);
-    const highlightsHtml = highlights.map((song, i) => {
+    // Add local songs to fill up the highlights if needed
+    const localRecs = songs.filter(s => !highlightSongs.some(hs => hs.id === s.id));
+    shuffleArray(localRecs);
+    highlightSongs.push(...localRecs.slice(0, 12 - highlightSongs.length));
+    
+    const highlightsHtml = highlightSongs.slice(0, 12).map((song, i) => {
         const isListenAgain = listenAgainSongs.includes(song);
         const label = song.storage === 'soundcloud' ? 'Discover on SoundCloud' : (isListenAgain ? 'Listen Again' : 'From Your Library');
-        // Add data-storage attribute to distinguish song types
         return `
         <div class="highlight-card" data-id="${song.id}" data-storage="${song.storage || 'local'}" id="highlight-${i+1}">
             <img src="${song.albumArt}">
@@ -3740,31 +3726,78 @@ async function renderHomePage() {
         </div>`;
     }).join('');
 
+    // --- 4. Build "Similar To..." Sections (New Feature) ---
+    let similarSectionsHtml = '';
+    if (isSoundcloudEnabled && isScRecommendationsEnabled && soundcloudClientId && localTopSongs.length > 0) {
+        const seedSongs = shuffleArray([...localTopSongs]).slice(0, 3); // Pick 3 random top songs as seeds
+        for (const seed of seedSongs) {
+            try {
+                const query = `${seed.artist} ${seed.name}`;
+                const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=20`);
+                const data = await response.json();
+                const similarTracks = data.collection
+                    .filter(track => !songs.some(s => s.name === track.title && s.artist === track.user.username)) // Deduplicate
+                    .slice(0, 8);
+                
+                if (similarTracks.length > 0) {
+                    similarSectionsHtml += `
+                    <div>
+                        <h2 class="section-title">Similar to ${sanitize(seed.name)}</h2>
+                        <div class="item-grid">${similarTracks.map(track => `
+                            <div class="item-card" data-id="${track.id}" data-storage="soundcloud">
+                                <img src="${getHighResArtwork(track.artwork_url)}" class="item-card-art">
+                                <div class="item-card-info">
+                                    <div class="item-card-title">${sanitize(track.title)}</div>
+                                    <div class="item-card-subtitle">${sanitize(track.user.username)}</div>
+                                </div>
+                            </div>`).join('')}
+                        </div> 
+                    </div>`;
+                }
+            } catch (e) { console.error(`Failed to fetch similar tracks for ${seed.name}:`, e); }
+        }
+    }
+
+    // --- 5. Build "Recently Played" and "Genre" Sections (Restored) ---
     const recentSongIds = [...new Set(history.map(h => h.songId))];
-    const recentlyPlayedSongs = recentSongIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
-    const recentAlbums = [...new Map(recentlyPlayedSongs.map(song => [`${song.albumArtist}::${song.album}`, song])).values()].slice(0, 40);
-    
-    const recentlyPlayedHtml = recentAlbums.map(song => `
-         <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
-            <img src="${song.albumArt}" class="item-card-art">
-            <div class="item-card-info">
-                <div class="item-card-title">${sanitize(song.album)}</div>
-                <div class="item-card-subtitle">${sanitize(song.albumArtist)}</div>
+    const recentAlbums = [...new Map(recentSongIds.map(id => songs.find(s => s.id === id)).filter(Boolean).map(song => [`${song.albumArtist}::${song.album}`, song])).values()].slice(0, 40);
+    const recentlyPlayedHtml = recentAlbums.length > 0 ? `
+        <div>
+            <h2 class="section-title">Recently Played</h2>
+            <div class="item-grid">${recentAlbums.map(song => `
+                <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
+                    <img src="${song.albumArt}" class="item-card-art">
+                    <div class="item-card-info"><div class="item-card-title">${sanitize(song.album)}</div><div class="item-card-subtitle">${sanitize(song.albumArtist)}</div></div>
+                </div>`).join('')}
             </div>
-        </div>
-    `).join('');
-    
+        </div>` : '';
+
+    const genres = [...new Set(songs.map(s => s.genre).filter(Boolean))];
+    const genreSectionsHtml = genres.map(genre => {
+        const genreSongs = songs.filter(s => s.genre === genre);
+        return `
+        <div>
+            <h2 class="section-title">${sanitize(genre)}</h2>
+            <div class="item-grid">${shuffleArray(genreSongs).slice(0, 8).map(song => `
+                <div class="item-card" data-album-id="${sanitize(song.albumArtist)}::${sanitize(song.album)}">
+                    <img src="${song.albumArt}" class="item-card-art">
+                    <div class="item-card-info"><div class="item-card-title">${sanitize(song.album)}</div><div class="item-card-subtitle">${sanitize(song.albumArtist)}</div></div>
+                </div>`).join('')}
+            </div> 
+        </div>`;
+    }).join('');
+
+    // --- 6. Final Assembly ---
     homeView.innerHTML = `
     <div class="page-content-wrapper">
         <div class="highlight-grid">${highlightsHtml}</div>
-        <div>
-            <h2 class="section-title">Recently Played</h2>
-            <div class="item-grid">${recentlyPlayedHtml}</div>
-        </div>
+        ${similarSectionsHtml}
+        ${recentlyPlayedHtml}
+        ${genreSectionsHtml}
     </div>`;
     
-    // Asynchronously apply background gradients to cards
-    highlights.forEach((song, i) => {
+    // Asynchronously apply gradients to highlight cards
+    highlightSongs.slice(0, 12).forEach((song, i) => {
         const card = document.getElementById(`highlight-${i+1}`);
         if (card) getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
     });
