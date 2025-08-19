@@ -3692,26 +3692,34 @@ async function renderHomePage() {
     }
 
     // --- 3. Build Main "Highlights" Section (SC Integration Fixed) ---
-    let highlightSongs = [...listenAgainSongs];
+    let highlightSongs = [];
+    const localRecsPool = songs.filter(s => !listenAgainSongs.some(ls => ls.id === s.id));
+    shuffleArray(localRecsPool);
+
     if (isSoundcloudEnabled && isScRecommendationsEnabled && soundcloudClientId && songs.length > 0) {
+        // SC ENABLED: 4 Listen Again + 4 Library + 4 SoundCloud
+        const localRecs = localRecsPool.slice(0, 4);
+        let scRecs = [];
         const topArtists = [...new Set(localTopSongs.slice(0, 5).map(s => s.artist))];
         const query = topArtists.join(' ');
         try {
             const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=20`);
             const data = await response.json();
-            const scRecs = data.collection.map(track => ({
+            scRecs = data.collection.map(track => ({
                 id: track.id, name: track.title, artist: track.user.username,
                 albumArt: getHighResArtwork(track.artwork_url), storage: 'soundcloud',
-            }));
-            highlightSongs.push(...scRecs);
+            })).slice(0, 4);
         } catch (e) { console.error("Failed to fetch SC highlights:", e); }
+
+        highlightSongs = [...listenAgainSongs, ...localRecs, ...scRecs];
+
+    } else {
+        // SC DISABLED: 4 Listen Again + 4 Library
+        const localRecs = localRecsPool.slice(0, 4);
+        highlightSongs = [...listenAgainSongs, ...localRecs];
     }
-    // Add local songs to fill up the highlights if needed
-    const localRecs = songs.filter(s => !highlightSongs.some(hs => hs.id === s.id));
-    shuffleArray(localRecs);
-    highlightSongs.push(...localRecs.slice(0, 12 - highlightSongs.length));
     
-    const highlightsHtml = highlightSongs.slice(0, 12).map((song, i) => {
+    const highlightsHtml = highlightSongs.map((song, i) => {
         const isListenAgain = listenAgainSongs.includes(song);
         const label = song.storage === 'soundcloud' ? 'Discover on SoundCloud' : (isListenAgain ? 'Listen Again' : 'From Your Library');
         return `
@@ -3798,7 +3806,7 @@ async function renderHomePage() {
     </div>`;
     
     // Asynchronously apply gradients to highlight cards
-    highlightSongs.slice(0, 12).forEach((song, i) => {
+    highlightSongs.forEach((song, i) => {
         const card = document.getElementById(`highlight-${i+1}`);
         if (card) getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
     });
