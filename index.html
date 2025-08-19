@@ -4363,14 +4363,14 @@ function removeAutoplaySongs() {
 }
 
 async function generateAutoplaySongs() {
-    // If queue is empty, use the currently playing song as context, otherwise use the whole queue
+    // Use the currently playing song as context if the queue is empty, otherwise use the whole queue.
     const contextQueue = playQueue.length > 0 ? playQueue : (currentlyPlayingSong ? [currentlyPlayingSong] : []);
     if (contextQueue.length === 0) return;
 
-    // Clear any previous autoplay songs before generating new ones
+    // Always clear previous autoplay songs before generating new ones.
     removeAutoplaySongs(); 
 
-    const queueSongIds = new Set(contextQueue.map(s => s.id));
+    const userQueueSongIds = new Set(playQueue.map(s => s.id)); // IDs of songs the user has added.
     const contextArtists = new Set();
     const contextGenres = new Set();
 
@@ -4382,18 +4382,32 @@ async function generateAutoplaySongs() {
     let localRecommendations = [];
     let soundcloudRecommendations = [];
 
-    // 1. Get Local Library Recommendations
+    // --- 1. Get Local Library Recommendations ---
     const artistMatches = songs.filter(song => contextArtists.has(song.artist));
     const genreMatches = songs.filter(song => contextGenres.has(song.genre));
     localRecommendations = [...artistMatches, ...genreMatches];
 
-    // 2. Get SoundCloud Recommendations (if enabled)
+    // --- 2. Get SoundCloud Recommendations (if enabled) by performing MULTIPLE searches ---
     if (isSoundcloudEnabled && soundcloudClientId) {
-        const query = [...contextArtists, ...contextGenres].join(' ');
+        // Create a unique list of search terms from the queue's context.
+        const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
+        
+        // Create an array of fetch promises, one for each search term.
+        const promises = searchTerms.map(term => 
+            fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=15`)
+        );
+
         try {
-            const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=50`);
-            const data = await response.json();
-            soundcloudRecommendations = data.collection.map(track => ({
+            // Run all searches in parallel for speed.
+            const responses = await Promise.all(promises);
+            // Parse the JSON from each successful response. If a search fails, treat it as an empty result.
+            const jsonPromises = responses.map(res => res.ok ? res.json() : Promise.resolve({ collection: [] }));
+            const results = await Promise.all(jsonPromises);
+            
+            // Flatten the array of arrays of tracks into a single array.
+            const allTracks = results.flatMap(data => data.collection);
+
+            soundcloudRecommendations = allTracks.map(track => ({
                 id: track.id,
                 name: track.title,
                 artist: track.user.username,
@@ -4406,15 +4420,15 @@ async function generateAutoplaySongs() {
         }
     }
 
-    // 3. Combine and Deduplicate all recommendations
+    // --- 3. Combine and Deduplicate all recommendations ---
     const allRecommendations = [...localRecommendations, ...soundcloudRecommendations];
     const uniqueSongs = new Map();
 
     allRecommendations.forEach(song => {
-        // First, skip any song that is already in the user's part of the queue
-        if (queueSongIds.has(song.id)) return;
+        // First, filter out any song that is already in the user's part of the queue.
+        if (userQueueSongIds.has(song.id)) return;
 
-        // Create a unique key based on artist and title to catch cross-platform duplicates
+        // Use a key of "artist + title" to catch duplicates across platforms (e.g., local and SC version of same song).
         const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
         if (!uniqueSongs.has(uniqueKey)) {
             uniqueSongs.set(uniqueKey, song);
@@ -4423,17 +4437,17 @@ async function generateAutoplaySongs() {
 
     let finalRecommendations = Array.from(uniqueSongs.values());
 
-    // 4. Shuffle and slice the final list
+    // --- 4. Shuffle and slice the final list ---
     shuffleArray(finalRecommendations);
     finalRecommendations = finalRecommendations.slice(0, 20);
     
-    // 5. Add the new autoplay songs to the queue and the tracking Set
+    // --- 5. Add the new autoplay songs to the queue and the tracking Set ---
     if (finalRecommendations.length > 0) {
         finalRecommendations.forEach(song => autoplaySongIds.add(song.id));
         playQueue.push(...finalRecommendations);
     }
 
-    // Re-render the queue to show the new songs
+    // Re-render the queue to show the new songs.
     renderQueue();
 }
 
