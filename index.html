@@ -3788,12 +3788,13 @@ async function renderHomePage() {
     }).join('');
 
     // --- 6. Final Assembly ---
+    const sections = [similarSectionsHtml, recentlyPlayedHtml, genreSectionsHtml].filter(Boolean); // Filter out empty sections
+    shuffleArray(sections);
+
     homeView.innerHTML = `
     <div class="page-content-wrapper">
         <div class="highlight-grid">${highlightsHtml}</div>
-        ${similarSectionsHtml}
-        ${recentlyPlayedHtml}
-        ${genreSectionsHtml}
+        ${sections.join('')}
     </div>`;
     
     // Asynchronously apply gradients to highlight cards
@@ -5845,29 +5846,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         
         document.getElementById('home-view').addEventListener('click', (e) => {
-            const highlightCard = e.target.closest('.highlight-card[data-id]');
+            // This selector now correctly targets highlight cards AND the new SoundCloud item cards
+            const card = e.target.closest('.highlight-card[data-id], .item-card[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
-    
-            if (highlightCard) {
-                const songId = highlightCard.dataset.id;
-                const storageType = highlightCard.dataset.storage;
+
+            if (card) {
+                const songId = card.dataset.id;
+                const storageType = card.dataset.storage;
 
                 if (storageType === 'soundcloud') {
-                    // If it's a SoundCloud track, play it directly
-                    playSoundcloudTrack(songId); // Pass only the ID to play as a single track
+                    playSoundcloudTrack(songId); // Play as a single track
                 } else {
-                    // If it's a local track, find it in the library and play it
                     const localSong = songs.find(s => s.id === parseFloat(songId));
                     if (localSong) {
-                        playSong(localSong, [localSong]); // Play as a single track
+                        playSong(localSong, [localSong]); // Play local song as a single track
                     }
                 }
             } else if (albumCard) {
+                // This handles clicks on local library albums from the "Recently Played" or "Genre" sections
                 const albumId = albumCard.dataset.albumId;
                 const [artist, albumName] = albumId.split('::');
                 const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName);
                 if (albumSongs.length > 0) {
-                    playSong(albumSongs[0], albumSongs); // Play the album
+                    playSong(albumSongs[0], albumSongs); // Play the full album
                 }
             }
         });
