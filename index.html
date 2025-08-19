@@ -1856,8 +1856,8 @@
         #autoplayToggle::before {
             content: '';
             position: absolute;
-            width: 16px;
-            height: 16px;
+            width: 15px;
+            height: 15px;
             background-color: var(--secondary-text-color);
             border-radius: 50%;
             top: 50%;
@@ -4493,32 +4493,24 @@ async function playSong(song, playContext = null) {
     
     // --- REVISED QUEUE LOGIC FOR PERSISTENT AUTOPLAY ---
     if (playContext && Array.isArray(playContext)) {
-        // A new context (song, album, artist) is being played.
-        if (isAutoplayEnabled) {
-            // Autoplay is ON. Preserve autoplay songs.
-            // 1. Get the existing autoplay songs from the end of the current queue.
-            const existingAutoplaySongs = playQueue.filter(s => autoplaySongIds.has(s.id));
-            
-            // 2. The new queue is the new play context...
-            playQueue = [...playContext];
-            
-            // 3. ...plus the old autoplay songs appended to the end.
-            playQueue.push(...existingAutoplaySongs);
+        // This block now ONLY runs when a user starts playback on a new context (song, album, etc.).
+        // It does NOT run for playNext/playPrevious.
+        const newQueue = [...playContext];
+        isQueueUserModified = false;
 
-            isQueueUserModified = false; // This is a new context, but autoplay state is maintained.
+        if (isAutoplayEnabled) {
+            // If autoplay is on, find any autoplay songs from the OLD queue.
+            const existingAutoplaySongs = playQueue.filter(s => autoplaySongIds.has(s.id));
+            // The new queue is the user's new context followed by the old autoplay songs.
+            playQueue = [...newQueue, ...existingAutoplaySongs];
         } else {
-            // Autoplay is OFF. Behavior is as before: replace the queue completely.
-            playQueue = [...playContext];
-            isQueueUserModified = false;
+            // If autoplay is off, the new queue is just the new context.
+            playQueue = newQueue;
+            autoplaySongIds.clear(); // Make sure autoplay songs are cleared if toggled off.
         }
-    } else if (isQueueUserModified) {
-        // If the queue is user-modified, we must protect it.
-        // Add the song to play next if it's not already in the custom queue.
-        if (!playQueue.some(s => s.id === song.id)) {
-            playQueue.splice(currentQueueIndex + 1, 0, song);
-        }
-    } else {
-        // Fallback: Autoplay is off, no context, no user modification. Rebuild as before.
+    } else if (playQueue.length === 0) {
+        // This is a fallback. If playSong is called without a context and the queue is empty,
+        // build a queue from the current library view.
         rebuildQueueFromCurrentView();
     }
     
@@ -5245,6 +5237,12 @@ function playNextSong({ userInitiated = false, isTransition = false } = {}) {
     }
     if (!playQueue || playQueue.length === 0) return;
     currentQueueIndex++;
+    
+    // If we've reached the end and autoplay is on, generate new songs.
+    if (isAutoplayEnabled && currentQueueIndex >= playQueue.length) {
+        generateAutoplaySongs(); // This will add songs and re-render the queue.
+    }
+
     if (currentQueueIndex >= playQueue.length) {
         if (repeatMode === 'all') currentQueueIndex = 0;
         else {
@@ -5257,9 +5255,9 @@ function playNextSong({ userInitiated = false, isTransition = false } = {}) {
     if (nextSong) {
         // **THE FIX:** Check song type and call the correct function
         if (nextSong.storage === 'soundcloud') {
-            playSoundcloudTrack(nextSong.id, playQueue);
+            playSoundcloudTrack(nextSong.id);
         } else {
-            playSong(nextSong, playQueue, { isTransition });
+            playSong(nextSong, { isTransition });
         }
         proactivelyCacheNextInQueue();
     }
@@ -5282,9 +5280,9 @@ function playPreviousSong() {
     if (prevSong) {
         // **THE FIX:** Check song type and call the correct function
         if (prevSong.storage === 'soundcloud') {
-            playSoundcloudTrack(prevSong.id, playQueue);
+            playSoundcloudTrack(prevSong.id);
         } else {
-            playSong(prevSong, playQueue, { isTransition: false });
+            playSong(prevSong, { isTransition: false });
         }
         proactivelyCacheNextInQueue();
     }
