@@ -4645,7 +4645,7 @@ async function generateAutoplaySongs() {
         const contextArtists = new Set(contextQueue.map(s => s.artist).filter(Boolean));
         const contextAlbumArtists = new Set(contextQueue.map(s => s.albumArtist).filter(Boolean));
         const contextGenres = new Set(contextQueue.map(s => s.genre).filter(Boolean));
-        const contextYears = new Set(contextQueue.map(s => s.year).filter(Boolean).map(y => parseInt(y, 10)));
+        const contextYears = [...new Set(contextQueue.map(s => s.year).filter(Boolean).map(y => parseInt(y, 10)))];
         const YEAR_RANGE = 5; // Recommend songs from +/- 5 years
 
         // 3. Score every song in the library based on the context.
