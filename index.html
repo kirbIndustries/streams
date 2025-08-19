@@ -3941,8 +3941,7 @@ async function renderHomePage() {
     }
 
     const aiPromptsHtml = isGuraAiEnabled ? `
-        <div id="ai-prompt-buttons" style="text-align: center; padding: 20px 0 125px 0;">
-            <h2 class="section-title">Ask GuraAI</h2>
+        <div id="ai-prompt-buttons" style="text-align: center; margin-bottom: 20px;">
             <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
                 <button class="action-btn" data-prompt="Create a playlist of my most played rock songs.">Create a rock playlist</button>
                 <button class="action-btn" data-prompt="Recommend me some upbeat songs for working out.">Find workout songs</button>
@@ -3953,8 +3952,8 @@ async function renderHomePage() {
 
     homeView.innerHTML = `
     <div class="page-content-wrapper">
-        <div class="highlight-grid">${highlightsHtml}</div>
         ${aiPromptsHtml}
+        <div class="highlight-grid">${highlightsHtml}</div>
         <div>
             <h2 class="section-title">Recently Played</h2>
             <div class="item-grid">${recentlyPlayedHtml}</div>
