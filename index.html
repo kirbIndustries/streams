@@ -1840,6 +1840,40 @@
             left: 50%;
             top: 50%;
         }
+
+        #autoplayToggle {
+            appearance: none;
+            width: 40px;
+            height: 24px;
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            border: 1px solid var(--glass-border);
+        }
+        
+        #autoplayToggle::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background-color: var(--secondary-text-color);
+            border-radius: 50%;
+            top: 50%;
+            left: 3px;
+            transform: translateY(-50%);
+            transition: all 0.3s cubic-bezier(.3,1.2,.64,1);
+        }
+        
+        #autoplayToggle:checked {
+            background-color: var(--secondary-text-color);
+        }
+        
+        #autoplayToggle:checked::before {
+            background-color: var(--background-color);
+            left: 19px;
+        }
     </style>
 </head>
 <body data-app-name="Music">
@@ -2282,6 +2316,8 @@
         let playQueue = [];
         let isQueueUserModified = false;
         let currentQueueIndex = -1;
+        let isAutoplayEnabled = false;
+        let autoplaySongIds = new Set(); // Use a Set for efficient add/delete/check operations
         let searchTimeout;
         let searchInput;
         let longPressTimer;
@@ -4125,35 +4161,47 @@ function renderQueue() {
     const lyricsQueuePanel = document.getElementById('lyrics-queue-panel');
     if (!lyricsQueuePanel) return;
 
+    // Create the header with the title and the new autoplay toggle
+    const headerHtml = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; flex-shrink: 0;">
+            <h2 class="section-title" style="margin: 0;">Up Next</h2>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="autoplayToggle" style="font-size: 14px; color: var(--secondary-text-color);">Autoplay</label>
+                <input type="checkbox" id="autoplayToggle" ${isAutoplayEnabled ? 'checked' : ''}>
+            </div>
+        </div>
+    `;
+
     if (playQueue.length === 0) {
-        lyricsQueuePanel.innerHTML = `
+        lyricsQueuePanel.innerHTML = headerHtml + `
             <div class="no-results" style="flex-grow: 1; justify-content: center;">
                 <span class="material-symbols-rounded">queue_music</span>
                 <p>The queue is empty.</p>
             </div>
         `;
-        return;
+    } else {
+        const queueHtml = playQueue.map((song, index) => `
+            <div class="music-item queue-item ${song.id === currentSongId ? "active" : ""}" data-queue-index="${index}" data-id="${song.id}">
+                <div class="song-info">
+                    <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 6px; margin: 0 5px;">
+                    <div class="song-title">${sanitize(song.name)}</div>
+                    <span class="song-artist-queue">${song.artist}</span>
+                    <button class="remove-from-queue-btn" data-queue-index="${index}">
+                        <span class="material-symbols-rounded" style="font-size: 14px;">cancel</span>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        
+        lyricsQueuePanel.innerHTML = headerHtml + `<div class="queue-list-container" style="margin-top: 10px;">${queueHtml}</div>`;
     }
 
-    const queueHtml = playQueue.map((song, index) => `
-        <div class="music-item queue-item ${song.id === currentSongId ? "active" : ""}" data-queue-index="${index}" data-id="${song.id}">
-            <div class="song-info">
-                <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 6px; margin: 0 5px;">
-                <div class="song-title">${sanitize(song.name)}</div>
-                <span class="song-artist-queue">${song.artist}</span>
-                <button class="remove-from-queue-btn" data-queue-index="${index}">
-                    <span class="material-symbols-rounded" style="font-size: 14px;">cancel</span>
-                </button>
-            </div>
-        </div>
-    `).join('');
-    
-    lyricsQueuePanel.innerHTML = `
-        <h2 class="section-title" style="margin-bottom: 0; flex-shrink: 0;">Up Next</h2>
-        <div class="queue-list-container">${queueHtml}</div>
-    `;
+    // Attach event listener for the new toggle switch
+    const autoplayToggle = document.getElementById('autoplayToggle');
+    if (autoplayToggle) {
+        autoplayToggle.addEventListener('change', toggleAutoplay);
+    }
 
-    // Make sure to re-attach event listeners for the new elements
     makeQueueItemsDraggable();
     addQueueItemEventListeners();
 }
@@ -4281,6 +4329,85 @@ function addToQueue(songId, position = 'last') {
     if (isPanelVisible && panelContent === 'queue') {
         renderQueue();
     }
+}
+
+async function toggleAutoplay(event) {
+    isAutoplayEnabled = event.target.checked;
+    if (isAutoplayEnabled) {
+        await generateAutoplaySongs();
+    } else {
+        removeAutoplaySongs();
+    }
+}
+
+function removeAutoplaySongs() {
+    if (autoplaySongIds.size === 0) return;
+
+    playQueue = playQueue.filter(song => !autoplaySongIds.has(song.id));
+    autoplaySongIds.clear();
+    
+    // After removing songs, the current index might be wrong. Let's fix it.
+    currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
+
+    renderQueue();
+}
+
+async function generateAutoplaySongs() {
+    if (playQueue.length === 0) return;
+
+    // First, ensure any old autoplay songs are gone before adding new ones
+    removeAutoplaySongs(); 
+
+    const queueSongIds = new Set(playQueue.map(s => s.id));
+    const contextArtists = new Set();
+    const contextGenres = new Set();
+
+    playQueue.forEach(song => {
+        contextArtists.add(song.artist);
+        if (song.genre) contextGenres.add(song.genre);
+    });
+
+    let recommendedSongs = [];
+
+    if (isSoundcloudEnabled) {
+        const query = [...contextArtists, ...contextGenres].join(' ');
+        try {
+            const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=50`);
+            const data = await response.json();
+            const tracks = data.collection.filter(track => !queueSongIds.has(track.id)).slice(0, 20);
+
+            recommendedSongs = tracks.map(track => ({
+                id: track.id,
+                name: track.title,
+                artist: track.user.username,
+                album: 'SoundCloud Autoplay',
+                albumArt: getHighResArtwork(track.artwork_url),
+                storage: 'soundcloud',
+            }));
+        } catch (error) {
+            console.error("SoundCloud Autoplay fetch failed:", error);
+        }
+    } else {
+        const artistMatches = songs.filter(song => contextArtists.has(song.artist) && !queueSongIds.has(song.id));
+        const genreMatches = songs.filter(song => contextGenres.has(song.genre) && !queueSongIds.has(song.id));
+        
+        const combined = [...artistMatches, ...genreMatches];
+        const uniqueRecommendations = [...new Map(combined.map(item => [item['id'], item])).values()];
+        
+        // Shuffle the recommendations
+        for (let i = uniqueRecommendations.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [uniqueRecommendations[i], uniqueRecommendations[j]] = [uniqueRecommendations[j], uniqueRecommendations[i]];
+        }
+        recommendedSongs = uniqueRecommendations.slice(0, 20);
+    }
+    
+    if (recommendedSongs.length > 0) {
+        recommendedSongs.forEach(song => autoplaySongIds.add(song.id));
+        playQueue.push(...recommendedSongs);
+    }
+
+    renderQueue();
 }
 
 function openSongContextMenu(targetElement, songId) {
@@ -5042,11 +5169,10 @@ function getDragAfterElement(container, y) {
 }
 
 function updateQueueFromDOM() {
-    isQueueUserModified = true; // Flag that the user has manually reordered the queue
+    isQueueUserModified = true; 
     const newQueueOrder = [];
     document.querySelectorAll('.queue-item').forEach(item => {
         const songId = parseFloat(item.dataset.id);
-        // FIX: Search within the current playQueue, which contains local and streamed songs
         const song = playQueue.find(s => s.id === songId);
         if (song) newQueueOrder.push(song);
     });
@@ -5054,6 +5180,14 @@ function updateQueueFromDOM() {
     playQueue = newQueueOrder;
     currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
 
+    // Check if an autoplay song was moved to be next
+    if (currentQueueIndex + 1 < playQueue.length) {
+        const nextSongId = playQueue[currentQueueIndex + 1].id;
+        if (autoplaySongIds.has(nextSongId)) {
+            autoplaySongIds.delete(nextSongId);
+        }
+    }
+    
     isShuffleEnabled = false;
     updateShuffleButtonState();
     
