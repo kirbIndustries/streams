@@ -5010,33 +5010,67 @@ async function removeFolder(folderName) {
         return;
     }
 
-    directoryHandles = directoryHandles.filter(h => h.name !== folderName);
+    const initialSongCount = songs.length;
     
-    const findableSongIds = new Set();
+    // Update the list of active directory handles in memory
+    directoryHandles = directoryHandles.filter(h => h.name !== folderName);
+
+    const songsToKeep = [];
     for (const song of songs) {
+        // Always keep songs that are stored directly in the browser's database
         if (song.storage === 'indexeddb') {
-             findableSongIds.add(song.id);
-             continue;
+            songsToKeep.push(song);
+            continue;
         }
-        let found = false;
-        for (const handle of directoryHandles) {
-             try {
-                 await handle.getFileHandle(song.handleName);
-                 findableSongIds.add(song.id);
-                 found = true;
-                 break; 
-             } catch (e) { /* Not in this handle */ }
+
+        // For filesystem-based songs, check if their file still exists in any of the REMAINING folders
+        if (song.storage === 'filesystem') {
+            let isStillAvailable = false;
+            for (const handle of directoryHandles) {
+                try {
+                    // Check if we can get a handle to the file. If this doesn't throw an error, the file exists.
+                    await handle.getFileHandle(song.handleName, { create: false });
+                    isStillAvailable = true;
+                    break; // The song is safe, no need to check other folders
+                } catch (e) {
+                    // A "NotFoundError" is expected if the song was in the removed folder.
+                    // We only log other potential errors (e.g., permission denied).
+                    if (e.name !== 'NotFoundError') {
+                        console.warn(`Permission or other error checking for "${song.handleName}" in "${handle.name}".`, e);
+                    }
+                }
+            }
+            // Only add the song to our list of survivors if it was found in a remaining folder.
+            if (isStillAvailable) {
+                songsToKeep.push(song);
+            }
         }
     }
-    
-    songs = songs.filter(s => findableSongIds.has(s.id));
 
+    const removedSongCount = initialSongCount - songsToKeep.length;
+    
+    // Replace the main songs array with the filtered list of survivors.
+    songs = songsToKeep;
+
+    // --- Persist all state changes and update the UI ---
+
+    // 1. Save the updated (smaller) list of directory handles to the database.
     const tx = db.transaction('config', 'readwrite');
     tx.objectStore('config').put({ key: 'directoryHandles', value: directoryHandles });
     await tx.done;
     
+    // 2. Save the updated (smaller) list of songs to the database.
     await saveSongs();
-    openManageFoldersModal(); 
+
+    // 3. Update the play queue in case a removed song was in it.
+    updatePlayQueue();
+
+    // 4. Show a confirmation message and refresh the UI.
+    Gurasuraisu.showPopup(`Removed "${folderName}" and ${removedSongCount} song(s).`);
+    openManageFoldersModal(); // Refreshes the folder list inside the modal.
+    if (activeView === 'library') {
+        renderLibraryPage(); // Refreshes the main library view in the background.
+    }
 }
 
         async function deleteSong(songIdToDelete) {
