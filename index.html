@@ -2354,6 +2354,7 @@
         let soundcloudFilter = 'tracks';
         let lastSoundcloudSearchResults = []; // To store API results for filtering
         const SOUNDCLOUD_CACHE_LIMIT = 200 * 1024 * 1024; // 200MB
+        let localSongLookup = new Map();
 
         function sanitize(str) {
             if (!str) return '';
@@ -2913,6 +2914,18 @@ function generateRandomGradient() {
     
     return canvas.toDataURL('image/jpeg', 0.9);
 }
+
+function updateLocalSongLookup() {
+    localSongLookup.clear();
+    for (const song of songs) {
+        // Create a consistent, case-insensitive key from artist and title
+        const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
+        if (!localSongLookup.has(uniqueKey)) {
+            localSongLookup.set(uniqueKey, song);
+        }
+    }
+    console.log(`Local song lookup map updated with ${localSongLookup.size} entries.`);
+}
         
 async function preloadSongs(files) {
     const allowedTypes = [
@@ -3152,6 +3165,7 @@ async function addSongs(files, storageType) {
     } else if (activeView === 'home') {
         renderHomePage();
     }
+    updateLocalSongLookup();
 }
 
 async function scanForNewSongs() {
@@ -4940,6 +4954,7 @@ async function saveSoundcloudTrackToLibrary() {
         
         songs.push(newLocalSong); // Add to in-memory library
         processAndSortSongs();
+        updateLocalSongLookup();
         Gurasuraisu.showPopup(`Saved "${songToSave.name}" to Library`);
 
     } catch (error) {
@@ -4948,10 +4963,28 @@ async function saveSoundcloudTrackToLibrary() {
     }
 }
 
-async function playSoundcloudTrack(trackId, playContext) {
+async function playSoundcloudTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     
     try {
+        // Step 1: Fetch metadata for the SC track to build our lookup key.
+        const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
+        if (!trackResponse.ok) throw new Error('Could not fetch SC track details.');
+        const trackData = await trackResponse.json();
+
+        const uniqueKey = `${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`;
+
+        // Step 2: Check if this song exists in our local library.
+        if (localSongLookup.has(uniqueKey)) {
+            const localSong = localSongLookup.get(uniqueKey);
+            console.log(`Redirecting SoundCloud play for "${trackData.title}" to local version.`);
+            // If it exists, play the local version instead and stop.
+            playSong(localSong, playContext);
+            return; 
+        }
+
+        // Step 3: If not found locally, proceed with streaming from SoundCloud as before.
+        console.log(`Playing from SoundCloud: "${trackData.title}"`);
         const tx = db.transaction('soundcloudCache', 'readwrite');
         const store = tx.objectStore('soundcloudCache');
         const cachedEntry = await promiseIDBRequest(store.get(numericTrackId));
@@ -4959,26 +4992,16 @@ async function playSoundcloudTrack(trackId, playContext) {
         let songToPlay;
 
         if (cachedEntry) {
-            console.log("Playing from cache:", cachedEntry.metadata.name);
             songToPlay = cachedEntry.metadata;
             songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
-            
-            // Update timestamp to mark as recently used
             cachedEntry.timestamp = Date.now();
             store.put(cachedEntry);
         } else {
-            console.log("Not in cache, streaming from SoundCloud...");
-            const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
-            if (!trackResponse.ok) throw new Error('Could not fetch track details.');
-            const trackData = await trackResponse.json();
-
             const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
             if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
             
             const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
-            if (!streamResponse.ok) throw new Error('Could not fetch stream URL.');
             const streamData = await streamResponse.json();
-            const finalStreamUrl = streamData.url;
 
             songToPlay = {
                 id: trackData.id,
@@ -4987,17 +5010,16 @@ async function playSoundcloudTrack(trackId, playContext) {
                 album: trackData.title,
                 albumArt: getHighResArtwork(trackData.artwork_url),
                 storage: 'soundcloud',
-                streamUrl: finalStreamUrl
+                streamUrl: streamData.url
             };
-            
-            // Start caching in the background *after* initiating playback logic
-            cacheSoundcloudTrack(songToPlay, finalStreamUrl);
+            cacheSoundcloudTrack(songToPlay, streamData.url);
         }
 
-        playSong(songToPlay, playContext);
+        playSong(songToPlay, playContext); // This now only receives genuine SC songs
         await tx.done;
+
     } catch (error) {
-        console.error('Error playing or fetching SoundCloud track:', error);
+        console.error('Error playing or redirecting SoundCloud track:', error);
         Gurasuraisu.showPopup('Could not play the selected track');
     }
 }
@@ -6405,6 +6427,7 @@ async function loadSongsAndPlaylists() {
         songs = Array.isArray(loadedSongs) ? loadedSongs : [];
         songs.forEach(song => { if (!song.dateAdded) song.dateAdded = song.id; });
         processAndSortSongs();
+        updateLocalSongLookup();
 
         const playlistTx = db.transaction('playlists', 'readonly');
         const playlistRequest = playlistTx.objectStore('playlists').getAll();
