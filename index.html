@@ -3797,7 +3797,7 @@ function setupHomeViewObserver() {
         
 function renderLibraryPage() {
     libraryCurrentPage = 1; // Reset to the first page
-    if (libraryObserver) libraryObserver.disconnect(); // Disconnect any previous observer
+    if (viewObserver) viewObserver.disconnect(); // Disconnect any previous observer
 
     const libraryGrid = document.getElementById('library-grid');
     if (!libraryGrid) return;
@@ -3879,15 +3879,15 @@ function renderMoreLibraryItems() {
         newSentinel.id = 'library-sentinel';
         libraryGrid.appendChild(newSentinel);
 
-        libraryObserver = new IntersectionObserver(entries => {
+        viewObserver = new IntersectionObserver(entries => {
             if (entries[0].isIntersecting) {
-                libraryObserver.disconnect();
+                viewObserver.disconnect();
                 libraryCurrentPage++;
                 renderMoreLibraryItems();
             }
         }, { rootMargin: '200px' }); // Load next batch when 200px from the bottom
 
-        libraryObserver.observe(newSentinel);
+        viewObserver.observe(newSentinel);
     }
 }
         
