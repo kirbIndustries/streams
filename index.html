@@ -3931,41 +3931,16 @@ async function renderHomePage() {
         </div>`;
     }).join('');
 
-    // --- GuraAI Dynamic Content (only shown if enabled) ---
+    // --- GuraAI Section (Now renders a placeholder INSTANTLY) ---
     let aiPromptAreaHtml = '';
     if (isGuraAiEnabled && musicAiModel && songs.length > 5) {
-        let dynamicPromptsHtml = '';
-        try {
-            // THE NEW, IMPROVED PROMPT
-            const prompt = `Based on the user's library, suggest 3 short, action-oriented prompts for buttons. The prompts should inspire the user to create a playlist or discover music. Good examples: "Create a workout playlist", "Songs for a rainy day", "Show me my best rock songs". Bad examples: "Play Artist - Song Title".
-
-            Library Sample:\n${formatSongsForAiPrompt(songs.slice(0, 50))}`;
-            
-            const result = await musicAiModel.generateContent(prompt);
-            const call = result.response.functionCalls()?.[0];
-
-            if (call && call.name === 'createPlaylist' && call.args.songs) {
-                // We're re-using the 'songs' field to get the AI's text suggestions for prompts
-                const promptIdeas = call.args.songs.slice(0, 3);
-                dynamicPromptsHtml = promptIdeas.map(p => `<button class="action-btn" data-prompt="${sanitize(p)}">${sanitize(p)}</button>`).join('');
-            } else {
-                 // Fallback to static prompts if AI fails
-                dynamicPromptsHtml = `<button class="action-btn" data-prompt="Create a high-energy playlist">High-energy Playlist</button><button class="action-btn" data-prompt="Find some relaxing songs">Relaxing Songs</button><button class="action-btn" data-prompt="Recommend a genre I might like">Suggest a Genre</button>`;
-            }
-        } catch (e) {
-            console.error("AI dynamic prompt generation failed", e);
-            dynamicPromptsHtml = `<button class="action-btn" data-prompt="Create a workout playlist">Workout Playlist</button><button class="action-btn" data-prompt="Find songs for a rainy day">Rainy Day Mix</button>`;
-        }
-
         aiPromptAreaHtml = `
             <div id="ai-prompt-area" style="text-align:center; margin-bottom: 20px;">
                 <div id="ai-prompt-bar" style="display:flex; gap:10px; max-width:600px; margin: auto auto 20px; border-bottom: 1px solid var(--search-background); padding-bottom: 10px;">
                     <input type="text" id="aiPromptInput" placeholder="Ask GuraAI" class="library-search-input" style="padding-left:15px;background: none;border: none;font-size: large;font-weight: bold;">
                     <button id="aiPromptSubmit" class="action-btn" style="height:auto; background: none; border: none;"><span class="material-symbols-rounded" style="font-size: 18px;">send</span></button>
                 </div>
-                <div id="ai-dynamic-prompts" style="display:flex; flex-wrap:wrap; justify-content:center; gap:10px">
-                    ${dynamicPromptsHtml}
-                </div>
+                <div id="ai-dynamic-prompts" style="display:flex; flex-wrap:wrap; justify-content:center; gap:10px"></div>
             </div>
         `;
     }
@@ -3988,6 +3963,13 @@ async function renderHomePage() {
             getArtColors(song.albumArt).then(gradient => { card.style.background = gradient; });
         }
     });
+    
+    // --- Asynchronously update AI content ---
+    // After the main page has rendered, call the function to fetch and populate AI prompts.
+    // We DON'T await this, allowing the UI to be responsive while the AI works.
+    if (isGuraAiEnabled && musicAiModel && songs.length > 5) {
+        updateAiHomePagePrompts();
+    }
 
     requestAnimationFrame(() => {
         const homeView = document.getElementById('home-view');
@@ -3995,6 +3977,40 @@ async function renderHomePage() {
     });
 }
 
+async function updateAiHomePagePrompts() {
+    const promptsContainer = document.getElementById('ai-dynamic-prompts');
+    if (!promptsContainer) return; // Exit if the placeholder isn't on the page
+
+    // You can add a subtle loading indicator here if you wish
+    promptsContainer.innerHTML = `<span style="font-size: 14px; color: var(--secondary-text-color);">GuraAI is thinking...</span>`;
+
+    let dynamicPromptsHtml = '';
+    try {
+        const prompt = `Based on the user's library, suggest 3 short, action-oriented prompts for buttons. The prompts should inspire the user to create a playlist or discover music. Good examples: "Create a workout playlist", "Songs for a rainy day", "Show me my best rock songs". Bad examples: "Play Artist - Song Title".
+
+        Library Sample:\n${formatSongsForAiPrompt(songs.slice(0, 50))}`;
+        
+        const result = await musicAiModel.generateContent(prompt);
+        const call = result.response.functionCalls()?.[0];
+
+        if (call && (call.name === 'createPlaylist' || call.name === 'getSongRecommendations') && call.args.songs) {
+            // AI returned valid prompts
+            const promptIdeas = call.args.songs.slice(0, 3);
+            dynamicPromptsHtml = promptIdeas.map(p => `<button class="action-btn" data-prompt="${sanitize(p)}">${sanitize(p)}</button>`).join('');
+        } else {
+            // Fallback if AI fails or returns unexpected data
+            throw new Error("AI did not return valid prompts.");
+        }
+    } catch (e) {
+        console.error("AI dynamic prompt generation failed:", e);
+        // On error, provide useful static fallback prompts
+        dynamicPromptsHtml = `<button class="action-btn" data-prompt="Create a high-energy playlist">High-energy Playlist</button><button class="action-btn" data-prompt="Find some relaxing songs">Relaxing Songs</button><button class="action-btn" data-prompt="Recommend a genre I might like">Suggest a Genre</button>`;
+    }
+
+    // Update the container with the final HTML (either from AI or fallback)
+    promptsContainer.innerHTML = dynamicPromptsHtml;
+}
+        
 function renderLibraryPage() {
     const libraryView = document.getElementById('library-view');
     const libraryGrid = document.getElementById('library-grid');
