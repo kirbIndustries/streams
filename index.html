@@ -2368,6 +2368,14 @@
             if (modal) modal.classList.remove('visible');
         }
 
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
 function openDrawer(title, subtitle, contentHtml) {
     // Clear any pending close timeout to prevent the drawer from closing immediately
     clearTimeout(closeDrawerTimeout);
@@ -4167,7 +4175,7 @@ function renderQueue() {
     const headerHtml = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; flex-shrink: 0;">
             <h2 class="section-title" style="margin: 0;">Up Next</h2>
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
                 <label for="autoplayToggle" style="font-size: 14px; color: var(--secondary-text-color);">Autoplay</label>
                 <input type="checkbox" id="autoplayToggle" ${isAutoplayEnabled ? 'checked' : ''}>
             </div>
