@@ -3336,6 +3336,108 @@ async function migrateToFSA() {
     }
 }
 
+        // --- GuraAI Music Assistant Integration ---
+        const isGuraAiEnabled = localStorage.getItem('aiAssistantEnabled') === 'true';
+        let geminiApiKey = localStorage.getItem('geminiApiKey') || '';
+        let genAI;
+        let musicAiModel;
+
+        // Utility function to format the user's library for the AI prompt
+        function formatLibraryForPrompt(songList = songs) {
+            if (songList.length === 0) return "The user's library is empty.";
+            // Create a concise string representation of the music library
+            return songList.map(s => `${s.artist} - ${s.name}`).join('\n');
+        }
+
+async function initializeMusicAi() {
+    if (!isGuraAiEnabled) return;
+
+    if (!geminiApiKey) {
+        console.warn("GuraAI is enabled, but no API key is set. AI features will be disabled.");
+        return;
+    }
+
+    try {
+        // Dynamically import the AI library only if needed
+        const { GoogleGenerativeAI } = await import("https://esm.sh/@google/generative-ai");
+        genAI = new GoogleGenerativeAI(geminiApiKey);
+
+        const systemInstruction = `You are GuraAI, an intelligent music assistant integrated into a music player. Your goal is to help users discover music and manage their library. You will be given a list of songs from the user's library as context. Based on the user's prompt, you must call one of the available functions. Your primary task is to select relevant songs from the provided library list. Do not respond with conversational text; only use function calls.`;
+
+        const tools = [{
+            "functionDeclarations": [
+                {
+                    "name": "createPlaylist",
+                    "description": "Creates a new playlist based on a user's descriptive prompt (e.g., 'a workout playlist').",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "playlistName": { "type": "STRING", "description": "A suitable name for the new playlist, derived from the user's prompt." },
+                            "songs": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "An array of song titles selected from the user's library that match the prompt's theme. Format each string as 'Artist - Title'." }
+                        },
+                        "required": ["playlistName", "songs"]
+                    }
+                },
+                {
+                    "name": "getSongRecommendations",
+                    "description": "Selects and returns a list of songs from the user's library based on a theme, genre, artist, or the user's listening history.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "songs": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "An array of recommended song titles from the user's library. Format each string as 'Artist - Title'." }
+                        },
+                        "required": ["songs"]
+                    }
+                }
+            ]
+        }];
+        
+        musicAiModel = genAI.getGenerativeModel({
+            model: "gemini-1.5-flash-latest", // Using a powerful model for better selections
+            tools: tools,
+            systemInstruction: systemInstruction,
+        });
+
+        console.log("GuraAI Music Assistant Initialized.");
+    } catch (error) {
+        console.error("GuraAI Music Assistant Initialization failed:", error);
+    }
+}
+
+// Helper function to find a song object from a string like "Artist - Title"
+function findSongByString(artistTitleString) {
+    const [artist, title] = artistTitleString.split(' - ').map(s => s.trim());
+    if (!artist || !title) return null;
+    return songs.find(song => song.artist === artist && song.name === title);
+}
+
+const availableMusicFunctions = {
+    createPlaylist: async ({ playlistName, songs: songStrings }) => {
+        const songIds = songStrings.map(findSongByString).filter(Boolean).map(s => s.id);
+        
+        if (songIds.length === 0) {
+            Gurasuraisu.showPopup(`GuraAI couldn't find matching songs.`);
+            return;
+        }
+
+        const newPlaylist = { name: playlistName, songIds: songIds };
+        const tx = db.transaction('playlists', 'readwrite');
+        const request = tx.objectStore('playlists').add(newPlaylist);
+        
+        await new Promise(resolve => {
+            tx.oncomplete = () => {
+                newPlaylist.id = request.result;
+                resolve();
+            };
+        });
+
+        playlists.push(newPlaylist);
+        Gurasuraisu.showPopup(`GuraAI created playlist: "${playlistName}"`);
+        if (activeView === 'library') renderLibraryPage();
+    }
+    // getSongRecommendations is handled directly by the calling function, so it doesn't need an entry here.
+};
+
 function initializeShards() {
     const shardElements = document.querySelectorAll('.distortion-shard');
     
@@ -3787,9 +3889,72 @@ async function renderHomePage() {
         </div>`;
     }).join('');
 
+    // --- GuraAI Dynamic Content (only shown if enabled) ---
+    let aiSectionsHtml = '';
+    if (isGuraAiEnabled && musicAiModel && songs.length > 10) {
+        try {
+            const prompt = `Analyze the user's library and create two recommendation categories.
+            1. A category named "Songs You Might Like" with 8 songs.
+            2. A category named "Because you like ${recentlyPlayedSongs[0].artist}" with 8 songs similar to that artist.
+            
+            Full Library:\n${formatLibraryForPrompt()}`;
+
+            const result = await musicAiModel.generateContent(prompt);
+            const calls = result.response.functionCalls();
+            
+            if (calls && calls.length > 0) {
+                const aiRecommendations = calls.flatMap(call => call.args.songs)
+                    .map(findSongByString)
+                    .filter(Boolean);
+
+                const category1 = aiRecommendations.slice(0, 8);
+                const category2 = aiRecommendations.slice(8, 16);
+
+                aiSectionsHtml = `
+                    <div>
+                        <h2 class="section-title">Songs You Might Like</h2>
+                        <div class="item-grid">${category1.map(song => `
+                            <div class="item-card" data-id="${song.id}">
+                                <img src="${song.albumArt}" class="item-card-art">
+                                <div class="item-card-info">
+                                    <div class="item-card-title">${sanitize(song.name)}</div>
+                                    <div class="item-card-subtitle">${sanitize(song.artist)}</div>
+                                </div>
+                            </div>`).join('')}
+                        </div>
+                    </div>
+                    <div>
+                        <h2 class="section-title">Because you like ${recentlyPlayedSongs[0].artist}</h2>
+                        <div class="item-grid">${category2.map(song => `
+                             <div class="item-card" data-id="${song.id}">
+                                <img src="${song.albumArt}" class="item-card-art">
+                                <div class="item-card-info">
+                                    <div class="item-card-title">${sanitize(song.name)}</div>
+                                    <div class="item-card-subtitle">${sanitize(song.artist)}</div>
+                                </div>
+                            </div>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        } catch(e) { console.error("AI Home Page generation failed", e); }
+    }
+
+    const aiPromptsHtml = isGuraAiEnabled ? `
+        <div id="ai-prompt-buttons" style="text-align: center; padding: 20px 0 125px 0;">
+            <h2 class="section-title">Ask GuraAI</h2>
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
+                <button class="action-btn" data-prompt="Create a playlist of my most played rock songs.">Create a rock playlist</button>
+                <button class="action-btn" data-prompt="Recommend me some upbeat songs for working out.">Find workout songs</button>
+                <button class="action-btn" data-prompt="Give me a genre that I might like based on my library.">Suggest a new genre</button>
+            </div>
+        </div>
+    ` : '';
+
     homeView.innerHTML = `
     <div class="page-content-wrapper">
         <div class="highlight-grid">${highlightsHtml}</div>
+        ${aiPromptsHtml}
         <div>
             <h2 class="section-title">Recently Played</h2>
             <div class="item-grid">${recentlyPlayedHtml}</div>
@@ -3825,6 +3990,19 @@ function renderLibraryPage() {
     }
     
     let itemsHtml = ''; // Declare itemsHtml here
+
+    let aiPlaylistSection = '';
+    if (isGuraAiEnabled && musicAiModel) {
+        aiPlaylistSection = `
+            <div id="ai-playlist-creator" style="margin: 0 auto 20px auto; max-width: 600px; text-align: center; background: var(--search-background); padding: 15px; border-radius: 20px; border: 1px solid var(--glass-border);">
+                <h3 style="margin-bottom: 10px;">Create a Playlist with GuraAI</h3>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="aiPlaylistPrompt" placeholder="e.g., Upbeat rock for a workout" class="library-search-input" style="padding-left: 15px;">
+                    <button id="aiCreatePlaylistBtn" class="action-btn" style="height: auto;">Create</button>
+                </div>
+            </div>
+        `;
+    }
 
     switch (currentFilter) {
         case 'artists':
@@ -3901,7 +4079,7 @@ function renderLibraryPage() {
             break;
     }
     
-    libraryGrid.innerHTML = itemsHtml;
+    libraryGrid.insertAdjacentHTML('beforebegin', aiPlaylistSection);
 
     // --- SCROLL RESTORATION LOGIC ---
     requestAnimationFrame(() => {
@@ -4387,73 +4565,135 @@ function removeAutoplaySongs() {
 }
 
 async function generateAutoplaySongs() {
+    removeAutoplaySongs(); // Always start with a clean slate
+
     const contextQueue = playQueue.length > 0 ? playQueue : (currentlyPlayingSong ? [currentlyPlayingSong] : []);
     if (contextQueue.length === 0) return;
 
-    removeAutoplaySongs(); 
+    let finalRecommendations = [];
 
-    // --- Master Deduplication Logic ---
-    // 1. Create a master set of unique keys for ALL songs the user "owns" or has in their current queue.
-    const ownedSongKeys = new Set(localSongLookup.keys());
-    playQueue.forEach(song => {
-        const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
-        ownedSongKeys.add(uniqueKey);
-    });
-    const userQueueSongIds = new Set(playQueue.map(s => s.id));
-    // ---
-
-    const contextArtists = new Set(contextQueue.map(s => s.artist).filter(Boolean));
-    const contextGenres = new Set(contextQueue.map(s => s.genre).filter(Boolean));
-
-    // Get Local Recommendations (filtered to exclude songs already in queue)
-    const localRecommendations = songs.filter(song => 
-        !userQueueSongIds.has(song.id) && 
-        (contextArtists.has(song.artist) || contextGenres.has(song.genre))
-    );
-
-    let soundcloudRecommendations = [];
-    if (isSoundcloudEnabled && soundcloudClientId) {
-        const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
-        const promises = searchTerms.map(term => 
-            fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=20`)
-                .then(res => res.ok ? res.json() : { collection: [] })
-                .catch(() => ({ collection: [] })) // Handle network errors gracefully
-        );
-        const results = await Promise.all(promises);
-        const allTracks = results.flatMap(data => data.collection);
-
-        // Filter SoundCloud results against our master "owned" set.
-        soundcloudRecommendations = allTracks
-            .map(track => ({
-                id: track.id,
-                name: track.title,
-                artist: track.user.username,
-                album: 'SoundCloud Autoplay',
-                albumArt: getHighResArtwork(track.artwork_url),
-                storage: 'soundcloud',
-                // Add the key here for efficient checking
-                uniqueKey: `${(track.user.username || '').toLowerCase().trim()}::${(track.title || '').toLowerCase().trim()}`
-            }))
-            .filter(song => !ownedSongKeys.has(song.uniqueKey));
+    // --- Path 1: GuraAI-Powered Recommendations (Highest Priority) ---
+    if (isGuraAiEnabled && musicAiModel) {
+        console.log("Generating autoplay using GuraAI...");
+        finalRecommendations = await generateAiAutoplaySongs();
     }
 
-    // Combine and perform a final deduplication on the combined recommendation pool
-    const finalRecommendationsMap = new Map();
-    [...localRecommendations, ...soundcloudRecommendations].forEach(song => {
-        const uniqueKey = song.uniqueKey || `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
-        if (!finalRecommendationsMap.has(uniqueKey)) {
-            finalRecommendationsMap.set(uniqueKey, song);
-        }
-    });
+    // --- Path 2: Advanced Scoring Fallback (If AI is off or fails) ---
+    if (finalRecommendations.length === 0) {
+        console.log("GuraAI not used, falling back to advanced scoring method...");
 
-    let finalRecommendations = shuffleArray(Array.from(finalRecommendationsMap.values())).slice(0, 20);
+        // 1. Create a master set of all songs the user already "owns" or has in their queue to prevent duplicates.
+        const ownedSongKeys = new Set(localSongLookup.keys());
+        playQueue.forEach(song => {
+            const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
+            ownedSongKeys.add(uniqueKey);
+        });
+        const userQueueSongIds = new Set(playQueue.map(s => s.id));
+
+        // 2. Gather all context signals from the current queue.
+        const contextArtists = new Set(contextQueue.map(s => s.artist).filter(Boolean));
+        const contextAlbumArtists = new Set(contextQueue.map(s => s.albumArtist).filter(Boolean));
+        const contextGenres = new Set(contextQueue.map(s => s.genre).filter(Boolean));
+        const contextYears = new Set(contextQueue.map(s => s.year).filter(Boolean).map(y => parseInt(y, 10)));
+        const YEAR_RANGE = 5; // Recommend songs from +/- 5 years
+
+        // 3. Score every song in the library based on the context.
+        const scoredRecommendations = [];
+        for (const candidateSong of songs) {
+            if (userQueueSongIds.has(candidateSong.id)) continue; // Skip songs already in queue
+
+            let score = 0;
+            if (contextArtists.has(candidateSong.artist)) score += 3; // Strongest signal
+            if (contextAlbumArtists.has(candidateSong.albumArtist)) score += 2; // Strong signal
+            if (contextGenres.has(candidateSong.genre)) score += 1; // Good signal
+
+            // Check for year proximity
+            const candidateYear = parseInt(candidateSong.year, 10);
+            if (!isNaN(candidateYear) && contextYears.some(year => Math.abs(year - candidateYear) <= YEAR_RANGE)) {
+                score += 1;
+            }
+
+            // Add a small boost for popularity
+            if (candidateSong.playCount > 10) {
+                score += 1;
+            }
+
+            if (score > 0) {
+                scoredRecommendations.push({ song: candidateSong, score: score });
+            }
+        }
+        
+        // 4. Sort by score (descending), with a random factor to break ties.
+        scoredRecommendations.sort((a, b) => b.score - a.score || Math.random() - 0.5);
+        const localRecommendations = scoredRecommendations.map(item => item.song);
+
+        // 5. Fetch and filter SoundCloud recommendations if enabled.
+        let soundcloudRecommendations = [];
+        if (isSoundcloudEnabled && soundcloudClientId) {
+            const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
+            const promises = searchTerms.map(term => 
+                fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=20`)
+                    .then(res => res.ok ? res.json() : { collection: [] })
+                    .catch(() => ({ collection: [] }))
+            );
+            const results = await Promise.all(promises);
+            const allTracks = results.flatMap(data => data.collection);
+
+            soundcloudRecommendations = allTracks
+                .map(track => ({
+                    id: track.id, name: track.title, artist: track.user.username,
+                    album: 'SoundCloud Autoplay', albumArt: getHighResArtwork(track.artwork_url), storage: 'soundcloud',
+                    uniqueKey: `${(track.user.username || '').toLowerCase().trim()}::${(track.title || '').toLowerCase().trim()}`
+                }))
+                .filter(song => !ownedSongKeys.has(song.uniqueKey));
+        }
+
+        // 6. Combine, deduplicate, and shuffle the final list.
+        const combinedPool = [...localRecommendations, ...soundcloudRecommendations];
+        const finalMap = new Map();
+        combinedPool.forEach(song => {
+            const key = song.uniqueKey || `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
+            if (!finalMap.has(key)) {
+                finalMap.set(key, song);
+            }
+        });
+        finalRecommendations = shuffleArray(Array.from(finalMap.values()));
+    }
     
-    if (finalRecommendations.length > 0) {
-        finalRecommendations.forEach(song => autoplaySongIds.add(song.id));
-        playQueue.push(...finalRecommendations);
+    // --- Final Step: Add the chosen recommendations to the queue ---
+    const songsToAdd = finalRecommendations.slice(0, 20);
+    if (songsToAdd.length > 0) {
+        songsToAdd.forEach(song => autoplaySongIds.add(song.id));
+        playQueue.push(...songsToAdd);
     }
 
     renderQueue();
+}
+
+async function generateAiAutoplaySongs() {
+    if (!musicAiModel) return []; // AI not ready
+
+    const contextQueue = playQueue.length > 0 ? playQueue : (currentlyPlayingSong ? [currentlyPlayingSong] : []);
+    if (contextQueue.length === 0) return [];
+    
+    const historyPrompt = `Based on the user's current queue:\n${formatLibraryForPrompt(contextQueue)}\n\nSelect 20 similar songs from their full library below.`;
+    const libraryPrompt = formatLibraryForPrompt(songs);
+    const fullPrompt = `${historyPrompt}\n\nFull Library:\n${libraryPrompt}`;
+
+    try {
+        const result = await musicAiModel.generateContent(fullPrompt);
+        const call = result.response.functionCalls()?.[0];
+
+        if (call && call.name === 'getSongRecommendations') {
+            const recommendedSongs = call.args.songs
+                .map(findSongByString)
+                .filter(Boolean); // Find song objects and filter out any nulls
+            return recommendedSongs;
+        }
+    } catch (error) {
+        console.error("GuraAI Autoplay Error:", error);
+    }
+    return []; // Return empty array on failure
 }
 
 function openSongContextMenu(targetElement, songId) {
@@ -6103,6 +6343,56 @@ document.addEventListener('DOMContentLoaded', async () => {
                 renderSoundcloudSearchResults();
             }
         });
+
+        document.body.addEventListener('click', async (e) => {
+    // AI Playlist Creation Button
+    if (e.target.id === 'aiCreatePlaylistBtn') {
+        const promptInput = document.getElementById('aiPlaylistPrompt');
+        const prompt = promptInput.value.trim();
+        if (!prompt) return;
+
+        e.target.textContent = 'Thinking...';
+        e.target.disabled = true;
+
+        const fullPrompt = `${prompt}\n\nLibrary:\n${formatLibraryForPrompt()}`;
+        const result = await musicAiModel.generateContent(fullPrompt);
+        const call = result.response.functionCalls()?.[0];
+        if (call && call.name === 'createPlaylist') {
+            availableMusicFunctions.createPlaylist(call.args);
+        } else {
+            Gurasuraisu.showPopup("GuraAI was unable to create a playlist from that prompt.");
+        }
+        promptInput.value = '';
+        e.target.textContent = 'Create';
+        e.target.disabled = false;
+    }
+
+    // AI Home Page Prompt Buttons
+    if (e.target.matches('#ai-prompt-buttons .action-btn')) {
+        const prompt = e.target.dataset.prompt;
+        Gurasuraisu.showPopup("GuraAI is thinking...");
+        const fullPrompt = `${prompt}\n\nLibrary:\n${formatLibraryForPrompt()}`;
+        const result = await musicAiModel.generateContent(fullPrompt);
+        const call = result.response.functionCalls()?.[0];
+        
+        if (call && call.name === 'createPlaylist') {
+             availableMusicFunctions.createPlaylist(call.args);
+        } else if (call && call.name === 'getSongRecommendations') {
+            const songs = call.args.songs.map(findSongByString).filter(Boolean);
+            const contentHtml = `<div class="item-list">${songs.map(song => `...`).join('')}</div>`; // This part is just a placeholder to show results
+             openDrawer("GuraAI Recommendations", prompt, `<div class="item-list">${songs.map(song => `
+                <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                     <div class="song-info">
+                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                        <div>
+                            <div class="song-title">${sanitize(song.name)}</div>
+                            <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
+                        </div>
+                    </div>
+                </div>`).join('')}</div>`);
+        } else {
+             Gurasuraisu.showPopup("GuraAI could not process that request.");
+        }
         
         setupLongPressListeners(document.getElementById('library-grid'));
         setupLongPressListeners(document.getElementById('search-results-grid'));
@@ -6329,6 +6619,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('Failed to initialize application:', error);
     }
 });
+
+// Call the AI initializer on page load
+initializeMusicAi();
 
 document.getElementById('uploadBtn').addEventListener('click', async () => {
     if ('showDirectoryPicker' in window) {
