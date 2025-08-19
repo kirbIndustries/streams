@@ -4736,19 +4736,20 @@ function openManageFoldersModal() {
     openModal(manageFoldersModal);
 }
 
-async function saveSoundcloudSettings() {
+async function saveIntegrationSettings() {
     soundcloudClientId = document.getElementById('soundcloudClientId').value.trim();
     isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
+    isScRecommendationsEnabled = document.getElementById('scRecsToggle').checked; // Add this line
 
     const tx = db.transaction('config', 'readwrite');
     await Promise.all([
         tx.objectStore('config').put({ key: 'soundcloudClientId', value: soundcloudClientId }),
-        tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled })
+        tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled }),
+        tx.objectStore('config').put({ key: 'isScRecommendationsEnabled', value: isScRecommendationsEnabled }) // Add this line
     ]);
     
     toggleSoundcloudTab();
 }
-
 function toggleSoundcloudTab() {
     const tab = document.getElementById('soundcloud-tab');
     if (tab) {
@@ -5557,12 +5558,15 @@ window.addEventListener("load", async () => {
         const configTx = db.transaction('config', 'readonly');
         const scIdReq = configTx.objectStore('config').get('soundcloudClientId');
         const scEnabledReq = configTx.objectStore('config').get('isSoundcloudEnabled');
+        const scRecsReq = configTx.objectStore('config').get('isScRecommendationsEnabled');
         
         const scIdResult = await new Promise(r => { scIdReq.onsuccess = () => r(scIdReq.result) });
         const scEnabledResult = await new Promise(r => { scEnabledReq.onsuccess = () => r(scEnabledReq.result) });
+        const scRecsResult = await new Promise(r => { scRecsReq.onsuccess = () => r(scRecsReq.result) });
         
         soundcloudClientId = scIdResult ? scIdResult.value : '';
         isSoundcloudEnabled = scEnabledResult ? scEnabledResult.value : false;
+        isScRecommendationsEnabled = scRecsResult ? scRecsResult.value : false;
         toggleSoundcloudTab();
 
         await loadSongsAndPlaylists();
@@ -6172,7 +6176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
 
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
-        document.getElementById('saveIntegrations').addEventListener('click', saveSoundcloudSettings);
+        document.getElementById('saveIntegrations').addEventListener('click', saveIntegrationSettings);
 
         const soundcloudSearchInput = document.getElementById('soundcloudSearchInput');
         soundcloudSearchInput.addEventListener('input', () => {
