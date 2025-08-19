@@ -4353,30 +4353,37 @@ function removeAutoplaySongs() {
 }
 
 async function generateAutoplaySongs() {
-    if (playQueue.length === 0) return;
+    // If queue is empty, use the currently playing song as context, otherwise use the whole queue
+    const contextQueue = playQueue.length > 0 ? playQueue : (currentlyPlayingSong ? [currentlyPlayingSong] : []);
+    if (contextQueue.length === 0) return;
 
-    // First, ensure any old autoplay songs are gone before adding new ones
+    // Clear any previous autoplay songs before generating new ones
     removeAutoplaySongs(); 
 
-    const queueSongIds = new Set(playQueue.map(s => s.id));
+    const queueSongIds = new Set(contextQueue.map(s => s.id));
     const contextArtists = new Set();
     const contextGenres = new Set();
 
-    playQueue.forEach(song => {
+    contextQueue.forEach(song => {
         contextArtists.add(song.artist);
         if (song.genre) contextGenres.add(song.genre);
     });
 
-    let recommendedSongs = [];
+    let localRecommendations = [];
+    let soundcloudRecommendations = [];
 
-    if (isSoundcloudEnabled) {
+    // 1. Get Local Library Recommendations
+    const artistMatches = songs.filter(song => contextArtists.has(song.artist));
+    const genreMatches = songs.filter(song => contextGenres.has(song.genre));
+    localRecommendations = [...artistMatches, ...genreMatches];
+
+    // 2. Get SoundCloud Recommendations (if enabled)
+    if (isSoundcloudEnabled && soundcloudClientId) {
         const query = [...contextArtists, ...contextGenres].join(' ');
         try {
             const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=50`);
             const data = await response.json();
-            const tracks = data.collection.filter(track => !queueSongIds.has(track.id)).slice(0, 20);
-
-            recommendedSongs = tracks.map(track => ({
+            soundcloudRecommendations = data.collection.map(track => ({
                 id: track.id,
                 name: track.title,
                 artist: track.user.username,
@@ -4387,26 +4394,36 @@ async function generateAutoplaySongs() {
         } catch (error) {
             console.error("SoundCloud Autoplay fetch failed:", error);
         }
-    } else {
-        const artistMatches = songs.filter(song => contextArtists.has(song.artist) && !queueSongIds.has(song.id));
-        const genreMatches = songs.filter(song => contextGenres.has(song.genre) && !queueSongIds.has(song.id));
-        
-        const combined = [...artistMatches, ...genreMatches];
-        const uniqueRecommendations = [...new Map(combined.map(item => [item['id'], item])).values()];
-        
-        // Shuffle the recommendations
-        for (let i = uniqueRecommendations.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [uniqueRecommendations[i], uniqueRecommendations[j]] = [uniqueRecommendations[j], uniqueRecommendations[i]];
-        }
-        recommendedSongs = uniqueRecommendations.slice(0, 20);
-    }
-    
-    if (recommendedSongs.length > 0) {
-        recommendedSongs.forEach(song => autoplaySongIds.add(song.id));
-        playQueue.push(...recommendedSongs);
     }
 
+    // 3. Combine and Deduplicate all recommendations
+    const allRecommendations = [...localRecommendations, ...soundcloudRecommendations];
+    const uniqueSongs = new Map();
+
+    allRecommendations.forEach(song => {
+        // First, skip any song that is already in the user's part of the queue
+        if (queueSongIds.has(song.id)) return;
+
+        // Create a unique key based on artist and title to catch cross-platform duplicates
+        const uniqueKey = `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
+        if (!uniqueSongs.has(uniqueKey)) {
+            uniqueSongs.set(uniqueKey, song);
+        }
+    });
+
+    let finalRecommendations = Array.from(uniqueSongs.values());
+
+    // 4. Shuffle and slice the final list
+    shuffleArray(finalRecommendations);
+    finalRecommendations = finalRecommendations.slice(0, 20);
+    
+    // 5. Add the new autoplay songs to the queue and the tracking Set
+    if (finalRecommendations.length > 0) {
+        finalRecommendations.forEach(song => autoplaySongIds.add(song.id));
+        playQueue.push(...finalRecommendations);
+    }
+
+    // Re-render the queue to show the new songs
     renderQueue();
 }
 
@@ -4463,20 +4480,35 @@ function openSongContextMenu(targetElement, songId) {
 
 async function playSong(song, playContext = null) {
     if (isPlayerLoading || !song) return;
-
-    // --- NEW QUEUE LOGIC ---
+    
+    // --- REVISED QUEUE LOGIC FOR PERSISTENT AUTOPLAY ---
     if (playContext && Array.isArray(playContext)) {
-        // PRIORITY 1: A new context was explicitly provided. This ALWAYS overwrites the old queue.
-        playQueue = [...playContext];
-        isQueueUserModified = false; // This is a new, app-generated queue.
+        // A new context (song, album, artist) is being played.
+        if (isAutoplayEnabled) {
+            // Autoplay is ON. Preserve autoplay songs.
+            // 1. Get the existing autoplay songs from the end of the current queue.
+            const existingAutoplaySongs = playQueue.filter(s => autoplaySongIds.has(s.id));
+            
+            // 2. The new queue is the new play context...
+            playQueue = [...playContext];
+            
+            // 3. ...plus the old autoplay songs appended to the end.
+            playQueue.push(...existingAutoplaySongs);
+
+            isQueueUserModified = false; // This is a new context, but autoplay state is maintained.
+        } else {
+            // Autoplay is OFF. Behavior is as before: replace the queue completely.
+            playQueue = [...playContext];
+            isQueueUserModified = false;
+        }
     } else if (isQueueUserModified) {
-        // PRIORITY 2: No new context was given, and the user has a custom queue. We must protect it.
+        // If the queue is user-modified, we must protect it.
+        // Add the song to play next if it's not already in the custom queue.
         if (!playQueue.some(s => s.id === song.id)) {
-            // The song isn't in the custom queue, so add it to play next.
             playQueue.splice(currentQueueIndex + 1, 0, song);
         }
     } else {
-        // PRIORITY 3 (FALLBACK): No context and no custom queue. Rebuild from the current view.
+        // Fallback: Autoplay is off, no context, no user modification. Rebuild as before.
         rebuildQueueFromCurrentView();
     }
     
