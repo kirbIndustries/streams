@@ -3510,22 +3510,32 @@ const availableMusicFunctions = {
         /**
          * Creates and initializes the properties for all blobs.
          * It spreads them evenly across the viewport and assigns each a unique
-         * section of the album art to render.
+         * section of the album art to render. This version includes enhanced
+         * properties for more organic, continuous movement.
          */
         function initBlobs() {
             blobs = [];
             const { width: imgWidth, height: imgHeight } = albumArtImage;
             const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
+            const maxSpeed = 0.5; // Maximum pixels per frame a blob can move
 
             for (let i = 0; i < NUM_BLOBS; i++) {
                 const radius = (Math.random() * 0.15 + 0.1) * Math.min(canvasWidth, canvasHeight);
                 blobs.push({
-                    // Position & Movement
+                    // Position
                     x: Math.random() * canvasWidth,
                     y: Math.random() * canvasHeight,
-                    vx: (Math.random() - 0.5) * 0.5,
-                    vy: (Math.random() - 0.5) * 0.5,
                     radius: radius,
+
+                    // --- NEW: Enhanced Movement Properties ---
+                    // Current velocity, which will change smoothly over time.
+                    vx: (Math.random() - 0.5) * maxSpeed,
+                    vy: (Math.random() - 0.5) * maxSpeed,
+                    // The target velocity the blob is currently moving towards.
+                    targetVx: (Math.random() - 0.5) * maxSpeed,
+                    targetVy: (Math.random() - 0.5) * maxSpeed,
+                    // A timer (in frames) for how long until the blob picks a new direction.
+                    nextMoveFrame: Math.random() * 300 + 100,
 
                     // Source image region this blob will render
                     sourceX: Math.random() * (imgWidth - imgWidth * 0.2),
@@ -3544,19 +3554,21 @@ const availableMusicFunctions = {
             }
         }
 
-        /**
+/**
          * The main animation loop, called on every frame.
          * It clears the canvas, draws the blurred background, and then updates
-         * and draws each individual blob with its warping effect.
+         * and draws each individual blob with its warping effect. This version
+         * implements organic movement for a continuous flow.
          */
-        function animateCanvas(timestamp) {
+        function animateCanvas() {
             animationFrameId = requestAnimationFrame(animateCanvas);
             if (!ctx || !albumArtImage.src) {
-                ctx.clearRect(0, 0, distortionCanvas.width, distortionCanvas.height);
+                if (ctx) ctx.clearRect(0, 0, distortionCanvas.width, distortionCanvas.height);
                 return;
             };
 
             const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
+            const maxSpeed = 0.5; // Should be the same as in initBlobs
             
             // 1. Draw the blurred, full-screen background image
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -3569,65 +3581,78 @@ const availableMusicFunctions = {
             // 2. Update and draw each blob
             blobs.forEach(blob => {
                 // --- Update blob properties ---
-                blob.time += 0.01;
+                
+                // --- NEW: Organic Movement Logic ---
+                blob.nextMoveFrame--;
+                // Check if it's time to choose a new destination velocity
+                if (blob.nextMoveFrame <= 0) {
+                    blob.targetVx = (Math.random() - 0.5) * maxSpeed;
+                    blob.targetVy = (Math.random() - 0.5) * maxSpeed;
+                    blob.nextMoveFrame = Math.random() * 300 + 100; // Reset timer
+                }
+                
+                // Smoothly move the current velocity towards the target velocity.
+                // This creates graceful acceleration and direction changes.
+                const lerpFactor = 0.02; 
+                blob.vx += (blob.targetVx - blob.vx) * lerpFactor;
+                blob.vy += (blob.targetVy - blob.vy) * lerpFactor;
+                
+                // Update position using the smoothly changing velocity
                 blob.x += blob.vx;
                 blob.y += blob.vy;
 
-                // Bounce off edges
-                if (blob.x - blob.radius < 0 || blob.x + blob.radius > canvasWidth) blob.vx *= -1;
-                if (blob.y - blob.radius < 0 || blob.y + blob.radius > canvasHeight) blob.vy *= -1;
+                // --- End of New Movement Logic ---
+
+                // Keep the bouncing logic as a safeguard to ensure blobs stay on screen.
+                // It now also inverts the target velocity to prevent blobs from "sticking" to walls.
+                if ((blob.x - blob.radius < 0 && blob.vx < 0) || (blob.x + blob.radius > canvasWidth && blob.vx > 0)) {
+                    blob.vx *= -1;
+                    blob.targetVx *= -1;
+                }
+                if ((blob.y - blob.radius < 0 && blob.vy < 0) || (blob.y + blob.radius > canvasHeight && blob.vy > 0)) {
+                    blob.vy *= -1;
+                    blob.targetVy *= -1;
+                }
                 
                 // Gradually decay beat-induced effects back to normal
+                blob.time += 0.01;
                 blob.warpAmount *= 0.95; 
                 blob.contrast *= 0.98;
                 if (blob.contrast < 1) blob.contrast = 1;
                 blob.scale += (1 - blob.scale) * 0.1;
 
 
-                // --- Render the blob ---
+                // --- Render the blob --- (This drawing code remains unchanged)
                 ctx.save();
                 
-                // Create a circular clipping mask for the blob
                 ctx.beginPath();
                 ctx.arc(blob.x, blob.y, blob.radius * blob.scale, 0, Math.PI * 2);
                 ctx.closePath();
                 ctx.clip();
                 
-                // Apply contrast from beat detection
                 if (blob.contrast > 1) {
                     ctx.filter = `contrast(${blob.contrast})`;
                 }
 
-                // Calculate total warp for this frame
                 const totalWarp = blob.baseWarp + blob.warpAmount + Math.sin(blob.time) * (blob.baseWarp * 0.5);
                 
-                // Draw the image inside the circle with a liquid warp effect
-                // This is done by drawing the image in thin vertical strips,
-                // each with a slight sinusoidal y-offset.
                 const numStrips = 30;
                 const stripWidth = (blob.radius * 2 * blob.scale) / numStrips;
                 for (let i = 0; i < numStrips; i++) {
                     const stripX = blob.x - (blob.radius * blob.scale) + i * stripWidth;
-                    
                     const sinInput = (i / numStrips) * Math.PI + blob.time;
                     const yOffset = Math.sin(sinInput) * totalWarp;
                     
                     ctx.drawImage(
                         albumArtImage,
-                        // Source rectangle (from original image)
-                        blob.sourceX + (blob.sourceSize / numStrips) * i,
-                        blob.sourceY,
-                        blob.sourceSize / numStrips,
-                        blob.sourceSize,
-                        // Destination rectangle (on canvas)
-                        stripX,
-                        blob.y - (blob.radius * blob.scale) + yOffset,
-                        stripWidth + 1, // +1 to avoid gaps
-                        blob.radius * 2 * blob.scale
+                        blob.sourceX + (blob.sourceSize / numStrips) * i, blob.sourceY,
+                        blob.sourceSize / numStrips, blob.sourceSize,
+                        stripX, blob.y - (blob.radius * blob.scale) + yOffset,
+                        stripWidth + 1, blob.radius * 2 * blob.scale
                     );
                 }
 
-                ctx.restore(); // Remove clipping mask and filter
+                ctx.restore();
             });
         }
         
