@@ -1051,13 +1051,24 @@
             background-position: center;
             filter: url(#albumArtDistortion);
             will-change: transform;
-            transition: background-image 0.5s ease, clip-path 3s ease-in-out, filter 0.1s ease-out;
+            transition: background-image 0.5s ease;
             scale: 0.75;
             opacity: 0.5;
         }
 
         body.is-mobile .distortion-shard {
             display: none !important;
+        }
+        
+        /* Define the unique organic shapes for each shard */
+        .shape-1 {
+            clip-path: polygon(0% 25%, 66% 0%, 100% 33%, 75% 100%, 25% 100%);
+        }
+        .shape-2 {
+            clip-path: polygon(33% 0%, 100% 0%, 100% 75%, 50% 100%, 0% 50%);
+        }
+        .shape-3 {
+            clip-path: polygon(100% 33%, 80% 80%, 30% 100%, 0% 70%, 20% 20%);
         }
         
         .search-container {
@@ -1891,11 +1902,11 @@
             <feTurbulence 
                 id="turbulence"
                 type="turbulence" 
-                baseFrequency="0.002 0.005" 
+                baseFrequency="0.01 0.02" 
                 numOctaves="1" 
                 seed="0"
             />
-            <feGaussianBlur stdDeviation="60" result="blurredTurbulence"/>
+            <feGaussianBlur stdDeviation="30" result="blurredTurbulence"/>
             <feDisplacementMap 
                 id="displacement"
                 in="SourceGraphic" 
@@ -3482,41 +3493,6 @@ const availableMusicFunctions = {
     // getSongRecommendations is handled directly by the calling function, so it doesn't need an entry here.
 };
 
-function generateRandomClipPath() {
-    const points = 8; // Number of vertices in the polygon
-    let path = [];
-    for (let i = 0; i < points; i++) {
-        // Generate a point on one of the four edges
-        const side = Math.floor(Math.random() * 4);
-        let x, y;
-        switch (side) {
-            case 0: // Top
-                x = Math.random() * 100;
-                y = Math.random() * 20; // Stick close to the edge
-                break;
-            case 1: // Right
-                x = 100 - (Math.random() * 20);
-                y = Math.random() * 100;
-                break;
-            case 2: // Bottom
-                x = Math.random() * 100;
-                y = 100 - (Math.random() * 20);
-                break;
-            case 3: // Left
-                x = Math.random() * 20;
-                y = Math.random() * 100;
-                break;
-        }
-        path.push({ x, y });
-    }
-
-    // Sort points to avoid self-intersecting polygons (simple clockwise sort)
-    const center = path.reduce((acc, { x, y }) => ({ x: acc.x + x / points, y: acc.y + y / points }), { x: 0, y: 0 });
-    path.sort((a, b) => Math.atan2(a.y - center.y, a.x - center.x) - Math.atan2(b.y - center.y, b.x - center.x));
-
-    return `polygon(${path.map(p => `${p.x.toFixed(2)}% ${p.y.toFixed(2)}%`).join(', ')})`;
-}
-
 function initializeShards() {
     const shardElements = document.querySelectorAll('.distortion-shard');
     
@@ -3530,26 +3506,24 @@ function initializeShards() {
         const homeX = homePositions[i % homePositions.length].x;
         const homeY = homePositions[i % homePositions.length].y;
         
+        const magnitude = Math.sqrt(homeX * homeX + homeY * homeY);
+        const dirX = magnitude > 0 ? homeX / magnitude : 0;
+        const dirY = magnitude > 0 ? homeY / magnitude : 0;
+
         shards.push({
             element: el,
             bgPos: `${i * 50}% 50%`, 
-            rotationSpeed: (Math.random() - 0.5) * 0.2, // Slower rotation
+            rotationSpeed: (Math.random() - 0.5) * 0.25,
             xDrift: (Math.random() - 0.5) * 0.2, 
             yDrift: (Math.random() - 0.5) * 0.2,
             rotation: Math.random() * 360,
             homeX: homeX,
-            homeY: homeY
+            homeY: homeY,
+            dirX: dirX,
+            dirY: dirY
         });
         el.style.backgroundPosition = shards[i].bgPos;
-        el.style.clipPath = generateRandomClipPath();
     });
-
-    // Periodically update the shapes to create a morphing effect
-    setInterval(() => {
-        shards.forEach(shard => {
-            shard.element.style.clipPath = generateRandomClipPath();
-        });
-    }, 5000); // Morph every 5 seconds
 }
 
 function setDistortionBackgrounds(url) {
@@ -3610,199 +3584,206 @@ async function updateAllBackgrounds(imageUrl) {
 }
 
 class BeatDetector {
-    constructor(historySize = 60) {
+    constructor(frequencyBands, historySize = 60, minThreshold = 5) {
+        this.frequencyBands = frequencyBands;
         this.historySize = historySize;
-        this.bassHistory = new Array(historySize).fill(0);
-        this.midHistory = new Array(historySize).fill(0);
-        
-        // These are the smoothed output values for animation
-        this.bass = 0;
-        this.mid = 0;
+        this.minFluxThreshold = minThreshold;
+        this.fluxHistories = this.frequencyBands.map(() => []);
+        this.lastEnergies = new Array(this.frequencyBands.length).fill(0);
+        this.beatValue = 0.0;
+        this.decayRate = 0.96;
+        this.dynamicSensitivity = 1.4;
+        this.minSensitivity = 1.2;
+        this.maxSensitivity = 2.4;
+        this.increaseFactor = 1.05;
+        this.decreaseFactor = 0.999;
+    }
 
-        // Configuration for how fast the values react and fade
-        this.attack = 0.45; // How quickly it reacts to a beat (0 to 1)
-        this.decay = 0.96;  // How quickly it fades after a beat (0 to 1)
+    _calculateStandardDeviation(array, mean) {
+        if (array.length < 2) return 0;
+        const variance = array.reduce((acc, val) => acc + (val - mean) ** 2, 0) / array.length;
+        return Math.sqrt(variance);
     }
 
     update(dataArray) {
-        // Calculate energy for bass frequencies (e.g., indices 1-5)
-        let bassEnergy = 0;
-        for (let i = 1; i < 6; i++) {
-            bassEnergy += dataArray[i];
+        let beatDetectedThisFrame = false;
+
+        for (let i = 0; i < this.frequencyBands.length; i++) {
+            const band = this.frequencyBands[i];
+            const history = this.fluxHistories[i];
+            
+            let currentEnergy = 0;
+            for (let j = band[0]; j <= band[1]; j++) currentEnergy += dataArray[j];
+            currentEnergy /= (band[1] - band[0] + 1);
+
+            const flux = Math.max(0, currentEnergy - this.lastEnergies[i]);
+            this.lastEnergies[i] = currentEnergy;
+
+            if (history.length < this.historySize) {
+                history.push(flux);
+                continue;
+            }
+            
+            const averageFlux = history.reduce((a, b) => a + b, 0) / history.length;
+            const stdDev = this._calculateStandardDeviation(history, averageFlux);
+            const dynamicThreshold = averageFlux + (this.dynamicSensitivity * stdDev);
+
+            if (flux > dynamicThreshold && flux > this.minFluxThreshold) {
+                beatDetectedThisFrame = true;
+            }
+
+            history.push(flux);
+            history.shift();
         }
-        bassEnergy /= 5;
 
-        // Calculate energy for mid frequencies (e.g., indices 50-100)
-        let midEnergy = 0;
-        for (let i = 50; i < 101; i++) {
-            midEnergy += dataArray[i];
+        if (beatDetectedThisFrame) {
+            this.beatValue = 1.0;
+            this.dynamicSensitivity *= this.increaseFactor;
+        } else {
+            this.beatValue *= this.decayRate;
+            this.dynamicSensitivity *= this.decreaseFactor;
         }
-        midEnergy /= 51;
-
-        // Calculate the average from history
-        const bassAvg = this.bassHistory.reduce((a, b) => a + b, 0) / this.historySize;
-        const midAvg = this.midHistory.reduce((a, b) => a + b, 0) / this.historySize;
-
-        // If current energy is significantly above average, it's a "beat"
-        if (bassEnergy > bassAvg * 1.25) {
-            // Smoothly increase the bass value towards 1
-            this.bass += (1.0 - this.bass) * this.attack;
-        }
-        if (midEnergy > midAvg * 1.4) {
-            // Smoothly increase the mid value towards 1
-            this.mid += (1.0 - this.mid) * this.attack;
-        }
-
-        // Smoothly decay the values back to 0
-        this.bass *= this.decay;
-        this.mid *= this.decay;
-
-        // Update the history buffers
-        this.bassHistory.shift();
-        this.bassHistory.push(bassEnergy);
-        this.midHistory.shift();
-        this.midHistory.push(midEnergy);
+        
+        this.dynamicSensitivity = Math.max(this.minSensitivity, Math.min(this.maxSensitivity, this.dynamicSensitivity));
+        return this.beatValue;
     }
 }
-        
+
 function initVisualizer() {
     if (document.body.classList.contains('reduce-animations')) {
         const canvas = document.getElementById('visualizerCanvas');
         if (canvas) canvas.style.display = 'none';
         return; 
     }
+
     if (isVisualizerInitialized) return;
 
     try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
-        eqBass = audioContext.createBiquadFilter(); eqMid = audioContext.createBiquadFilter(); eqTreble = audioContext.createBiquadFilter();
+        eqBass = audioContext.createBiquadFilter();
+        eqMid = audioContext.createBiquadFilter();
+        eqTreble = audioContext.createBiquadFilter();
         eqBass.type = 'lowshelf'; eqBass.frequency.value = 300; 
         eqMid.type = 'peaking'; eqMid.frequency.value = 1000; eqMid.Q.value = 1; 
         eqTreble.type = 'highshelf'; eqTreble.frequency.value = 3000;
         
         analyser = audioContext.createAnalyser();
-        analyser.smoothingTimeConstant = 0.8;
-        analyser.fftSize = isMobile ? 256 : 1024;
         
         source = audioContext.createMediaElementSource(audioPlayer);
-        source.connect(eqBass).connect(eqMid).connect(eqTreble).connect(analyser).connect(audioContext.destination);
 
+        source.connect(eqBass);
+        eqBass.connect(eqMid);
+        eqMid.connect(eqTreble);
+        eqTreble.connect(analyser);
+        analyser.connect(audioContext.destination);
+
+        if (isMobile) {
+            analyser.fftSize = 64;
+        } else {
+            analyser.fftSize = 2048;
+        }
+        
+        analyser.smoothingTimeConstant = 0.8;
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
         
-        const distortionCanvas = document.getElementById('distortionCanvas');
-        const d_ctx = distortionCanvas.getContext('2d');
-        const beatDetector = new BeatDetector();
+        const displacementFilter = document.getElementById('displacement');
+        const turbulenceFilter = document.getElementById('turbulence');
 
-        // Define the four pieces (quadrants) of the album art
-        const pieces = [
-            // [sourceX, sourceY, baseRotationSpeed, beatRotationMultiplier]
-            [0, 0, 0.00003, 1.5],   // Top-left
-            [0.5, 0, -0.000025, 1.2], // Top-right
-            [0, 0.5, 0.00002, -1],  // Bottom-left
-            [0.5, 0.5, -0.000035, -1.8] // Bottom-right
-        ].map(p => ({
-            sx: p[0], sy: p[1],
-            baseSpeed: p[2], beatSpeed: p[3],
-            rotation: Math.random() * Math.PI * 2 // Start at a random angle
-        }));
+        const baselineDistortion = 80;
+        const peakDistortion = 250;
 
-        const smallVisualizerCanvas = document.getElementById('visualizerCanvas');
-        const small_ctx = smallVisualizerCanvas.getContext('2d');
-        const desktopBarIndices = [2, 5, 10, 30, 60, 120];
-        const mobileBarIndices = [1, 3, 6, 12, 20, 28];
-        const numBars = 6, powerCurve = 2.2;
-        let lastTime = 0;
+        let beatDetector;
+        if (!isMobile) {
+            beatDetector = new BeatDetector([[0, 10], [20, 50], [80, 120]]);
+        }
+        
+        const canvas = document.getElementById('visualizerCanvas');
+        const canvasCtx = canvas.getContext('2d');
+        
+        // Define separate bar indices for desktop and mobile to match their FFT sizes.
+        const desktopBarIndices = [5, 10, 30, 100, 200, 400];
+        const mobileBarIndices = [1, 3, 6, 12, 20, 28]; // Mapped to a 32-bin array
+        const numBars = 6;
+        
+        const sensitivityMultipliers = [1, 1.05, 1.1, 1.15, 1.25, 1.4];
+        const powerCurve = 2.2;
+        
+        let smoothedPulse = 0.0; 
+        const smoothingFactor = 0.2;
 
-        function draw(currentTime) {
+        function draw() {
             requestAnimationFrame(draw);
             analyser.getByteFrequencyData(dataArray);
-            beatDetector.update(dataArray);
-            if (!lastTime) lastTime = currentTime;
-            const deltaTime = currentTime - lastTime;
-            lastTime = currentTime;
 
-            // --- Animate Main Distortion Canvas ---
-            if (isDistortionImageLoaded) {
-                if (distortionCanvas.width !== distortionCanvas.clientWidth || distortionCanvas.height !== distortionCanvas.clientHeight) {
-                    distortionCanvas.width = distortionCanvas.clientWidth;
-                    distortionCanvas.height = distortionCanvas.clientHeight;
-                }
-                const w = distortionCanvas.width;
-                const h = distortionCanvas.height;
-                d_ctx.clearRect(0, 0, w, h);
-                d_ctx.globalCompositeOperation = 'source-over';
-                
-                const img = currentDistortionImage;
-                const imgW_half = img.width / 2;
-                const imgH_half = img.height / 2;
-
-                pieces.forEach((p, i) => {
-                    d_ctx.save();
-                    
-                    // 1. Update rotation: slow base speed + faster speed on beat
-                    p.rotation += (p.baseSpeed + beatDetector.bass * p.baseSpeed * p.beatSpeed) * deltaTime;
-                    
-                    // 2. Determine center position for this piece
-                    const centerX = w * (p.sx + 0.25);
-                    const centerY = h * (p.sy + 0.25);
-                    d_ctx.translate(centerX, centerY);
-                    d_ctx.rotate(p.rotation);
-
-                    // 3. Apply "punch" (scale) based on bass beat
-                    const scale = 1 + beatDetector.bass * 0.15;
-                    d_ctx.scale(scale, scale);
-
-                    // 4. Apply "warp" using a gentle sine wave modified by the mid-range beat
-                    const warpFactor = beatDetector.mid * 0.15;
-                    const warpX = Math.sin(currentTime * 0.0005 + i) * warpFactor;
-                    const warpY = Math.cos(currentTime * 0.0005 + i) * warpFactor;
-                    d_ctx.transform(1, warpY, warpX, 1, 0, 0); // Skew transform
-
-                    // 5. Draw the correct quadrant of the source image, centered on the new origin
-                    d_ctx.drawImage(
-                        img,
-                        p.sx * img.width, p.sy * img.height, imgW_half, imgH_half,
-                        -w / 4, -h / 4, w / 2, h / 2
-                    );
-                    d_ctx.restore();
+            if (!isMobile) {
+                const beatPulseTarget = beatDetector.update(dataArray);
+                smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
+    
+                const distortionRange = peakDistortion - baselineDistortion;
+                const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
+                displacementFilter.setAttribute('scale', currentDistortion);
+    
+                const maxShift = 60; 
+                const outwardShift = smoothedPulse * maxShift;
+                const shardTime = Date.now() * 0.00005;
+    
+                shards.forEach((shard) => {
+                    shard.rotation += shard.rotationSpeed;
+                    const baseX = shard.homeX + Math.sin(shardTime * shard.xDrift * 10) * 15;
+                    const baseY = shard.homeY + Math.cos(shardTime * shard.yDrift * 10) * 15;
+                    const totalX = baseX + (shard.dirX * outwardShift);
+                    const totalY = baseY + (shard.dirY * outwardShift);
+                    shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
                 });
-
-                // 6. Apply brightness flash over the whole canvas on a bass hit
-                if (beatDetector.bass > 0.1) {
-                    const isLightTheme = document.body.classList.contains('light-theme');
-                    d_ctx.globalCompositeOperation = isLightTheme ? 'soft-light' : 'lighter';
-                    d_ctx.fillStyle = isLightTheme ? `rgba(255, 255, 255, ${beatDetector.bass * 0.4})` : `rgba(0, 0, 0, ${beatDetector.bass * 0.4})`;
-                    d_ctx.fillRect(0, 0, w, h);
-                }
-            } else {
-                 d_ctx.clearRect(0, 0, distortionCanvas.width, distortionCanvas.height);
+    
+                turbulenceFilter.setAttribute('seed', Date.now() / 30);
             }
-
-            // --- Animate Small Player Visualizer (Restored Logic) ---
-            if (smallVisualizerCanvas.width !== smallVisualizerCanvas.clientWidth) smallVisualizerCanvas.width = smallVisualizerCanvas.clientWidth;
-            if (smallVisualizerCanvas.height !== smallVisualizerCanvas.clientHeight) smallVisualizerCanvas.height = smallVisualizerCanvas.clientHeight;
-            small_ctx.clearRect(0, 0, smallVisualizerCanvas.width, smallVisualizerCanvas.height);
+            
+            if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
+            if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            
             const gap = 2;
-            const barWidth = (smallVisualizerCanvas.width - (numBars - 1) * gap) / numBars;
-            small_ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-color').trim() || '#FFFFFF';
+            const barWidth = (canvas.width - (numBars - 1) * gap) / numBars;
+            const style = getComputedStyle(document.body);
+            const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
+            canvasCtx.fillStyle = textColor;
+
             const indicesToUse = isMobile ? mobileBarIndices : desktopBarIndices;
 
             for (let i = 0; i < numBars; i++) {
                 const x = i * (barWidth + gap);
-                const value = dataArray[indicesToUse[i]] || 0;
-                const barHeight = Math.pow(value / 255, powerCurve) * smallVisualizerCanvas.height;
+                const value = Math.min(dataArray[indicesToUse[i]] * sensitivityMultipliers[i], 255);
+                const barHeight = Math.pow(value / 255, powerCurve) * canvas.height;
+                
                 const pillRadius = Math.max(0, barWidth / 2);
-
-                if (barHeight < 1) continue; // Don't draw tiny dots
-                small_ctx.beginPath();
-                small_ctx.roundRect(x, (smallVisualizerCanvas.height - barHeight) / 2, barWidth, barHeight, pillRadius);
-                small_ctx.fill();
+                if (barHeight < pillRadius * 2) {
+                    const dotRadius = barHeight / 2;
+                    if (dotRadius < 1) continue;
+                    canvasCtx.globalAlpha = barHeight / (pillRadius * 2);
+                    canvasCtx.beginPath();
+                    canvasCtx.arc(x + pillRadius, canvas.height / 2, dotRadius, 0, 2 * Math.PI);
+                    canvasCtx.fill();
+                } else {
+                    const y = (canvas.height - barHeight) / 2;
+                    canvasCtx.globalAlpha = 1.0;
+                    canvasCtx.beginPath();
+                    if (canvasCtx.roundRect) {
+                        canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
+                    } else { // Fallback
+                        canvasCtx.rect(x, y, barWidth, barHeight);
+                    }
+                    canvasCtx.fill();
+                }
             }
+            canvasCtx.globalAlpha = 1.0;
         }
-        draw(0); // Start the animation loop
+
+        draw();
         isVisualizerInitialized = true;
+
     } catch(e) {
         console.error("Failed to initialize AudioContext/Visualizer:", e);
     }
@@ -6160,6 +6141,7 @@ playPauseBtn.addEventListener('click', async () => {
             playPauseBtn.classList.add('playing');
             updateMiniplayerUI(currentlyPlayingSong, 'playing');
             if (!document.body.classList.contains('reduce-animations')) {
+                document.querySelector('.background-blur').classList.add('rotating');
             }
             updateMediaSessionPlaybackState('playing');
             Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
@@ -6214,6 +6196,7 @@ volumeSlider.addEventListener('input', (e) => {
 
 audioPlayer.addEventListener('play', () => {
     if (!document.body.classList.contains('reduce-animations')) {
+        document.querySelector('.background-blur').classList.add('rotating');
     }
 });
 
