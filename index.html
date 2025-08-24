@@ -3598,8 +3598,8 @@ const availableMusicFunctions = {
                     oldResizedArt = currentResizedArt;
                 }
 
-                // Create the new resized image. 256px is plenty for a blurred background.
-                const newResized = await createResizedImage(imageUrl, 256);
+                // Create the new resized image.
+                const newResized = await createResizedImage(imageUrl, 64);
                 newResized.dataset.originalUrl = imageUrl; // Store original URL for comparison
                 currentResizedArt = newResized;
 
