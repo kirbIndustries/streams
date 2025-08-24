@@ -2296,6 +2296,7 @@
         let isTransitioning = false;
         let transitionProgress = 0;
         const TRANSITION_DURATION = 15; // in frames (approx. 0.25 seconds)
+        let visualizerFrameId = null;
         let songs = [];
         let currentSongId = null;
         let isPlayerLoading = false;
@@ -2565,20 +2566,24 @@ function setView(viewName) {
     const isNowPlaying = (viewName === 'now-playing');
 
     if (isNowPlaying) {
-        // If we are switching TO the now playing view, start the animation
-        // but only if it's not already running.
         if (!animationFrameId) {
             animateCanvas();
         }
+        // Much cleaner start logic:
+        if (!visualizerFrameId && visualizerDraw) {
+            visualizerDraw();
+        }
     } else {
-        // If we are switching AWAY from now playing, stop the animation
-        // if it is currently running.
         if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
-            animationFrameId = null; // Reset the ID to indicate the animation is stopped.
+            animationFrameId = null;
+        }
+        if (visualizerFrameId) {
+            cancelAnimationFrame(visualizerFrameId);
+            visualizerFrameId = null;
         }
     }
-
+    
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
     });
@@ -4013,8 +4018,8 @@ function initVisualizer() {
         let smoothedPulse = 0.0; 
         const smoothingFactor = 0.2;
 
-        function draw() {
-            requestAnimationFrame(draw);
+        visualizerDraw = () => {
+            visualizerFrameId = requestAnimationFrame(draw);
             analyser.getByteFrequencyData(dataArray);
 
             if (!isMobile) {
@@ -4069,7 +4074,6 @@ function initVisualizer() {
             canvasCtx.globalAlpha = 1.0;
         }
 
-        draw();
         isVisualizerInitialized = true;
 
     } catch(e) {
