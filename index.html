@@ -2290,7 +2290,6 @@
         let blobs = [];
         let animationFrameId;
         let backgroundRotation = 0;
-        let targetBeatIntensity = 0; // The goal intensity when a beat hits (0 or 1)
         let currentBeatIntensity = 0; // The smoothly animated intensity used for rendering
         const NUM_BLOBS_PERF = 15; // Increased for better canvas coverage
         let noise; // This will hold our noise generator function
@@ -3772,30 +3771,20 @@ const availableMusicFunctions = {
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
             // --- Beat Effect Logic ---
-            const BEAT_ATTACK_SPEED = 0.4; // How quickly the effect animates IN (higher is faster)
-            const BEAT_DECAY_SPEED = 0.96; // How quickly the effect animates OUT (closer to 1 is slower)
-            
-            // 1. Animate the *current* intensity towards the *target* intensity. This creates the smooth "attack".
-            currentBeatIntensity += (targetBeatIntensity - currentBeatIntensity) * BEAT_ATTACK_SPEED;
+            const BEAT_DECAY_SPEED = 0.95; // Controls how fast the effect fades out (closer to 1 is slower)
 
-            // 2. Animate the *target* intensity back down to 0. This creates the smooth "decay".
-            targetBeatIntensity *= BEAT_DECAY_SPEED;
-            
-            // Apply a global "thump" effect based on the SMOOTH `currentBeatIntensity`.
-            if (currentBeatIntensity > 0.001) { // Only apply transforms if there's an effect
-                const zoom = 1 + Math.sin(currentBeatIntensity * Math.PI) * 0.005; // 0.5% zoom
-                ctx.save();
-                ctx.translate(canvasWidth / 2, canvasHeight / 2);
-                ctx.scale(zoom, zoom);
-                ctx.translate(-canvasWidth / 2, -canvasHeight / 2);
+            // 1. If a beat is active, smoothly decay the intensity on every frame.
+            if (beatIntensity > 0.001) {
+                beatIntensity *= BEAT_DECAY_SPEED;
+            } else {
+                beatIntensity = 0; // Clamp to zero to prevent tiny residual values
             }
 
-            // 2. Apply a global "thump" effect to the entire canvas if a beat is active.
+            // 2. Apply a global "thump" effect based on the decaying `beatIntensity`.
             if (beatIntensity > 0) {
-                // Use a sine wave to create a smooth in-and-out zoom effect
-                const zoom = 1 + Math.sin(beatIntensity * Math.PI) * 0.02;
+                // The sine wave creates a smooth pulse that animates both in and out during the decay
+                const zoom = 1 + Math.sin(beatIntensity * Math.PI) * 0.005; // Gentle 0.5% zoom
                 ctx.save();
-                // Apply the zoom from the center of the canvas
                 ctx.translate(canvasWidth / 2, canvasHeight / 2);
                 ctx.scale(zoom, zoom);
                 ctx.translate(-canvasWidth / 2, -canvasHeight / 2);
@@ -3845,20 +3834,20 @@ const availableMusicFunctions = {
                 blob.time += 0.1;
 
                 // --- Draw Blobs with Transition and Beat Intensity ---
-                // The key change is passing 'beatIntensity' to the drawing function.
+                // Pass the decaying `beatIntensity` to the drawing function
                 if (isTransitioning && oldResizedArt.complete && oldResizedArt.src) {
                     ctx.globalAlpha = 1 - transitionProgress;
-                    drawOrganicBlob(ctx, blob, oldResizedArt, currentBeatIntensity);
+                    drawOrganicBlob(ctx, blob, oldResizedArt, beatIntensity);
                 }
                 if (currentResizedArt.complete && currentResizedArt.src) {
                     ctx.globalAlpha = isTransitioning ? transitionProgress : 1;
-                    drawOrganicBlob(ctx, blob, currentResizedArt, currentBeatIntensity);
+                    drawOrganicBlob(ctx, blob, currentResizedArt, beatIntensity);
                 }
                 ctx.globalAlpha = 1;
             });
 
             // 3. If a beat was active, restore the canvas from the global distortion.
-            if (currentBeatIntensity > 0.001) {
+            if (beatIntensity > 0.001) {
                 ctx.restore();
             }
         }
