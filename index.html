@@ -2301,6 +2301,7 @@
         let isTransitioning = false;
         let transitionProgress = 0;
         const TRANSITION_DURATION = 15; // in frames (approx. 0.25 seconds)
+        let isVisualizerLoopActive = false;
         let songs = [];
         let currentSongId = null;
         let isPlayerLoading = false;
@@ -2568,6 +2569,15 @@ function renderSoundcloudSearchResults() {
 function setView(viewName) {
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
+    const wasNowPlaying = (activeView === 'now-playing');
+
+    if (isNowPlaying && !wasNowPlaying) {
+        // If we are ENTERING the 'now-playing' view, start the loop.
+        startVisualizerLoop();
+    } else if (!isNowPlaying && wasNowPlaying) {
+        // If we are LEAVING the 'now-playing' view, stop the loop.
+        stopVisualizerLoop();
+    }
 
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
@@ -2583,11 +2593,6 @@ function setView(viewName) {
             else if (viewName === 'search') { renderSearchResults(); }
         }
     });
-    
-    if (isNowPlaying && currentSongId) {
-        const song = currentlyPlayingSong; 
-        if (song) updatePlayerUI(song);
-    }
 
     if (viewName !== 'search') {
         document.getElementById('searchInput').value = '';
@@ -3941,6 +3946,28 @@ class BeatDetector {
     }
 }
 
+        function startVisualizerLoop() {
+            // Prevent starting if it's already running or hasn't been initialized
+            if (!isVisualizerInitialized || isVisualizerLoopActive) return;
+            
+            console.log("Starting visualizer loop.");
+            isVisualizerLoopActive = true;
+            // The `draw` function is defined within initVisualizer's scope, so we call it via `window`
+            if (window.drawVisualizerFrame) {
+                window.drawVisualizerFrame();
+            }
+        }
+
+        function stopVisualizerLoop() {
+            // Prevent stopping if it's not running
+            if (!isVisualizerLoopActive) return;
+
+            console.log("Stopping visualizer loop.");
+            isVisualizerLoopActive = false;
+            // This is the crucial step that actually stops the loop from running.
+            cancelAnimationFrame(animationFrameId);
+        }
+
 function initVisualizer() {
     if (document.body.classList.contains('reduce-animations')) {
         const canvas = document.getElementById('visualizerCanvas');
@@ -4005,7 +4032,10 @@ function initVisualizer() {
         let smoothedPulse = 0.0; 
         const smoothingFactor = 0.2;
 
-        function draw() {
+        window.drawVisualizerFrame = function() {
+            // If the loop has been told to stop, do nothing.
+            if (!isVisualizerLoopActive) return;
+                    
             animationFrameId = requestAnimationFrame(draw);
             
             if (activeView !== 'now-playing') {
@@ -4064,9 +4094,11 @@ function initVisualizer() {
                 }
             }
             canvasCtx.globalAlpha = 1.0;
+
+            // Schedule the next frame ONLY if the loop is still active.
+            animationFrameId = requestAnimationFrame(window.drawVisualizerFrame);
         }
 
-        draw();
         isVisualizerInitialized = true;
 
     } catch(e) {
