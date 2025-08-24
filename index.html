@@ -2339,6 +2339,7 @@
         let playlistModal, sleepTimerModal;
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let activeAlbum = null; // Will store { artist, name } of the selected album
+        let shardSourceImage = null; // Will hold the loaded album art for the canvas
 
         // --- SoundCloud variables ---
         let soundcloudClientId = '';
@@ -3554,8 +3555,6 @@ async function updateAllBackgrounds(imageUrl) {
         shardSourceImage = null;
     }
 }
-
-let shardSourceImage = null; // Will hold the loaded album art for the canvas
 
 function generateRandomPolygon(centerX, centerY, avgRadius, irregularity, spikeyness, numVertices) {
     irregularity *= 2 * Math.PI / numVertices;
