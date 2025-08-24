@@ -4019,7 +4019,7 @@ function initVisualizer() {
         const smoothingFactor = 0.2;
 
         visualizerDraw = () => {
-            visualizerFrameId = requestAnimationFrame(draw);
+            visualizerFrameId = requestAnimationFrame(visualizerDraw);
             analyser.getByteFrequencyData(dataArray);
 
             if (!isMobile) {
