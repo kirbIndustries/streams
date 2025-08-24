@@ -2301,8 +2301,6 @@
         let isTransitioning = false;
         let transitionProgress = 0;
         const TRANSITION_DURATION = 15; // in frames (approx. 0.25 seconds)
-        let isVisualizerLoopActive = false;
-        let isDistortionLoopActive = false;
         let songs = [];
         let currentSongId = null;
         let isPlayerLoading = false;
@@ -2568,20 +2566,8 @@ function renderSoundcloudSearchResults() {
 }
 
 function setView(viewName) {
-    const wasNowPlaying = (activeView === 'now-playing');
-    const isNowPlaying = (viewName === 'now-playing');
-
     activeView = viewName;
-    
-    if (isNowPlaying && !wasNowPlaying) {
-        // If we are ENTERING the 'now-playing' view, start the loop.
-        startVisualizerLoop();
-        startDistortionLoop();
-    } else if (!isNowPlaying && wasNowPlaying) {
-        // If we are LEAVING the 'now-playing' view, stop the loop.
-        stopVisualizerLoop();
-        stopDistortionLoop();
-    }
+    const isNowPlaying = (viewName === 'now-playing');
 
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
@@ -2597,6 +2583,11 @@ function setView(viewName) {
             else if (viewName === 'search') { renderSearchResults(); }
         }
     });
+    
+    if (isNowPlaying && currentSongId) {
+        const song = currentlyPlayingSong; 
+        if (song) updatePlayerUI(song);
+    }
 
     if (viewName !== 'search') {
         document.getElementById('searchInput').value = '';
@@ -2606,6 +2597,7 @@ function setView(viewName) {
     toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
     updateMiniplayerUI(currentlyPlayingSong, audioPlayer.paused ? 'paused' : 'playing');
 
+    document.getElementById('distortion-container').classList.toggle('active', isNowPlaying);
     if (isVisualizerInitialized && isNowPlaying && audioContext.state === 'suspended') {
         audioContext.resume();
     }
@@ -3605,6 +3597,8 @@ const availableMusicFunctions = {
             };
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
+
+            animateCanvas();
         }
 
         /**
@@ -3750,36 +3744,12 @@ const availableMusicFunctions = {
             context.restore();
         }
 
-        function startDistortionLoop() {
-            // Prevent starting if it's already running.
-            if (isDistortionLoopActive) return;
-            
-            console.log("Starting distortion canvas loop.");
-            isDistortionLoopActive = true;
-            // Kick off the first frame.
-            animateCanvas();
-        }
-        
-        function stopDistortionLoop() {
-            // Prevent stopping if it's not running.
-            if (!isDistortionLoopActive) return;
-
-            console.log("Stopping distortion canvas loop.");
-            isDistortionLoopActive = false;
-            // This is the crucial step that actually stops the loop.
-            cancelAnimationFrame(animationFrameId);
-        }
-
         /**
          * The animation loop, now featuring a global canvas distortion on beat
          * and passing the beat intensity down to each blob for synchronized animation.
          */
         function animateCanvas() {
-            // If the loop has been told to stop, exit immediately.
-            if (!isDistortionLoopActive) return;
-            
-            // The runaway call that caused the freeze has been REMOVED from the top of this function.
-
+            animationFrameId = requestAnimationFrame(animateCanvas);
             if (!ctx) return;
             
             const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
@@ -3787,21 +3757,26 @@ const availableMusicFunctions = {
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
             // --- Beat Effect Logic ---
+            // 1. Smoothly decay the beat intensity back to zero on every frame.
             if (beatIntensity > 0) {
                 beatIntensity *= 0.95; // Controls the speed of the decay
                 if (beatIntensity < 0.01) {
                     beatIntensity = 0; // Clamp to zero when it's negligible
                 }
             }
+
+            // 2. Apply a global "thump" effect to the entire canvas if a beat is active.
             if (beatIntensity > 0) {
+                // Use a sine wave to create a smooth in-and-out zoom effect
                 const zoom = 1 + Math.sin(beatIntensity * Math.PI) * 0.02;
                 ctx.save();
+                // Apply the zoom from the center of the canvas
                 ctx.translate(canvasWidth / 2, canvasHeight / 2);
                 ctx.scale(zoom, zoom);
                 ctx.translate(-canvasWidth / 2, -canvasHeight / 2);
             }
             
-            // --- Background Rotation and Drawing ---
+            // --- Background Rotation and Drawing (Unchanged) ---
             backgroundRotation += 0.002;
             if (isTransitioning) {
                 transitionProgress += 1 / TRANSITION_DURATION;
@@ -3810,7 +3785,7 @@ const availableMusicFunctions = {
                 }
             }
             const drawRotatingBackground = (image) => {
-                const scale = 1.5;
+                const scale = 1.5; // Draw larger to prevent corners from appearing during rotation
                 ctx.save();
                 ctx.translate(canvasWidth / 2, canvasHeight / 2);
                 ctx.rotate(backgroundRotation);
@@ -3832,15 +3807,20 @@ const availableMusicFunctions = {
             
             // --- Update and Draw Blobs ---
             blobs.forEach(blob => {
+                // Blob movement logic is unchanged
                 blob.x += blob.vx;
                 blob.y += blob.vy;
                 blob.rotation += blob.rotationSpeed;
-                const radius = blob.radius * (1 + beatIntensity * 0.1);
+                const radius = blob.radius * (1 + beatIntensity * 0.1); // Use an effective radius for wrapping
                 if (blob.x - radius > canvasWidth) { blob.x = -radius; } 
                 else if (blob.x + radius < 0) { blob.x = canvasWidth + radius; }
                 if (blob.y - radius > canvasHeight) { blob.y = -radius; } 
                 else if (blob.y + radius < 0) { blob.y = canvasHeight + radius; }
+
                 blob.time += 0.1;
+
+                // --- Draw Blobs with Transition and Beat Intensity ---
+                // The key change is passing 'beatIntensity' to the drawing function.
                 if (isTransitioning && oldResizedArt.complete && oldResizedArt.src) {
                     ctx.globalAlpha = 1 - transitionProgress;
                     drawOrganicBlob(ctx, blob, oldResizedArt, beatIntensity);
@@ -3852,13 +3832,10 @@ const availableMusicFunctions = {
                 ctx.globalAlpha = 1;
             });
 
+            // 3. If a beat was active, restore the canvas from the global distortion.
             if (beatIntensity > 0) {
                 ctx.restore();
             }
-
-            // CRITICAL FIX: Schedule the next frame ONLY after all the work
-            // for the current frame is complete. This prevents the runaway loop and freeze.
-            animationFrameId = requestAnimationFrame(animateCanvas);
         }
         
         /**
@@ -3964,28 +3941,6 @@ class BeatDetector {
     }
 }
 
-        function startVisualizerLoop() {
-            // Prevent starting if it's already running or hasn't been initialized
-            if (!isVisualizerInitialized || isVisualizerLoopActive) return;
-            
-            console.log("Starting visualizer loop.");
-            isVisualizerLoopActive = true;
-            // The `draw` function is defined within initVisualizer's scope, so we call it via `window`
-            if (window.drawVisualizerFrame) {
-                window.drawVisualizerFrame();
-            }
-        }
-
-        function stopVisualizerLoop() {
-            // Prevent stopping if it's not running
-            if (!isVisualizerLoopActive) return;
-
-            console.log("Stopping visualizer loop.");
-            isVisualizerLoopActive = false;
-            // This is the crucial step that actually stops the loop from running.
-            cancelAnimationFrame(animationFrameId);
-        }
-
 function initVisualizer() {
     if (document.body.classList.contains('reduce-animations')) {
         const canvas = document.getElementById('visualizerCanvas');
@@ -4050,10 +4005,8 @@ function initVisualizer() {
         let smoothedPulse = 0.0; 
         const smoothingFactor = 0.2;
 
-        window.drawVisualizerFrame = function() {
-            // If the loop has been told to stop, do nothing.
-            if (!isVisualizerLoopActive) return;
-            
+        function draw() {
+            requestAnimationFrame(draw);
             analyser.getByteFrequencyData(dataArray);
 
             if (!isMobile) {
@@ -4106,14 +4059,11 @@ function initVisualizer() {
                 }
             }
             canvasCtx.globalAlpha = 1.0;
-
-            // Schedule the next frame ONLY if the loop is still active.
-            animationFrameId = requestAnimationFrame(window.drawVisualizerFrame);
         }
 
+        draw();
         isVisualizerInitialized = true;
-        console.log("Visualizer initialized successfully.");
-        
+
     } catch(e) {
         console.error("Failed to initialize AudioContext/Visualizer:", e);
     }
