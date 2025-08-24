@@ -1016,6 +1016,16 @@
             opacity: 0.6; /* 60% opacity for light theme */
             filter: blur(50px) saturate(2) brightness(1);
         }
+
+        @media (min-width: 1500px) {
+            #distortion-container {
+                filter: blur(75px) saturate(2) brightness(0.6);
+            }
+
+            body.light-theme #distortion-container {
+                filter: blur(75px) saturate(2) brightness(1);
+            }
+        }
         
         #distortionCanvas {
             position: absolute;
