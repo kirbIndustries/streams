@@ -3753,9 +3753,9 @@ function initVisualizer() {
     
                 const shardTime = Date.now() * 0.00005;
 
-                // New: Calculate brightness and contrast based on the beat
-                const contrastValue = 1 + (smoothedPulse * 1.5);
-                const brightnessValue = 1 + (smoothedPulse * 0.2);
+                // Greatly reduced strength for a more subtle pulse
+                const contrastValue = 1 + (smoothedPulse * 0.3); 
+                const brightnessValue = 1 + (smoothedPulse * 0.05);
     
                 shards.forEach((shard) => {
                     shard.rotation += shard.rotationSpeed;
@@ -3767,10 +3767,10 @@ function initVisualizer() {
                     const baseX = shard.homeX + driftX;
                     const baseY = shard.homeY + driftY;
                     
-                    // Apply base drift and rotation, but no more positional shift from the beat
+                    // Only apply the gentle, ambient drift and rotation
                     shard.element.style.transform = `translate(${baseX}px, ${baseY}px) rotate(${shard.rotation}deg)`;
                     
-                    // Apply the pulsing brightness/contrast filter
+                    // Apply the subtle pulsing brightness/contrast filter
                     shard.element.style.filter = `url(#albumArtDistortion) contrast(${contrastValue}) brightness(${brightnessValue})`;
                 });
     
