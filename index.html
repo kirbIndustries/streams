@@ -4643,10 +4643,8 @@ async function renderLyrics() {
     const lyricsQueuePanel = document.getElementById('lyrics-queue-panel');
     if (!lyricsQueuePanel) return;
 
-    lyricsQueuePanel.innerHTML = `
-        <div class="lyrics-container" id="lyrics-scroll-container"></div>
-    `;
-
+    // Basic setup
+    lyricsQueuePanel.innerHTML = `<div class="lyrics-container" id="lyrics-scroll-container"></div>`;
     const lyricsContainer = lyricsQueuePanel.querySelector('.lyrics-container');
 
     if (!currentSongId) {
@@ -4656,44 +4654,51 @@ async function renderLyrics() {
     
     const song = currentlyPlayingSong;
 
-    if (song.lyrics === null && isLrclibEnabled && song.storage !== 'soundcloud') {
-        lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">Searching for lyrics...</p>`;
+    // 1. If lyrics already exist (they are not null or empty), display them immediately.
+    if (song.lyrics) {
+        if (song.lrcData && song.lrcData.length > 0) {
+            lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
+                `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '• • •'}</p>`
+            ).join('');
+
+            lyricsContainer.querySelectorAll('p').forEach(lineEl => {
+                lineEl.addEventListener('click', () => {
+                    const seekTime = parseFloat(lineEl.dataset.time);
+                    if (!isNaN(seekTime)) audioPlayer.currentTime = seekTime;
+                });
+            });
+        } else {
+            lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none; white-space: pre-wrap;">${song.lyrics}</p>`;
+        }
+        return; // Lyrics were found and displayed, so we are done.
+    }
+
+    // 2. If we're here, lyrics are missing. Check if we should search LRCLIB.
+    if (isLrclibEnabled && song.storage !== 'soundcloud') {
+        lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">Searching LRCLIB for lyrics...</p>`;
+        
         const fetchedLyrics = await fetchLyricsFromLrclib(song);
+
         if (fetchedLyrics) {
+            // SUCCESS: We found lyrics!
             song.lyrics = fetchedLyrics.content;
             if (fetchedLyrics.type === 'lrc') {
                 song.lrcData = parseLRC(fetchedLyrics.content);
             }
-            saveSongs(); 
+            await saveSongs(); // Save the new lyrics to the database
+            renderLyrics(); // Re-run this function to display the new lyrics
+            return;
         } else {
-             song.lyrics = ''; 
-             saveSongs();
+            // FAILURE: The API had no lyrics.
+            // Show a temporary message but DO NOT save an empty string.
+            // This allows the app to try searching again in a future session.
+            lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found on LRCLIB.</p>`;
+            return;
         }
     }
 
-    if (!song || !song.lyrics) {
-        lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found.</p>`;
-        return;
-    }
-
-    if (song.lrcData && song.lrcData.length > 0) {
-        lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
-            `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '• • •'}</p>`
-        ).join('');
-
-        lyricsContainer.querySelectorAll('p').forEach(lineEl => {
-            lineEl.addEventListener('click', () => {
-                const seekTime = parseFloat(lineEl.dataset.time);
-                if (!isNaN(seekTime)) {
-                    audioPlayer.currentTime = seekTime;
-                }
-            });
-        });
-
-    } else {
-        // For plain text lyrics
-        lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none; white-space: pre-wrap;">${song.lyrics}</p>`;
-    }
+    // 3. This is the final fallback. It runs if LRCLIB is disabled or it's a SoundCloud track.
+    lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found.</p>`;
 }
 
 async function fetchLyricsFromLrclib(song) {
