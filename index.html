@@ -5476,7 +5476,7 @@ function openManageFoldersModal() {
     openModal(manageFoldersModal);
 }
 
-async function saveIntegrations() {
+async function saveIntegrationSettings() {
     soundcloudClientId = document.getElementById('soundcloudClientId').value.trim();
     isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
 
@@ -6346,7 +6346,7 @@ window.addEventListener("load", async () => {
         
         const scIdResult = await new Promise(r => { scIdReq.onsuccess = () => r(scIdReq.result) });
         const scEnabledResult = await new Promise(r => { scEnabledReq.onsuccess = () => r(scEnabledReq.result) });
-        const lrclibEnabledResult = await new Promise(r => { lrclibEnabledReq.onsuccess = () => r(lrclibEnabledReq.result) });
+        const lrclibEnabledResult = await new Promise(r => { lrclibReq.onsuccess = () => r(lrclibReq.result) }); 
         
         soundcloudClientId = scIdResult ? scIdResult.value : '';
         isSoundcloudEnabled = scEnabledResult ? scEnabledResult.value : false;
