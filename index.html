@@ -3784,9 +3784,17 @@ const availableMusicFunctions = {
                     transitionProgress = 1; isTransitioning = false; oldResizedArt = new Image();
                 }
             }
-            const themeBrightness = document.body.classList.contains('light-theme') ? '1.1' : '0.6';
-            const backgroundFilter = `blur(50px) saturate(1.5) brightness(${themeBrightness})`;
-            const drawRotatingBackground = (image) => { /* ... (this helper function is unchanged) ... */ };
+            const drawRotatingBackground = (image) => {
+                const scale = 1.5; // Draw larger to prevent corners from appearing during rotation
+                ctx.save();
+                ctx.translate(canvasWidth / 2, canvasHeight / 2);
+                ctx.rotate(backgroundRotation);
+                ctx.drawImage(image, 
+                    -canvasWidth * scale / 2, -canvasHeight * scale / 2, 
+                    canvasWidth * scale, canvasHeight * scale
+                );
+                ctx.restore();
+            };
             if (isTransitioning && oldResizedArt.complete && oldResizedArt.src) {
                 ctx.globalAlpha = 1 - transitionProgress;
                 drawRotatingBackground(oldResizedArt);
