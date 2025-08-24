@@ -3629,35 +3629,35 @@ const availableMusicFunctions = {
         }
 
         /**
-         * Creates larger blobs designed to overlap and fill the viewport more fluidly.
+         * Creates blobs optimized for linear movement.
+         * The 'target' and 'nextMoveFrame' properties have been removed for a simpler, direct motion model.
          */
         function initBlobs() {
             if (!distortionCanvas || !ctx || !currentResizedArt.complete) return;
             blobs = [];
             const { width: imgWidth, height: imgHeight } = currentResizedArt;
             const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
-            const maxSpeed = 0.8; // Slightly reduced speed for a more majestic flow
+            const maxSpeed = 0.7; // A comfortable, fluid speed
 
-            for (let i = 0; i < NUM_BLOBS; i++) {
-                // Blobs are now significantly larger to create the fluid, overlapping effect.
-                const radius = (Math.random() * 0.2 + 0.4) * Math.min(canvasWidth, canvasHeight);
+            const NUM_BLOBS_PERF = 5;
+
+            for (let i = 0; i < NUM_BLOBS_PERF; i++) {
+                const radius = (Math.random() * 0.2 + 0.5) * Math.min(canvasWidth, canvasHeight);
                 blobs.push({
                     x: Math.random() * canvasWidth,
                     y: Math.random() * canvasHeight,
+                    // Blobs now only have a direct, current velocity.
                     vx: (Math.random() - 0.5) * maxSpeed,
                     vy: (Math.random() - 0.5) * maxSpeed,
-                    targetVx: (Math.random() - 0.5) * maxSpeed,
-                    targetVy: (Math.random() - 0.5) * maxSpeed,
-                    nextMoveFrame: Math.random() * 200 + 100,
                     radius: radius,
                     rotation: Math.random() * Math.PI * 2,
-                    rotationSpeed: (Math.random() - 0.5) * 0.003, // Slower, more graceful rotation
-                    sourceX: Math.random() * (imgWidth * 0.5),
-                    sourceY: Math.random() * (imgHeight * 0.5),
-                    sourceSize: Math.min(imgWidth, imgHeight) * (Math.random() * 0.3 + 0.5),
+                    rotationSpeed: (Math.random() - 0.5) * 0.002,
+                    sourceX: 0,
+                    sourceY: 0,
+                    sourceSize: Math.max(imgWidth, imgHeight),
                     time: Math.random() * 1000,
                     warpAmount: 0,
-                    baseWarp: radius * 0.15,
+                    baseWarp: radius * 0.1,
                     contrast: 1,
                     scale: 1,
                 });
@@ -3776,37 +3776,32 @@ const availableMusicFunctions = {
             
             // --- Update and Draw Blobs ---
             blobs.forEach(blob => {
-                // --- NEW: Fluid Viewport Containment Logic ---
-                const margin = blob.radius * 0.8; // How far from the edge the pull starts
-                const pullFactor = 0.0005; // How strong the pull is
+                // --- NEW: Direct Linear Movement and Instant Reflection ---
+                // This logic replaces the previous meandering and waiting system.
                 
-                if (blob.x < margin) blob.vx += (margin - blob.x) * pullFactor;
-                if (blob.x > canvasWidth - margin) blob.vx += (canvasWidth - margin - blob.x) * pullFactor;
-                if (blob.y < margin) blob.vy += (margin - blob.y) * pullFactor;
-                if (blob.y > canvasHeight - margin) blob.vy += (canvasHeight - margin - blob.y) * pullFactor;
-                
-                // --- Standard Movement Update ---
-                blob.nextMoveFrame--;
-                if (blob.nextMoveFrame <= 0) {
-                    blob.targetVx = (Math.random() - 0.5) * maxSpeed;
-                    blob.targetVy = (Math.random() - 0.5) * maxSpeed;
-                    blob.nextMoveFrame = Math.random() * 200 + 100;
-                }
-                const lerpFactor = 0.02; 
-                blob.vx += (blob.targetVx - blob.vx) * lerpFactor;
-                blob.vy += (blob.targetVy - blob.vy) * lerpFactor;
+                // 1. Update position based on current velocity (Linear Motion)
                 blob.x += blob.vx;
                 blob.y += blob.vy;
                 blob.rotation += blob.rotationSpeed;
-                
-                // Decay beat effects & slower continuous warp
-                blob.time += 0.1; // REDUCED: Slower, more subtle continuous warping
+
+                // 2. Check for boundary collisions and reflect velocity (Instant Redirection)
+                const radius = blob.radius * blob.scale; // Use the scaled radius for checks
+                if ((blob.x - radius < 0 && blob.vx < 0) || (blob.x + radius > canvasWidth && blob.vx > 0)) {
+                    blob.vx *= -1; // Invert horizontal velocity
+                }
+                if ((blob.y - radius < 0 && blob.vy < 0) || (blob.y + radius > canvasHeight && blob.vy > 0)) {
+                    blob.vy *= -1; // Invert vertical velocity
+                }
+                // --- End of New Movement Logic ---
+
+                // Decay beat effects & continuous warp (Unchanged)
+                blob.time += 0.1;
                 blob.warpAmount *= 0.95; 
                 blob.contrast *= 0.98;
                 if (blob.contrast < 1) blob.contrast = 1;
                 blob.scale += (1 - blob.scale) * 0.1;
 
-                // --- Draw Blobs with Transition using Resized Images ---
+                // --- Draw Blobs with Transition (Unchanged) ---
                 if (isTransitioning && oldResizedArt.complete && oldResizedArt.src) {
                     ctx.globalAlpha = 1 - transitionProgress;
                     drawOrganicBlob(ctx, blob, oldResizedArt);
@@ -3827,11 +3822,11 @@ const availableMusicFunctions = {
         function triggerBeatEffect() {
             if (blobs.length === 0) return;
             const blob = blobs[Math.floor(Math.random() * blobs.length)];
-            blob.warpAmount = blob.radius * 0.5; // Spike the warp amount
-            blob.contrast = 2.5; // Spike the contrast
-            blob.scale = 1.05; // Briefly increase size
+            blob.warpAmount = blob.radius * 0.2;  // Reduced warp ripple by 60%
+            blob.contrast = 1.1;   // A much softer, less intense flash
+            blob.scale = 1.02;     // A very small, gentle pulse
         }
-
+        
 async function createResizedImageURL(imageUrl, width, height) {
     return new Promise((resolve, reject) => {
         const img = new Image();
