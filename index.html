@@ -2606,7 +2606,6 @@ function setView(viewName) {
     toolbar.classList.toggle('hidden', isNowPlaying && isFullscreen);
     updateMiniplayerUI(currentlyPlayingSong, audioPlayer.paused ? 'paused' : 'playing');
 
-    document.getElementById('distortion-container').classList.toggle('active', isNowPlaying);
     if (isVisualizerInitialized && isNowPlaying && audioContext.state === 'suspended') {
         audioContext.resume();
     }
