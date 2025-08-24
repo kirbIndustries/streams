@@ -1902,11 +1902,11 @@
             <feTurbulence 
                 id="turbulence"
                 type="turbulence" 
-                baseFrequency="0.01 0.02" 
+                baseFrequency="0.005 0.01" 
                 numOctaves="1" 
                 seed="0"
             />
-            <feGaussianBlur stdDeviation="30" result="blurredTurbulence"/>
+            <feGaussianBlur stdDeviation="40" result="blurredTurbulence"/>
             <feDisplacementMap 
                 id="displacement"
                 in="SourceGraphic" 
@@ -3692,7 +3692,7 @@ function initVisualizer() {
         const turbulenceFilter = document.getElementById('turbulence');
 
         const baselineDistortion = 80;
-        const peakDistortion = 250;
+        const peakDistortion = 350; // Increased for more impact
 
         let beatDetector;
         if (!isMobile) {
@@ -3731,8 +3731,14 @@ function initVisualizer() {
     
                 shards.forEach((shard) => {
                     shard.rotation += shard.rotationSpeed;
-                    const baseX = shard.homeX + Math.sin(shardTime * shard.xDrift * 10) * 15;
-                    const baseY = shard.homeY + Math.cos(shardTime * shard.yDrift * 10) * 15;
+                    // More organic, multi-layered movement calculation
+                    const time1 = shardTime * 5;
+                    const time2 = shardTime * 2;
+                    const driftX = Math.sin(time1 + shard.xDrift * 10) * 10 + Math.cos(time2 + shard.yDrift * 5) * 5;
+                    const driftY = Math.cos(time1 + shard.yDrift * 10) * 10 + Math.sin(time2 + shard.xDrift * 5) * 5;
+
+                    const baseX = shard.homeX + driftX;
+                    const baseY = shard.homeY + driftY;
                     const totalX = baseX + (shard.dirX * outwardShift);
                     const totalY = baseY + (shard.dirY * outwardShift);
                     shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
