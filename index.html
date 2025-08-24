@@ -3635,18 +3635,28 @@ const availableMusicFunctions = {
         }
 
         /**
-         * Creates blobs optimized for linear movement.
-         * The 'target' and 'nextMoveFrame' properties have been removed for a simpler, direct motion model.
+         * Creates a large number of smaller blobs, with each blob being assigned a
+         * unique, random section of the source album art for maximum visual variety.
          */
         function initBlobs() {
             if (!distortionCanvas || !ctx || !currentResizedArt.complete) return;
             blobs = [];
             const { width: imgWidth, height: imgHeight } = currentResizedArt;
             const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
-            const maxSpeed = 0.7; // A comfortable, fluid speed
+            const maxSpeed = 0.5;
 
             for (let i = 0; i < NUM_BLOBS_PERF; i++) {
-                const radius = (Math.random() * 0.15 + 0.2) * Math.min(canvasWidth, canvasHeight);
+                const radius = (Math.random() * 0.1 + 0.15) * Math.min(canvasWidth, canvasHeight);
+
+                // --- THE FIX: Calculate a unique source rectangle for each blob ---
+                // 1. Determine a random size for the crop, e.g., 30% to 60% of the source image's smaller dimension.
+                const sourceSize = Math.min(imgWidth, imgHeight) * (Math.random() * 0.3 + 0.3);
+                // 2. Determine a random X start position, ensuring the crop doesn't go out of bounds.
+                const sourceX = Math.random() * (imgWidth - sourceSize);
+                // 3. Determine a random Y start position, also ensuring it stays in bounds.
+                const sourceY = Math.random() * (imgHeight - sourceSize);
+                // --- End of Fix ---
+
                 blobs.push({
                     x: Math.random() * canvasWidth,
                     y: Math.random() * canvasHeight,
@@ -3655,9 +3665,12 @@ const availableMusicFunctions = {
                     radius: radius,
                     rotation: Math.random() * Math.PI * 2,
                     rotationSpeed: (Math.random() - 0.5) * 0.002,
-                    sourceX: 0,
-                    sourceY: 0,
-                    sourceSize: Math.max(imgWidth, imgHeight),
+                    
+                    // Use the newly calculated unique source rectangle for this blob
+                    sourceX: sourceX,
+                    sourceY: sourceY,
+                    sourceSize: sourceSize,
+
                     time: Math.random() * 1000,
                     warpAmount: 0,
                     baseWarp: radius * 0.1,
@@ -3739,7 +3752,7 @@ const availableMusicFunctions = {
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
             
             // Increment the rotation angle on every frame
-            backgroundRotation += 0.0002;
+            backgroundRotation += 0.002;
 
             if (isTransitioning) {
                 transitionProgress += 1 / TRANSITION_DURATION;
