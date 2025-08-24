@@ -3496,6 +3496,14 @@ function initializeShards() {
     shardImage = new Image();
     shardImage.crossOrigin = 'Anonymous'; // Allow loading cross-origin images
 
+    // Add handlers to ensure the image is ready before we try to use it
+    // and to catch any loading errors.
+    shardImage.onload = () => {};
+    shardImage.onerror = () => {
+        console.error("Shard image failed to load:", shardImage.src);
+    };
+
+
     // Resize canvas to match display size
     const resizeCanvas = () => {
         shardCanvas.width = shardCanvas.clientWidth;
@@ -3526,20 +3534,20 @@ function initializeShards() {
             shard.targetVertices = generateRandomClipPath(shard.size);
             shard.morphProgress = 0; // Reset progress to start morphing
         });
-    }, 4000); // New shape every 4 seconds
+    }, 2000); // New shape every 2 seconds
 }
         
 function setDistortionBackgrounds(url) {
     const backgroundUrl = url ? `url('${url}')` : '';
     document.querySelector('.background-blur').style.backgroundImage = backgroundUrl;
-    // Set the source for our canvas image object
-    if (url) {
-        shardImage.src = url;
-    } else {
-        shardImage.src = ''; // Clear the image
+    
+    // Only update the image source if it has actually changed
+    const newSrc = url || '';
+    if (shardImage && shardImage.src !== newSrc) {
+        shardImage.src = newSrc;
     }
 }
-
+        
 async function createResizedImageURL(imageUrl, width, height) {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -3697,6 +3705,10 @@ function initVisualizer() {
         const displacementFilter = document.getElementById('displacement');
         const turbulenceFilter = document.getElementById('turbulence');
 
+        // Main Fix: Reduce peak distortion to a strong but visible level
+        const baselineDistortion = 80;
+        const peakDistortion = 300; 
+
         let beatDetector;
         if (!isMobile) {
             beatDetector = new BeatDetector([[0, 10], [20, 50], [80, 120]]);
@@ -3723,17 +3735,22 @@ function initVisualizer() {
                 const beatPulseTarget = beatDetector.update(dataArray);
                 smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
 
+                // Apply the displacement scale to the SVG filter which affects the canvas
+                const distortionRange = peakDistortion - baselineDistortion;
+                const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
+                displacementFilter.setAttribute('scale', currentDistortion);
+
                 // --- Canvas Shard Drawing Logic ---
                 shardCtx.clearRect(0, 0, shardCanvas.width, shardCanvas.height);
+                
+                // The check for `shardImage.complete` is now more reliable
                 if (shardImage.complete && shardImage.naturalWidth > 0) {
                     const contrast = 1 + (smoothedPulse * 0.8);
-                    const brightness = 1 + (smoothedPulse * 0.1); // Reduced brightness
-                    shardCtx.filter = `contrast(${contrast}) brightness(${brightness})`;
-
+                    const brightness = 1 + (smoothedPulse * 0.1);
+                    
                     shards.forEach(shard => {
                         shard.rotation += shard.rotationSpeed;
                         
-                        // Smoothly morph vertices
                         if (shard.morphProgress < 1) {
                             shard.morphProgress = Math.min(1, shard.morphProgress + 0.02);
                             for(let i=0; i < shard.vertices.length; i++) {
@@ -3747,9 +3764,8 @@ function initVisualizer() {
                         shardCtx.save();
                         shardCtx.translate(shard.homeX, shard.homeY);
                         shardCtx.rotate(shard.rotation * Math.PI / 180);
-                        shardCtx.translate(-shard.size / 2, -shard.size / 2); // Center the shape
+                        shardCtx.translate(-shard.size / 2, -shard.size / 2);
 
-                        // Create clipping path
                         shardCtx.beginPath();
                         shardCtx.moveTo(shard.vertices[0].x, shard.vertices[0].y);
                         for (let i = 1; i < shard.vertices.length; i++) {
@@ -3757,13 +3773,14 @@ function initVisualizer() {
                         }
                         shardCtx.closePath();
                         shardCtx.clip();
-
-                        // Draw the image inside the clipped path
+                        
+                        // Apply brightness/contrast filter directly before drawing the image
+                        shardCtx.filter = `contrast(${contrast}) brightness(${brightness})`;
                         shardCtx.drawImage(shardImage, 0, 0, shard.size, shard.size);
                         shardCtx.restore();
                     });
                 }
-                shardCtx.filter = 'none'; // Reset filter
+                shardCtx.filter = 'none';
             }
             
             // --- Bar Visualizer Drawing Logic (Unchanged) ---
