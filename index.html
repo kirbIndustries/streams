@@ -2143,7 +2143,7 @@
                 </div>
             </div>
 
-            <div style="display: flex; justify-content: flex-end; margin-top: 25px;">
+            <div style="display: flex; justify-content: flex-end; margin-top: 25px; gap: 10px;">
                 <button id="saveIntegrations" class="filter-btn">Save</button>
                 <button id="closeFoldersModal" class="filter-btn active">Close</button>
             </div>
@@ -5484,6 +5484,7 @@ function openManageFoldersModal() {
 async function saveIntegrationSettings() {
     soundcloudClientId = document.getElementById('soundcloudClientId').value.trim();
     isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
+    isLrclibEnabled = document.getElementById('lrclibToggle').checked;
 
     const tx = db.transaction('config', 'readwrite');
     await Promise.all([
