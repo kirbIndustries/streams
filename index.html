@@ -4006,7 +4006,12 @@ function initVisualizer() {
         const smoothingFactor = 0.2;
 
         function draw() {
-            requestAnimationFrame(draw);
+            animationFrameId = requestAnimationFrame(draw);
+            
+            if (activeView !== 'now-playing') {
+                return;
+            }
+            
             analyser.getByteFrequencyData(dataArray);
 
             if (!isMobile) {
