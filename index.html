@@ -1028,6 +1028,7 @@
             left: 0;
             width: 100%;
             height: 100%;
+            image-rendering: pixelated;
         }
         
         @keyframes rotate {
@@ -3548,27 +3549,41 @@ const availableMusicFunctions = {
         }
 
         /**
-         * Initializes the canvas, creates the noise generator, and starts the animation.
+         * Initializes a LOW-RESOLUTION canvas and starts the animation. The canvas element
+         * itself will be stretched by CSS to fill the screen.
          */
         function initDistortionCanvas() {
+            // This constant defines our rendering resolution. 0.25 means 25% of the screen size.
+            // A lower number means better performance but a more pixelated (though blurred) source.
+            const RENDER_SCALE = 0.25;
+
             distortionCanvas = document.getElementById('distortionCanvas');
-            if (!distortionCanvas) return;
+            if (!distortionCanvas) {
+                console.error("Distortion Canvas not found in the DOM.");
+                return;
+            }
+            
             ctx = distortionCanvas.getContext('2d'); 
             if (!ctx) {
                 console.error("Failed to get 2D context from the canvas.");
                 return;
             }
             
-            // Initialize the noise function that will define the blob shapes
             noise = createNoiseGenerator();
-            
+
             currentResizedArt.crossOrigin = 'Anonymous';
             oldResizedArt.crossOrigin = 'Anonymous';
+            currentResizedArt.onerror = () => console.error("Failed to load current resized album art image.");
+            oldResizedArt.onerror = () => console.error("Failed to load old resized album art image for transition.");
 
             const resizeCanvas = () => {
-                distortionCanvas.width = window.innerWidth;
-                distortionCanvas.height = window.innerHeight;
-                // Re-initialize blobs on resize. A small delay ensures the new art is ready.
+                // Set the canvas's actual drawing buffer size to be a fraction of the window size.
+                // For a 1920x1080 screen, this creates a tiny 480x270 canvas to draw on.
+                distortionCanvas.width = window.innerWidth * RENDER_SCALE;
+                distortionCanvas.height = window.innerHeight * RENDER_SCALE;
+
+                // The CSS `width: 100%` will stretch this small buffer to fill the screen.
+                
                 if (currentResizedArt.src) {
                     setTimeout(initBlobs, 100);
                 }
