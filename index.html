@@ -6343,6 +6343,7 @@ window.addEventListener("load", async () => {
         const configTx = db.transaction('config', 'readonly');
         const scIdReq = configTx.objectStore('config').get('soundcloudClientId');
         const scEnabledReq = configTx.objectStore('config').get('isSoundcloudEnabled');
+        const lrclibReq = configTx.objectStore('config').get('isLrclibEnabled'); 
         
         const scIdResult = await new Promise(r => { scIdReq.onsuccess = () => r(scIdReq.result) });
         const scEnabledResult = await new Promise(r => { scEnabledReq.onsuccess = () => r(scEnabledReq.result) });
