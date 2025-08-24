@@ -2576,6 +2576,10 @@ function setView(viewName) {
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
 
+    if (isNowPlaying) {
+        resizeShardCanvas();
+    }
+
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
     });
@@ -3503,22 +3507,13 @@ function initializeShards() {
         console.error("Shard image failed to load:", shardImage.src);
     };
 
-
-    // Resize canvas to match display size
-    const resizeCanvas = () => {
-        shardCanvas.width = shardCanvas.clientWidth;
-        shardCanvas.height = shardCanvas.clientHeight;
-    };
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-
     const numShards = isMobile ? 4 : 8; // More shards on desktop
     for (let i = 0; i < numShards; i++) {
         const size = 150 + Math.random() * 200; // Random sizes
         shards.push({
-            // Random home position scattered across the viewport
-            homeX: Math.random() * shardCanvas.width,
-            homeY: Math.random() * shardCanvas.height,
+            // Home position will be set relative to canvas size later
+            homeX: Math.random(), // Store as a ratio (0 to 1)
+            homeY: Math.random(), // Store as a ratio (0 to 1)
             size: size,
             rotationSpeed: (Math.random() - 0.5) * 0.1,
             rotation: Math.random() * 360,
@@ -3534,7 +3529,7 @@ function initializeShards() {
             shard.targetVertices = generateRandomClipPath(shard.size);
             shard.morphProgress = 0; // Reset progress to start morphing
         });
-    }, 2000); // New shape every 2 seconds
+    }, 4000); // New shape every 4 seconds
 }
         
 function setDistortionBackgrounds(url) {
@@ -3705,7 +3700,6 @@ function initVisualizer() {
         const displacementFilter = document.getElementById('displacement');
         const turbulenceFilter = document.getElementById('turbulence');
 
-        // Main Fix: Reduce peak distortion to a strong but visible level
         const baselineDistortion = 80;
         const peakDistortion = 300; 
 
@@ -3732,18 +3726,20 @@ function initVisualizer() {
             analyser.getByteFrequencyData(dataArray);
 
             if (!isMobile) {
+                // Failsafe: Ensure canvas has dimensions before drawing
+                if (shardCanvas.width === 0 || shardCanvas.height === 0) {
+                    resizeShardCanvas();
+                }
+
                 const beatPulseTarget = beatDetector.update(dataArray);
                 smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
 
-                // Apply the displacement scale to the SVG filter which affects the canvas
                 const distortionRange = peakDistortion - baselineDistortion;
                 const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
                 displacementFilter.setAttribute('scale', currentDistortion);
 
-                // --- Canvas Shard Drawing Logic ---
                 shardCtx.clearRect(0, 0, shardCanvas.width, shardCanvas.height);
                 
-                // The check for `shardImage.complete` is now more reliable
                 if (shardImage.complete && shardImage.naturalWidth > 0) {
                     const contrast = 1 + (smoothedPulse * 0.8);
                     const brightness = 1 + (smoothedPulse * 0.1);
@@ -3762,7 +3758,8 @@ function initVisualizer() {
                         }
 
                         shardCtx.save();
-                        shardCtx.translate(shard.homeX, shard.homeY);
+                        // Use actual canvas dimensions to place shards
+                        shardCtx.translate(shard.homeX * shardCanvas.width, shard.homeY * shardCanvas.height);
                         shardCtx.rotate(shard.rotation * Math.PI / 180);
                         shardCtx.translate(-shard.size / 2, -shard.size / 2);
 
@@ -3774,7 +3771,6 @@ function initVisualizer() {
                         shardCtx.closePath();
                         shardCtx.clip();
                         
-                        // Apply brightness/contrast filter directly before drawing the image
                         shardCtx.filter = `contrast(${contrast}) brightness(${brightness})`;
                         shardCtx.drawImage(shardImage, 0, 0, shard.size, shard.size);
                         shardCtx.restore();
@@ -3828,6 +3824,16 @@ function initVisualizer() {
 
     } catch(e) {
         console.error("Failed to initialize AudioContext/Visualizer:", e);
+    }
+}
+
+// New Standalone Resize Function
+function resizeShardCanvas() {
+    if (!shardCanvas) return;
+    const needsResize = shardCanvas.width !== shardCanvas.clientWidth || shardCanvas.height !== shardCanvas.clientHeight;
+    if (needsResize) {
+        shardCanvas.width = shardCanvas.clientWidth;
+        shardCanvas.height = shardCanvas.clientHeight;
     }
 }
 
@@ -6256,6 +6262,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         searchInput = document.getElementById('searchInput');
         const musicUploadInput = document.getElementById('musicUpload');
         const libraryGrid = document.getElementById('library-grid');
+
+        window.addEventListener('resize', resizeShardCanvas);
         
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
