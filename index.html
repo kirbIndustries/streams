@@ -3585,20 +3585,21 @@ async function updateAllBackgrounds(imageUrl) {
 
 class BeatDetector {
     constructor(frequencyBands, {
-        emaAlpha = 0.2,
-        minThreshold = 5,
+        emaAlpha = 0.1,
+        minThreshold = 3,
         decayRate = 0.96,
-        minSensitivity = 1.2,
-        maxSensitivity = 2.4,
+        minSensitivity = 1.0,
+        maxSensitivity = 2.5,
         initialSensitivity = 1.4,
-        increaseFactor = 1.05,
-        decreaseFactor = 0.999,
+        increaseFactor = 1.1,
+        decreaseFactor = 0.995,
         enableGlobalDetection = true,
-        smoothingFactor = 0.3,
+        smoothingFactor = 0.25,
+        minBeatInterval = 150, // ms
+        bandWeights = null
     } = {}) {
         this.frequencyBands = frequencyBands;
 
-        // Configuration
         this.emaAlpha = emaAlpha;
         this.minFluxThreshold = minThreshold;
         this.decayRate = decayRate;
@@ -3609,63 +3610,74 @@ class BeatDetector {
         this.decreaseFactor = decreaseFactor;
         this.enableGlobalDetection = enableGlobalDetection;
         this.smoothingFactor = smoothingFactor;
+        this.minBeatInterval = minBeatInterval;
 
-        // State
         this.lastEnergies = new Array(frequencyBands.length).fill(0);
+        this.energyEMA = new Array(frequencyBands.length).fill(0);
         this.emaFlux = new Array(frequencyBands.length).fill(0);
-        this.emaFluxSquared = new Array(frequencyBands.length).fill(0); // For stdDev
+        this.emaFluxSquared = new Array(frequencyBands.length).fill(0);
         this.beatValue = 0.0;
         this.prevTimestamp = null;
+        this.lastBeatTime = 0;
+
+        this.bandWeights = bandWeights || new Array(frequencyBands.length).fill(1.0);
     }
 
     update(dataArray, currentTimestamp = null) {
+        const now = currentTimestamp || performance.now();
         const detectedBands = [];
         let globalBeatDetected = false;
 
-        // Calculate deltaTime if using time-based decay
+        // Time-based decay
         let deltaTime = 1.0;
-        if (this.prevTimestamp != null && currentTimestamp != null) {
-            deltaTime = (currentTimestamp - this.prevTimestamp) / 1000;
+        if (this.prevTimestamp != null) {
+            deltaTime = (now - this.prevTimestamp) / 1000;
         }
-        this.prevTimestamp = currentTimestamp;
+        this.prevTimestamp = now;
 
         for (let i = 0; i < this.frequencyBands.length; i++) {
             const [start, end] = this.frequencyBands[i];
-
-            // Smoothed energy
             let currentEnergy = 0;
+
             for (let j = start; j <= end; j++) {
                 currentEnergy += dataArray[j];
             }
+
             currentEnergy /= (end - start + 1);
 
-            // Apply energy smoothing
+            // Energy smoothing
             currentEnergy = this._lerp(this.lastEnergies[i], currentEnergy, this.smoothingFactor);
-            const flux = Math.max(0, currentEnergy - this.lastEnergies[i]);
-
             this.lastEnergies[i] = currentEnergy;
 
-            // Update EMA for flux and its square (used for std dev)
-            const oldEma = this.emaFlux[i];
+            // Update energy EMA for more stable flux comparison
+            this.energyEMA[i] = this._lerp(this.energyEMA[i], currentEnergy, this.emaAlpha);
+
+            const flux = Math.max(0, currentEnergy - this.energyEMA[i]);
+
+            // Update EMA for flux and flux squared
             this.emaFlux[i] = this.emaAlpha * flux + (1 - this.emaAlpha) * this.emaFlux[i];
             this.emaFluxSquared[i] = this.emaAlpha * (flux * flux) + (1 - this.emaAlpha) * this.emaFluxSquared[i];
 
             const mean = this.emaFlux[i];
-            const variance = this.emaFluxSquared[i] - mean * mean;
-            const stdDev = Math.sqrt(Math.max(variance, 0));
-
+            const variance = Math.max(0, this.emaFluxSquared[i] - mean * mean);
+            const stdDev = Math.sqrt(variance);
             const dynamicThreshold = mean + this.dynamicSensitivity * stdDev;
 
-            if (flux > dynamicThreshold && flux > this.minFluxThreshold) {
+            const weightedFlux = flux * this.bandWeights[i];
+
+            if (weightedFlux > dynamicThreshold && flux > this.minFluxThreshold) {
                 detectedBands.push(i);
                 if (this.enableGlobalDetection) globalBeatDetected = true;
             }
         }
 
-        // Beat logic
-        if ((this.enableGlobalDetection && globalBeatDetected) || (!this.enableGlobalDetection && detectedBands.length > 0)) {
+        const beatNow = (this.enableGlobalDetection ? globalBeatDetected : detectedBands.length > 0);
+        const timeSinceLastBeat = now - this.lastBeatTime;
+
+        if (beatNow && timeSinceLastBeat > this.minBeatInterval) {
             this.beatValue = 1.0;
             this.dynamicSensitivity *= this.increaseFactor;
+            this.lastBeatTime = now;
         } else {
             this.beatValue *= Math.pow(this.decayRate, deltaTime);
             this.dynamicSensitivity *= this.decreaseFactor;
@@ -3677,7 +3689,7 @@ class BeatDetector {
         return {
             beatValue: this.beatValue,
             detectedBands,
-            sensitivity: this.dynamicSensitivity,
+            sensitivity: this.dynamicSensitivity
         };
     }
 
