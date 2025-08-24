@@ -3708,9 +3708,9 @@ const availableMusicFunctions = {
             
             // --- Apply Beat Animations ---
             // 1. Calculate an effective scale for the blob (base size + beat pulse).
-            const effectiveScale = 1 + currentBeatIntensity * 0.1; // 10% size increase on beat
+            const effectiveScale = 1 + currentBeatIntensity * 0.05; // 5% size increase on beat
             // 2. Calculate an effective rotation (base rotation + beat kick).
-            const effectiveRotation = blob.rotation + currentBeatIntensity * 0.075; // Add a rotational nudge
+            const effectiveRotation = blob.rotation + currentBeatIntensity * 0.5; // Add a rotational nudge
 
             context.translate(blob.x, blob.y);
             context.rotate(effectiveRotation); // Use the animated rotation
