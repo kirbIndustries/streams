@@ -3561,9 +3561,9 @@ const availableMusicFunctions = {
             
             // Initialize the noise function that will define the blob shapes
             noise = createNoiseGenerator();
-
-            currentAlbumArtImage.crossOrigin = 'Anonymous';
-            oldAlbumArtImage.crossOrigin = 'Anonymous';
+            
+            currentResizedArt.crossOrigin = 'Anonymous';
+            oldResizedArt.crossOrigin = 'Anonymous';
 
             const resizeCanvas = () => {
                 distortionCanvas.width = window.innerWidth;
