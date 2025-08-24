@@ -1051,8 +1051,7 @@
             background-position: center;
             filter: url(#albumArtDistortion);
             will-change: transform;
-            transition: background-image 0.5s ease, clip-path 3s ease-in-out, filter 0.1s ease-out;
-            scale: 0.65;
+            transition: background-image 0.5s ease, clip-path 5s, filter 0.1s ease-out;
             opacity: 0.5;
         }
 
@@ -2025,6 +2024,7 @@
             <div class="distortion-shard shape-1"></div>
             <div class="distortion-shard shape-2"></div>
             <div class="distortion-shard shape-3"></div>
+            <div class="distortion-shard shape-4"></div>
         </div>
         <div class="now-playing-wrapper">
             <div class="album-art">
@@ -3519,11 +3519,12 @@ function generateRandomClipPath() {
 function initializeShards() {
     const shardElements = document.querySelectorAll('.distortion-shard');
     
-    // New positions are more spread out towards the corners and edges
+    // Drastically increased positions to push shards far into the corners and edges
     const homePositions = [
-        { x: -90, y: -120 }, // Top-left
-        { x: 120, y: 90 },  // Bottom-right
-        { x: 100, y: -100 }  // Top-right
+        { x: -250, y: -220 }, // Far Top-left
+        { x: 250, y: 220 },  // Far Bottom-right
+        { x: -220, y: 250 }, // Far Bottom-left
+        { x: 220, y: -250 }  // Far Top-right
     ];
 
     shardElements.forEach((el, i) => {
@@ -3533,7 +3534,7 @@ function initializeShards() {
         shards.push({
             element: el,
             bgPos: `${i * 50}% 50%`, 
-            rotationSpeed: (Math.random() - 0.5) * 0.4, // Increased rotation speed
+            rotationSpeed: (Math.random() - 0.5) * 0.4,
             xDrift: (Math.random() - 0.5) * 0.2, 
             yDrift: (Math.random() - 0.5) * 0.2,
             rotation: Math.random() * 360,
@@ -3608,7 +3609,7 @@ async function updateAllBackgrounds(imageUrl) {
         setDistortionBackgrounds(originalUrl);
     }
 }
-
+        
 class BeatDetector {
     constructor(frequencyBands, historySize = 60, minThreshold = 5) {
         this.frequencyBands = frequencyBands;
@@ -3617,12 +3618,12 @@ class BeatDetector {
         this.fluxHistories = this.frequencyBands.map(() => []);
         this.lastEnergies = new Array(this.frequencyBands.length).fill(0);
         this.beatValue = 0.0;
-        this.decayRate = 0.96;
+        this.decayRate = 0.90; // Faster decay for a sharper pulse
         this.dynamicSensitivity = 1.4;
         this.minSensitivity = 1.2;
         this.maxSensitivity = 2.4;
         this.increaseFactor = 1.05;
-        this.decreaseFactor = 0.999;
+        this.decreaseFactor = 0.995; // Faster sensitivity correction
     }
 
     _calculateStandardDeviation(array, mean) {
@@ -3755,7 +3756,7 @@ function initVisualizer() {
 
                 // New: Calculate brightness and contrast based on the beat
                 const contrastValue = 1 + (smoothedPulse * 1.5);
-                const brightnessValue = 1 + (smoothedPulse * 0.1); // Reduced brightness strength
+                const brightnessValue = 1 + (smoothedPulse * 0.1);
     
                 shards.forEach((shard) => {
                     shard.rotation += shard.rotationSpeed;
@@ -3767,8 +3768,8 @@ function initVisualizer() {
                     const baseX = shard.homeX + driftX;
                     const baseY = shard.homeY + driftY;
                     
-                    // Apply base drift and rotation
-                    shard.element.style.transform = `translate(${baseX}px, ${baseY}px) rotate(${shard.rotation}deg)`;
+                    // Crucial fix: Apply translate, then rotate, then scale in one property
+                    shard.element.style.transform = `translate(${baseX}px, ${baseY}px) rotate(${shard.rotation}deg) scale(0.75)`;
                     
                     // Apply the pulsing brightness/contrast filter
                     shard.element.style.filter = `url(#albumArtDistortion) contrast(${contrastValue}) brightness(${brightnessValue})`;
