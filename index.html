@@ -1040,17 +1040,23 @@
             }
         }
         
-        #shardCanvas {
+        /* Common style for ALL moving shards */
+        .distortion-shard {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            width: 150%;
+            height: 150%;
+            top: -25%;
+            left: -25%;
+            background-size: cover;
+            background-position: center;
             filter: url(#albumArtDistortion);
+            will-change: transform;
+            transition: background-image 0.5s ease, clip-path 3s ease-in-out, filter 0.1s ease-out;
+            scale: 0.75;
             opacity: 0.5;
         }
 
-        body.is-mobile #shardCanvas {
+        body.is-mobile .distortion-shard {
             display: none !important;
         }
         
@@ -2016,7 +2022,9 @@
     <div id="now-playing-view" class="view-container" style="display: none;">
         <div id="distortion-container">
             <div class="background-blur"></div>
-            <canvas id="shardCanvas"></canvas>
+            <div class="distortion-shard shape-1"></div>
+            <div class="distortion-shard shape-2"></div>
+            <div class="distortion-shard shape-3"></div>
         </div>
         <div class="now-playing-wrapper">
             <div class="album-art">
@@ -2307,7 +2315,6 @@
         let shards = [];
         let lastOriginalImageUrl = null;
         let lastResizedImageUrl = null;
-        let shardCanvas, shardCtx, shardImage;
         let songs = [];
         let currentSongId = null;
         let isPlayerLoading = false;
@@ -2575,10 +2582,6 @@ function renderSoundcloudSearchResults() {
 function setView(viewName) {
     activeView = viewName;
     const isNowPlaying = (viewName === 'now-playing');
-
-    if (isNowPlaying) {
-        resizeShardCanvas();
-    }
 
     tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === viewName);
@@ -3479,70 +3482,84 @@ const availableMusicFunctions = {
     // getSongRecommendations is handled directly by the calling function, so it doesn't need an entry here.
 };
 
-function generateRandomClipPath(shardSize) {
-    const points = Math.floor(6 + Math.random() * 5); // 6 to 10 vertices
+function generateRandomClipPath() {
+    const points = 8; // Number of vertices in the polygon
     let path = [];
-    const radius = shardSize / 2;
     for (let i = 0; i < points; i++) {
-        const angle = (i / points) * 2 * Math.PI;
-        // Vary the radius to create an organic shape
-        const r = radius * (0.8 + Math.random() * 0.4); 
-        const x = radius + r * Math.cos(angle);
-        const y = radius + r * Math.sin(angle);
+        // Generate a point on one of the four edges
+        const side = Math.floor(Math.random() * 4);
+        let x, y;
+        switch (side) {
+            case 0: // Top
+                x = Math.random() * 100;
+                y = Math.random() * 20; // Stick close to the edge
+                break;
+            case 1: // Right
+                x = 100 - (Math.random() * 20);
+                y = Math.random() * 100;
+                break;
+            case 2: // Bottom
+                x = Math.random() * 100;
+                y = 100 - (Math.random() * 20);
+                break;
+            case 3: // Left
+                x = Math.random() * 20;
+                y = Math.random() * 100;
+                break;
+        }
         path.push({ x, y });
     }
-    return path;
+
+    // Sort points to avoid self-intersecting polygons (simple clockwise sort)
+    const center = path.reduce((acc, { x, y }) => ({ x: acc.x + x / points, y: acc.y + y / points }), { x: 0, y: 0 });
+    path.sort((a, b) => Math.atan2(a.y - center.y, a.x - center.x) - Math.atan2(b.y - center.y, b.x - center.x));
+
+    return `polygon(${path.map(p => `${p.x.toFixed(2)}% ${p.y.toFixed(2)}%`).join(', ')})`;
 }
 
 function initializeShards() {
-    shardCanvas = document.getElementById('shardCanvas');
-    shardCtx = shardCanvas.getContext('2d');
-    shardImage = new Image();
-    shardImage.crossOrigin = 'Anonymous'; // Allow loading cross-origin images
+    const shardElements = document.querySelectorAll('.distortion-shard');
+    
+    const homePositions = [
+        { x: -50, y: -80 }, 
+        { x: 80, y: 40 }, 
+        { x: -70, y: 60 }
+    ];
 
-    // Add handlers to ensure the image is ready before we try to use it
-    // and to catch any loading errors.
-    shardImage.onload = () => {};
-    shardImage.onerror = () => {
-        console.error("Shard image failed to load:", shardImage.src);
-    };
-
-    const numShards = isMobile ? 4 : 8; // More shards on desktop
-    for (let i = 0; i < numShards; i++) {
-        const size = 150 + Math.random() * 200; // Random sizes
+    shardElements.forEach((el, i) => {
+        const homeX = homePositions[i % homePositions.length].x;
+        const homeY = homePositions[i % homePositions.length].y;
+        
         shards.push({
-            // Home position will be set relative to canvas size later
-            homeX: Math.random(), // Store as a ratio (0 to 1)
-            homeY: Math.random(), // Store as a ratio (0 to 1)
-            size: size,
-            rotationSpeed: (Math.random() - 0.5) * 0.1,
+            element: el,
+            bgPos: `${i * 50}% 50%`, 
+            rotationSpeed: (Math.random() - 0.5) * 0.2, // Slower rotation
+            xDrift: (Math.random() - 0.5) * 0.2, 
+            yDrift: (Math.random() - 0.5) * 0.2,
             rotation: Math.random() * 360,
-            vertices: generateRandomClipPath(size),
-            targetVertices: generateRandomClipPath(size),
-            morphProgress: 0,
+            homeX: homeX,
+            homeY: homeY
         });
-    }
+        el.style.backgroundPosition = shards[i].bgPos;
+        el.style.clipPath = generateRandomClipPath();
+    });
 
-    // Periodically set a new target shape for each shard
+    // Periodically update the shapes to create a morphing effect
     setInterval(() => {
         shards.forEach(shard => {
-            shard.targetVertices = generateRandomClipPath(shard.size);
-            shard.morphProgress = 0; // Reset progress to start morphing
+            shard.element.style.clipPath = generateRandomClipPath();
         });
-    }, 4000); // New shape every 4 seconds
+    }, 5000); // Morph every 5 seconds
 }
-        
+
 function setDistortionBackgrounds(url) {
     const backgroundUrl = url ? `url('${url}')` : '';
-    document.querySelector('.background-blur').style.backgroundImage = backgroundUrl;
-    
-    // Only update the image source if it has actually changed
-    const newSrc = url || '';
-    if (shardImage && shardImage.src !== newSrc) {
-        shardImage.src = newSrc;
-    }
+    shardContainer.querySelector('.background-blur').style.backgroundImage = backgroundUrl;
+    shards.forEach(shard => {
+        shard.element.style.backgroundImage = backgroundUrl;
+    });
 }
-        
+
 async function createResizedImageURL(imageUrl, width, height) {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -3701,7 +3718,7 @@ function initVisualizer() {
         const turbulenceFilter = document.getElementById('turbulence');
 
         const baselineDistortion = 80;
-        const peakDistortion = 300; 
+        const peakDistortion = 500; 
 
         let beatDetector;
         if (!isMobile) {
@@ -3711,8 +3728,9 @@ function initVisualizer() {
         const canvas = document.getElementById('visualizerCanvas');
         const canvasCtx = canvas.getContext('2d');
         
+        // Define separate bar indices for desktop and mobile to match their FFT sizes.
         const desktopBarIndices = [5, 10, 30, 100, 200, 400];
-        const mobileBarIndices = [1, 3, 6, 12, 20, 28]; 
+        const mobileBarIndices = [1, 3, 6, 12, 20, 28]; // Mapped to a 32-bin array
         const numBars = 6;
         
         const sensitivityMultipliers = [1, 1.05, 1.1, 1.15, 1.25, 1.4];
@@ -3726,60 +3744,39 @@ function initVisualizer() {
             analyser.getByteFrequencyData(dataArray);
 
             if (!isMobile) {
-                // Failsafe: Ensure canvas has dimensions before drawing
-                if (shardCanvas.width === 0 || shardCanvas.height === 0) {
-                    resizeShardCanvas();
-                }
-
                 const beatPulseTarget = beatDetector.update(dataArray);
                 smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
-
+    
                 const distortionRange = peakDistortion - baselineDistortion;
                 const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
                 displacementFilter.setAttribute('scale', currentDistortion);
+    
+                const shardTime = Date.now() * 0.00005;
 
-                shardCtx.clearRect(0, 0, shardCanvas.width, shardCanvas.height);
-                
-                if (shardImage.complete && shardImage.naturalWidth > 0) {
-                    const contrast = 1 + (smoothedPulse * 0.8);
-                    const brightness = 1 + (smoothedPulse * 0.1);
+                // New: Calculate brightness and contrast based on the beat
+                const contrastValue = 1 + (smoothedPulse * 1.5);
+                const brightnessValue = 1 + (smoothedPulse * 0.2);
+    
+                shards.forEach((shard) => {
+                    shard.rotation += shard.rotationSpeed;
+                    const time1 = shardTime * 5;
+                    const time2 = shardTime * 2;
+                    const driftX = Math.sin(time1 + shard.xDrift * 10) * 10 + Math.cos(time2 + shard.yDrift * 5) * 5;
+                    const driftY = Math.cos(time1 + shard.yDrift * 10) * 10 + Math.sin(time2 + shard.xDrift * 5) * 5;
+
+                    const baseX = shard.homeX + driftX;
+                    const baseY = shard.homeY + driftY;
                     
-                    shards.forEach(shard => {
-                        shard.rotation += shard.rotationSpeed;
-                        
-                        if (shard.morphProgress < 1) {
-                            shard.morphProgress = Math.min(1, shard.morphProgress + 0.02);
-                            for(let i=0; i < shard.vertices.length; i++) {
-                                if (shard.targetVertices[i]) {
-                                    shard.vertices[i].x += (shard.targetVertices[i].x - shard.vertices[i].x) * 0.05;
-                                    shard.vertices[i].y += (shard.targetVertices[i].y - shard.vertices[i].y) * 0.05;
-                                }
-                            }
-                        }
-
-                        shardCtx.save();
-                        // Use actual canvas dimensions to place shards
-                        shardCtx.translate(shard.homeX * shardCanvas.width, shard.homeY * shardCanvas.height);
-                        shardCtx.rotate(shard.rotation * Math.PI / 180);
-                        shardCtx.translate(-shard.size / 2, -shard.size / 2);
-
-                        shardCtx.beginPath();
-                        shardCtx.moveTo(shard.vertices[0].x, shard.vertices[0].y);
-                        for (let i = 1; i < shard.vertices.length; i++) {
-                            shardCtx.lineTo(shard.vertices[i].x, shard.vertices[i].y);
-                        }
-                        shardCtx.closePath();
-                        shardCtx.clip();
-                        
-                        shardCtx.filter = `contrast(${contrast}) brightness(${brightness})`;
-                        shardCtx.drawImage(shardImage, 0, 0, shard.size, shard.size);
-                        shardCtx.restore();
-                    });
-                }
-                shardCtx.filter = 'none';
+                    // Apply base drift and rotation, but no more positional shift from the beat
+                    shard.element.style.transform = `translate(${baseX}px, ${baseY}px) rotate(${shard.rotation}deg)`;
+                    
+                    // Apply the pulsing brightness/contrast filter
+                    shard.element.style.filter = `url(#albumArtDistortion) contrast(${contrastValue}) brightness(${brightnessValue})`;
+                });
+    
+                turbulenceFilter.setAttribute('seed', Date.now() / 30);
             }
             
-            // --- Bar Visualizer Drawing Logic (Unchanged) ---
             if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
             if (canvas.height !== canvas.clientHeight) canvas.height = canvas.clientHeight;
             canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -3789,6 +3786,7 @@ function initVisualizer() {
             const style = getComputedStyle(document.body);
             const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
             canvasCtx.fillStyle = textColor;
+
             const indicesToUse = isMobile ? mobileBarIndices : desktopBarIndices;
 
             for (let i = 0; i < numBars; i++) {
@@ -3810,7 +3808,7 @@ function initVisualizer() {
                     canvasCtx.beginPath();
                     if (canvasCtx.roundRect) {
                         canvasCtx.roundRect(x, y, barWidth, barHeight, pillRadius);
-                    } else { 
+                    } else { // Fallback
                         canvasCtx.rect(x, y, barWidth, barHeight);
                     }
                     canvasCtx.fill();
@@ -3824,16 +3822,6 @@ function initVisualizer() {
 
     } catch(e) {
         console.error("Failed to initialize AudioContext/Visualizer:", e);
-    }
-}
-
-// New Standalone Resize Function
-function resizeShardCanvas() {
-    if (!shardCanvas) return;
-    const needsResize = shardCanvas.width !== shardCanvas.clientWidth || shardCanvas.height !== shardCanvas.clientHeight;
-    if (needsResize) {
-        shardCanvas.width = shardCanvas.clientWidth;
-        shardCanvas.height = shardCanvas.clientHeight;
     }
 }
 
@@ -6262,8 +6250,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         searchInput = document.getElementById('searchInput');
         const musicUploadInput = document.getElementById('musicUpload');
         const libraryGrid = document.getElementById('library-grid');
-
-        window.addEventListener('resize', resizeShardCanvas);
         
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
