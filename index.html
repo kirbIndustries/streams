@@ -1051,12 +1051,24 @@
             background-position: center;
             filter: url(#albumArtDistortion);
             will-change: transform;
-            transition: background-image 0.5s ease, clip-path 5s, filter 0.1s ease-out;
+            transition: background-image 0.5s ease;
+            scale: 0.75;
             opacity: 0.5;
         }
 
         body.is-mobile .distortion-shard {
             display: none !important;
+        }
+        
+        /* Define the unique organic shapes for each shard */
+        .shape-1 {
+            clip-path: polygon(0% 25%, 66% 0%, 100% 33%, 75% 100%, 25% 100%);
+        }
+        .shape-2 {
+            clip-path: polygon(33% 0%, 100% 0%, 100% 75%, 50% 100%, 0% 50%);
+        }
+        .shape-3 {
+            clip-path: polygon(100% 33%, 80% 80%, 30% 100%, 0% 70%, 20% 20%);
         }
         
         .search-container {
@@ -1890,11 +1902,11 @@
             <feTurbulence 
                 id="turbulence"
                 type="turbulence" 
-                baseFrequency="0.002 0.005" 
+                baseFrequency="0.01 0.02" 
                 numOctaves="1" 
                 seed="0"
             />
-            <feGaussianBlur stdDeviation="60" result="blurredTurbulence"/>
+            <feGaussianBlur stdDeviation="30" result="blurredTurbulence"/>
             <feDisplacementMap 
                 id="displacement"
                 in="SourceGraphic" 
@@ -2024,7 +2036,6 @@
             <div class="distortion-shard shape-1"></div>
             <div class="distortion-shard shape-2"></div>
             <div class="distortion-shard shape-3"></div>
-            <div class="distortion-shard shape-4"></div>
         </div>
         <div class="now-playing-wrapper">
             <div class="album-art">
@@ -3482,75 +3493,37 @@ const availableMusicFunctions = {
     // getSongRecommendations is handled directly by the calling function, so it doesn't need an entry here.
 };
 
-function generateRandomClipPath() {
-    const points = 8; // Number of vertices in the polygon
-    let path = [];
-    for (let i = 0; i < points; i++) {
-        // Generate a point on one of the four edges
-        const side = Math.floor(Math.random() * 4);
-        let x, y;
-        switch (side) {
-            case 0: // Top
-                x = Math.random() * 100;
-                y = Math.random() * 20; // Stick close to the edge
-                break;
-            case 1: // Right
-                x = 100 - (Math.random() * 20);
-                y = Math.random() * 100;
-                break;
-            case 2: // Bottom
-                x = Math.random() * 100;
-                y = 100 - (Math.random() * 20);
-                break;
-            case 3: // Left
-                x = Math.random() * 20;
-                y = Math.random() * 100;
-                break;
-        }
-        path.push({ x, y });
-    }
-
-    // Sort points to avoid self-intersecting polygons (simple clockwise sort)
-    const center = path.reduce((acc, { x, y }) => ({ x: acc.x + x / points, y: acc.y + y / points }), { x: 0, y: 0 });
-    path.sort((a, b) => Math.atan2(a.y - center.y, a.x - center.x) - Math.atan2(b.y - center.y, b.x - center.x));
-
-    return `polygon(${path.map(p => `${p.x.toFixed(2)}% ${p.y.toFixed(2)}%`).join(', ')})`;
-}
 function initializeShards() {
     const shardElements = document.querySelectorAll('.distortion-shard');
     
-    // Drastically increased positions to push shards far into the corners and edges
     const homePositions = [
-        { x: -250, y: -220 }, // Far Top-left
-        { x: 250, y: 220 },  // Far Bottom-right
-        { x: -220, y: 250 }, // Far Bottom-left
-        { x: 220, y: -250 }  // Far Top-right
+        { x: -50, y: -80 }, 
+        { x: 80, y: 40 }, 
+        { x: -70, y: 60 }
     ];
 
     shardElements.forEach((el, i) => {
         const homeX = homePositions[i % homePositions.length].x;
         const homeY = homePositions[i % homePositions.length].y;
         
+        const magnitude = Math.sqrt(homeX * homeX + homeY * homeY);
+        const dirX = magnitude > 0 ? homeX / magnitude : 0;
+        const dirY = magnitude > 0 ? homeY / magnitude : 0;
+
         shards.push({
             element: el,
             bgPos: `${i * 50}% 50%`, 
-            rotationSpeed: (Math.random() - 0.5) * 0.4,
+            rotationSpeed: (Math.random() - 0.5) * 0.25,
             xDrift: (Math.random() - 0.5) * 0.2, 
             yDrift: (Math.random() - 0.5) * 0.2,
             rotation: Math.random() * 360,
             homeX: homeX,
-            homeY: homeY
+            homeY: homeY,
+            dirX: dirX,
+            dirY: dirY
         });
         el.style.backgroundPosition = shards[i].bgPos;
-        el.style.clipPath = generateRandomClipPath();
     });
-
-    // Periodically update the shapes to create a morphing effect
-    setInterval(() => {
-        shards.forEach(shard => {
-            shard.element.style.clipPath = generateRandomClipPath();
-        });
-    }, 1000); // Morph every 1 second
 }
 
 function setDistortionBackgrounds(url) {
@@ -3609,7 +3582,7 @@ async function updateAllBackgrounds(imageUrl) {
         setDistortionBackgrounds(originalUrl);
     }
 }
-        
+
 class BeatDetector {
     constructor(frequencyBands, historySize = 60, minThreshold = 5) {
         this.frequencyBands = frequencyBands;
@@ -3618,12 +3591,12 @@ class BeatDetector {
         this.fluxHistories = this.frequencyBands.map(() => []);
         this.lastEnergies = new Array(this.frequencyBands.length).fill(0);
         this.beatValue = 0.0;
-        this.decayRate = 0.90; // Faster decay for a sharper pulse
+        this.decayRate = 0.96;
         this.dynamicSensitivity = 1.4;
         this.minSensitivity = 1.2;
         this.maxSensitivity = 2.4;
         this.increaseFactor = 1.05;
-        this.decreaseFactor = 0.995; // Faster sensitivity correction
+        this.decreaseFactor = 0.999;
     }
 
     _calculateStandardDeviation(array, mean) {
@@ -3719,7 +3692,7 @@ function initVisualizer() {
         const turbulenceFilter = document.getElementById('turbulence');
 
         const baselineDistortion = 80;
-        const peakDistortion = 500; 
+        const peakDistortion = 250;
 
         let beatDetector;
         if (!isMobile) {
@@ -3752,27 +3725,17 @@ function initVisualizer() {
                 const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
                 displacementFilter.setAttribute('scale', currentDistortion);
     
+                const maxShift = 60; 
+                const outwardShift = smoothedPulse * maxShift;
                 const shardTime = Date.now() * 0.00005;
-
-                // New: Calculate brightness and contrast based on the beat
-                const contrastValue = 1 + (smoothedPulse * 1.5);
-                const brightnessValue = 1 + (smoothedPulse * 0.1);
     
                 shards.forEach((shard) => {
                     shard.rotation += shard.rotationSpeed;
-                    const time1 = shardTime * 5;
-                    const time2 = shardTime * 2;
-                    const driftX = Math.sin(time1 + shard.xDrift * 10) * 10 + Math.cos(time2 + shard.yDrift * 5) * 5;
-                    const driftY = Math.cos(time1 + shard.yDrift * 10) * 10 + Math.sin(time2 + shard.xDrift * 5) * 5;
-
-                    const baseX = shard.homeX + driftX;
-                    const baseY = shard.homeY + driftY;
-                    
-                    // Crucial fix: Apply translate, then rotate, then scale in one property
-                    shard.element.style.transform = `translate(${baseX}px, ${baseY}px) rotate(${shard.rotation}deg) scale(0.75)`;
-                    
-                    // Apply the pulsing brightness/contrast filter
-                    shard.element.style.filter = `url(#albumArtDistortion) contrast(${contrastValue}) brightness(${brightnessValue})`;
+                    const baseX = shard.homeX + Math.sin(shardTime * shard.xDrift * 10) * 15;
+                    const baseY = shard.homeY + Math.cos(shardTime * shard.yDrift * 10) * 15;
+                    const totalX = baseX + (shard.dirX * outwardShift);
+                    const totalY = baseY + (shard.dirY * outwardShift);
+                    shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
                 });
     
                 turbulenceFilter.setAttribute('seed', Date.now() / 30);
