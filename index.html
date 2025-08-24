@@ -3777,7 +3777,6 @@ const availableMusicFunctions = {
         function animateCanvas() {
             if (!isDistortionLoopActive) return;
             
-            animationFrameId = requestAnimationFrame(animateCanvas);
             if (!ctx) return;
             
             const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
