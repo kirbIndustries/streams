@@ -3595,6 +3595,8 @@ class BeatDetector {
         decreaseFactor = 0.999,
         enableGlobalDetection = true,
         smoothingFactor = 0.3,
+        tempoWindow = 100, // ms window to allow beat detection within tempo
+        minBeatInterval = 150 // Minimum interval between detected beats (ms)
     } = {}) {
         this.frequencyBands = frequencyBands;
 
@@ -3610,12 +3612,37 @@ class BeatDetector {
         this.enableGlobalDetection = enableGlobalDetection;
         this.smoothingFactor = smoothingFactor;
 
+        // Tempo-related configuration
+        this.tempoWindow = tempoWindow;
+        this.minBeatInterval = minBeatInterval;
+
         // State
         this.lastEnergies = new Array(frequencyBands.length).fill(0);
         this.emaFlux = new Array(frequencyBands.length).fill(0);
         this.emaFluxSquared = new Array(frequencyBands.length).fill(0); // For stdDev
         this.beatValue = 0.0;
         this.prevTimestamp = null;
+
+        // Tempo tracking
+        this.lastBeatTime = 0;
+        this.tempoHistory = [];  // Store previous IBIs (Inter-beat intervals)
+        this.estimatedBPM = 120; // Initial estimate (can be adjusted)
+        this.predictedNextBeatTime = 0;
+    }
+
+    // Function to update the tempo estimate based on IBI (Inter-beat interval)
+    updateTempo(lastBeatTime, currentTime) {
+        const ibi = (currentTime - lastBeatTime) / 1000; // Time between beats in seconds
+        const bpm = 60 / ibi; // Convert IBI to BPM
+        this.tempoHistory.push(bpm);
+
+        if (this.tempoHistory.length > 10) {
+            this.tempoHistory.shift(); // Keep the last 10 tempo readings
+        }
+
+        // Calculate the average tempo from recent IBIs
+        this.estimatedBPM = this.tempoHistory.reduce((sum, bpm) => sum + bpm, 0) / this.tempoHistory.length;
+        this.predictedNextBeatTime = lastBeatTime + (60 / this.estimatedBPM) * 1000; // Predict next beat time
     }
 
     update(dataArray, currentTimestamp = null) {
@@ -3629,6 +3656,7 @@ class BeatDetector {
         }
         this.prevTimestamp = currentTimestamp;
 
+        // Loop through frequency bands and calculate flux
         for (let i = 0; i < this.frequencyBands.length; i++) {
             const [start, end] = this.frequencyBands[i];
 
@@ -3662,11 +3690,25 @@ class BeatDetector {
             }
         }
 
-        // Beat logic
+        // Beat detection logic: If a beat is detected globally or within any frequency band
+        let beatDetected = false;
+        const now = currentTimestamp || performance.now();
+        const timeSinceLastBeat = now - this.lastBeatTime;
+        const tempoDeviation = Math.abs(now - this.predictedNextBeatTime);  // How close are we to predicted beat time?
+
         if ((this.enableGlobalDetection && globalBeatDetected) || (!this.enableGlobalDetection && detectedBands.length > 0)) {
-            this.beatValue = 1.0;
-            this.dynamicSensitivity *= this.increaseFactor;
-        } else {
+            // Only register beat if within predicted tempo window
+            if (tempoDeviation <= this.tempoWindow && timeSinceLastBeat >= this.minBeatInterval) {
+                this.beatValue = 1.0;
+                this.lastBeatTime = now;
+                this.updateTempo(this.lastBeatTime, now);  // Update the tempo estimate
+                beatDetected = true;
+                this.dynamicSensitivity *= this.increaseFactor;
+            }
+        }
+
+        // If no beat detected, decay beat value and adjust sensitivity
+        if (!beatDetected) {
             this.beatValue *= Math.pow(this.decayRate, deltaTime);
             this.dynamicSensitivity *= this.decreaseFactor;
         }
@@ -3674,13 +3716,17 @@ class BeatDetector {
         // Clamp sensitivity
         this.dynamicSensitivity = Math.max(this.minSensitivity, Math.min(this.maxSensitivity, this.dynamicSensitivity));
 
+        // Return the beat information
         return {
             beatValue: this.beatValue,
             detectedBands,
-            sensitivity: this.dynamicSensitivity,
+            estimatedBPM: this.estimatedBPM,
+            predictedNextBeatTime: this.predictedNextBeatTime,
+            tempoDeviation,
         };
     }
 
+    // Lerp function for smoothing
     _lerp(a, b, t) {
         return a + (b - a) * t;
     }
