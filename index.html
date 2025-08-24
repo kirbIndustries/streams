@@ -3733,8 +3733,8 @@ const availableMusicFunctions = {
         }
 
         /**
-         * The final animation loop, featuring fluid viewport containment,
-         * reduced warping speed, and rendering of the pre-resized images.
+         * The animation loop, now featuring toroidal wrapping (looping) for blob movement.
+         * When blobs go off one edge, they reappear on the opposite side.
          */
         function animateCanvas() {
             animationFrameId = requestAnimationFrame(animateCanvas);
@@ -3774,23 +3774,31 @@ const availableMusicFunctions = {
             
             // --- Update and Draw Blobs ---
             blobs.forEach(blob => {
-                // --- NEW: Direct Linear Movement and Instant Reflection ---
-                // This logic replaces the previous meandering and waiting system.
+                // --- NEW: Toroidal Wrapping (Looping) Logic ---
+                // This logic replaces the previous bouncing system.
                 
                 // 1. Update position based on current velocity (Linear Motion)
                 blob.x += blob.vx;
                 blob.y += blob.vy;
                 blob.rotation += blob.rotationSpeed;
 
-                // 2. Check for boundary collisions and reflect velocity (Instant Redirection)
-                const radius = blob.radius * blob.scale; // Use the scaled radius for checks
-                if ((blob.x - radius < 0 && blob.vx < 0) || (blob.x + radius > canvasWidth && blob.vx > 0)) {
-                    blob.vx *= -1; // Invert horizontal velocity
+                // 2. Check if the blob has moved completely off-screen and wrap it to the opposite side.
+                // We use the radius to ensure the blob is fully hidden before it reappears.
+                const radius = blob.radius * blob.scale;
+
+                // Horizontal wrapping
+                if (blob.x - radius > canvasWidth) { // Gone completely past the right edge
+                    blob.x = -radius; // Reappear just off the left edge
+                } else if (blob.x + radius < 0) { // Gone completely past the left edge
+                    blob.x = canvasWidth + radius; // Reappear just off the right edge
                 }
-                if ((blob.y - radius < 0 && blob.vy < 0) || (blob.y + radius > canvasHeight && blob.vy > 0)) {
-                    blob.vy *= -1; // Invert vertical velocity
+
+                // Vertical wrapping
+                if (blob.y - radius > canvasHeight) { // Gone completely past the bottom edge
+                    blob.y = -radius; // Reappear just off the top edge
+                } else if (blob.y + radius < 0) { // Gone completely past the top edge
+                    blob.y = canvasHeight + radius; // Reappear just off the bottom edge
                 }
-                // --- End of New Movement Logic ---
 
                 // Decay beat effects & continuous warp (Unchanged)
                 blob.time += 0.1;
