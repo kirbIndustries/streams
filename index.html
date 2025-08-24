@@ -3760,7 +3760,7 @@ function initVisualizer() {
             
             const bandWeights = [1.3, 1.1, 0.7];
             
-            beatDetector = new ImprovedBeatDetector(beatBands, {
+            beatDetector = new BeatDetector(beatBands, {
                 bandWeights,
                 smoothingFactor: 0.25,
                 emaAlpha: 0.1,
