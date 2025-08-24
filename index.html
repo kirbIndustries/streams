@@ -3569,7 +3569,7 @@ const availableMusicFunctions = {
                 distortionCanvas.width = window.innerWidth;
                 distortionCanvas.height = window.innerHeight;
                 // Re-initialize blobs on resize. A small delay ensures the new art is ready.
-                if (currentAlbumArtImage.src) {
+                if (currentResizedArt.src) {
                     setTimeout(initBlobs, 100);
                 }
             };
