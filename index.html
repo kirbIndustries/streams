@@ -3801,7 +3801,7 @@ function initVisualizer() {
             analyser.getByteFrequencyData(dataArray);
 
             if (!isMobile) {
-                const { beatValue: beatPulseTarget } = beatDetector.update(dataArray);
+                const { beatValue: beatPulseTarget, estimatedBPM, predictedNextBeatTime, tempoDeviation } = beatDetector.update(dataArray, performance.now());
                 smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
     
                 const distortionRange = peakDistortion - baselineDistortion;
