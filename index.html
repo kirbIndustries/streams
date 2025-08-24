@@ -1028,7 +1028,6 @@
             left: 0;
             width: 100%;
             height: 100%;
-            image-rendering: pixelated;
         }
         
         @keyframes rotate {
@@ -2295,7 +2294,8 @@
         let oldResizedArt = new Image();
         let blobs = [];
         let animationFrameId;
-        const NUM_BLOBS_PERF = 5; // Increased for better canvas coverage
+        let backgroundRotation = 0;
+        const NUM_BLOBS_PERF = 15; // Increased for better canvas coverage
         let noise; // This will hold our noise generator function
         let isTransitioning = false;
         let transitionProgress = 0;
@@ -3512,8 +3512,8 @@ const availableMusicFunctions = {
         }
 
         /**
-         * A self-contained Perlin noise generator.
-         * This creates the organic, smoothly-random values needed for the blob shapes.
+         * A self-contained 3D Perlin noise generator.
+         * Using a third dimension (z) for time allows the blob shapes to continuously evolve.
          */
         function createNoiseGenerator() {
             const p = new Uint8Array(512);
@@ -3526,25 +3526,31 @@ const availableMusicFunctions = {
 
             const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
             const lerp = (a, b, t) => a + t * (b - a);
-            const grad = (hash, x, y) => {
+            const grad = (hash, x, y, z) => {
                 const h = hash & 15;
                 const u = h < 8 ? x : y;
-                const v = h < 4 ? y : h === 12 || h === 14 ? x : 0;
+                const v = h < 4 ? y : h === 12 || h === 14 ? x : z;
                 return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
             };
 
-            return (x, y) => {
-                const X = Math.floor(x) & 255;
-                const Y = Math.floor(y) & 255;
-                x -= Math.floor(x);
-                y -= Math.floor(y);
-                const u = fade(x);
-                const v = fade(y);
+            return (x, y, z) => {
+                const X = Math.floor(x) & 255, Y = Math.floor(y) & 255, Z = Math.floor(z) & 255;
+                x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
+                const u = fade(x), v = fade(y), w = fade(z);
                 const a = p[X] + Y, b = p[X + 1] + Y;
+                const a1 = p[a] + Z, a2 = p[a + 1] + Z;
+                const b1 = p[b] + Z, b2 = p[b + 1] + Z;
+
                 return lerp(
-                    lerp(grad(p[a], x, y), grad(p[b], x - 1, y), u),
-                    lerp(grad(p[a + 1], x, y - 1), grad(p[b + 1], x - 1, y - 1), u),
-                v) * 0.5 + 0.5; // Return in 0-1 range
+                    lerp(
+                        lerp(grad(p[a1], x, y, z), grad(p[b1], x - 1, y, z), u),
+                        lerp(grad(p[a2], x, y - 1, z), grad(p[b2], x - 1, y - 1, z), u),
+                    v),
+                    lerp(
+                        lerp(grad(p[a1 + 1], x, y, z - 1), grad(p[b1 + 1], x - 1, y, z - 1), u),
+                        lerp(grad(p[a2 + 1], x, y - 1, z - 1), grad(p[b2 + 1], x - 1, y - 1, z - 1), u),
+                    v),
+                w) * 0.5 + 0.5; // Return in 0-1 range
             };
         }
 
@@ -3644,7 +3650,6 @@ const availableMusicFunctions = {
                 blobs.push({
                     x: Math.random() * canvasWidth,
                     y: Math.random() * canvasHeight,
-                    // Blobs now only have a direct, current velocity.
                     vx: (Math.random() - 0.5) * maxSpeed,
                     vy: (Math.random() - 0.5) * maxSpeed,
                     radius: radius,
@@ -3663,55 +3668,45 @@ const availableMusicFunctions = {
         }
 
         /**
-         * Draws a single blob with a procedurally generated organic shape.
-         * @param {CanvasRenderingContext2D} context - The canvas context to draw on.
-         * @param {object} blob - The blob object containing its properties.
-         * @param {HTMLImageElement} imageToDraw - The album art image to render inside the blob.
+         * Draws a single blob whose shape is defined by the new 3D noise function,
+         * causing it to continuously morph over time.
          */
         function drawOrganicBlob(context, blob, imageToDraw) {
             context.save();
-            
-            // Move to the blob's position and apply rotation
             context.translate(blob.x, blob.y);
             context.rotate(blob.rotation);
             
-            // --- Procedural Shape Generation ---
             context.beginPath();
-            const points = 60; // Number of points defining the blob's edge
-            const noiseFrequency = 1.5; // How detailed the noise is
-            const noiseSpeed = 0.005; // How fast the shape warps over time
+            const points = 20; // Fewer points for better performance with more blobs
+            const noiseFrequency = 1.8;
+            const noiseSpeed = 0.004; // How fast the shape morphs
             
             for (let i = 0; i < points; i++) {
                 const angle = (i / points) * Math.PI * 2;
-                
-                // Calculate a point on a circle
                 const x = Math.cos(angle);
                 const y = Math.sin(angle);
-                
-                // Use noise to displace the point from the circle's edge
+
+                // THE KEY CHANGE: We now pass 'blob.time' as the third 'z' argument.
+                // This samples the noise field at a different "slice" in time on every frame.
                 const noiseVal = noise(
                     (x + 1) * noiseFrequency, 
-                    (y + 1) * noiseFrequency + blob.time * noiseSpeed
+                    (y + 1) * noiseFrequency, 
+                    blob.time * noiseSpeed
                 );
                 
-                // The radius for this point is the base radius plus the noise displacement
                 const radius = blob.radius * blob.scale + (noiseVal * blob.radius * 0.3);
                 const pointX = x * radius;
                 const pointY = y * radius;
-                
-                // Draw a line to the calculated point
                 if (i === 0) context.moveTo(pointX, pointY);
                 else context.lineTo(pointX, pointY);
             }
             context.closePath();
-            context.clip(); // Create the clipping mask from the organic shape
+            context.clip();
             
-            // Apply contrast from beat detection
             if (blob.contrast > 1) {
                 context.filter = `contrast(${blob.contrast})`;
             }
 
-            // The internal liquid warp effect (optional, but adds nice detail)
             const totalWarp = blob.baseWarp + blob.warpAmount + Math.sin(blob.time * 0.1) * (blob.baseWarp * 0.5);
             const numStrips = 30;
             const stripWidth = (blob.radius * 2 * blob.scale) / numStrips;
@@ -3728,8 +3723,7 @@ const availableMusicFunctions = {
                     stripWidth + 1, blob.radius * 2 * blob.scale
                 );
             }
-
-            context.restore(); // Remove clipping mask, filter, and transforms
+            context.restore();
         }
 
         /**
@@ -3741,35 +3735,40 @@ const availableMusicFunctions = {
             if (!ctx) return;
             
             const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
-            const maxSpeed = 0.8;
             
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
             
-            // --- Handle Fade Transition ---
+            // Increment the rotation angle on every frame
+            backgroundRotation += 0.0002;
+
             if (isTransitioning) {
                 transitionProgress += 1 / TRANSITION_DURATION;
                 if (transitionProgress >= 1) {
-                    transitionProgress = 1;
-                    isTransitioning = false;
-                    oldResizedArt = new Image(); // Clear old image
+                    transitionProgress = 1; isTransitioning = false; oldResizedArt = new Image();
                 }
             }
             
             // --- Draw Background(s) using Resized Images ---
-            const themeBrightness = document.body.classList.contains('light-theme') ? '1.1' : '0.6';
-            const backgroundFilter = ``;
+            const drawRotatingBackground = (image) => {
+                const scale = 1.5; // Draw larger to prevent corners from appearing during rotation
+                ctx.save();
+                ctx.translate(canvasWidth / 2, canvasHeight / 2);
+                ctx.rotate(backgroundRotation);
+                ctx.drawImage(image, 
+                    -canvasWidth * scale / 2, -canvasHeight * scale / 2, 
+                    canvasWidth * scale, canvasHeight * scale
+                );
+                ctx.restore();
+            };
 
             if (isTransitioning && oldResizedArt.complete && oldResizedArt.src) {
                 ctx.globalAlpha = 1 - transitionProgress;
-                ctx.filter = backgroundFilter;
-                ctx.drawImage(oldResizedArt, 0, 0, canvasWidth, canvasHeight);
+                drawRotatingBackground(oldResizedArt);
             }
             if (currentResizedArt.complete && currentResizedArt.src) {
                 ctx.globalAlpha = isTransitioning ? transitionProgress : 1;
-                ctx.filter = backgroundFilter;
-                ctx.drawImage(currentResizedArt, 0, 0, canvasWidth, canvasHeight);
+                drawRotatingBackground(currentResizedArt);
             }
-            ctx.filter = 'none';
             ctx.globalAlpha = 1;
             
             // --- Update and Draw Blobs ---
