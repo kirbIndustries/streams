@@ -1012,25 +1012,24 @@
             opacity: 1;
         }
 
+        #distortion-container:not(.active) {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         body.light-theme #distortion-container {
             opacity: 0.6; /* 60% opacity for light theme */
             filter: blur(50px) saturate(2) brightness(1);
         }
         
-        /* The VERY back layer: heavy blur, no distortion */
-        .background-blur {
+        #distortionCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            background-size: cover;
-            background-position: center;
-            scale: 2;
-            transition: background-image 0.5s ease;
         }
-
-        .background-blur.rotating {
-            animation: rotate 45s linear infinite;
-        }
-
+        
         @keyframes rotate {
             from {
                 transform: scale(1.42) rotate(0deg);
@@ -1038,37 +1037,6 @@
             to {
                 transform: scale(1.42) rotate(360deg);
             }
-        }
-        
-        /* Common style for ALL moving shards */
-        .distortion-shard {
-            position: absolute;
-            width: 150%;
-            height: 150%;
-            top: -25%;
-            left: -25%;
-            background-size: cover;
-            background-position: center;
-            filter: url(#albumArtDistortion);
-            will-change: transform;
-            transition: background-image 0.5s ease;
-            scale: 0.75;
-            opacity: 0.5;
-        }
-
-        body.is-mobile .distortion-shard {
-            display: none !important;
-        }
-        
-        /* Define the unique organic shapes for each shard */
-        .shape-1 {
-            clip-path: polygon(0% 25%, 66% 0%, 100% 33%, 75% 100%, 25% 100%);
-        }
-        .shape-2 {
-            clip-path: polygon(33% 0%, 100% 0%, 100% 75%, 50% 100%, 0% 50%);
-        }
-        .shape-3 {
-            clip-path: polygon(100% 33%, 80% 80%, 30% 100%, 0% 70%, 20% 20%);
         }
         
         .search-container {
@@ -2032,10 +2000,7 @@
     </div>
     <div id="now-playing-view" class="view-container" style="display: none;">
         <div id="distortion-container">
-            <div class="background-blur"></div>
-            <div class="distortion-shard shape-1"></div>
-            <div class="distortion-shard shape-2"></div>
-            <div class="distortion-shard shape-3"></div>
+            <canvas id="distortionCanvas"></canvas>
         </div>
         <div class="now-playing-wrapper">
             <div class="album-art">
@@ -2322,10 +2287,13 @@
         
         let listenAgainIndex = parseInt(localStorage.getItem('listenAgainIndex') || '0');
         let currentMediaSessionArtBlobUrl = null;
-        let shardContainer; 
-        let shards = [];
         let lastOriginalImageUrl = null;
         let lastResizedImageUrl = null;
+        let distortionCanvas, ctx;
+        let albumArtImage = new Image();
+        let blobs = [];
+        let animationFrameId;
+        const NUM_BLOBS = 7; // The number of warping blobs on screen
         let songs = [];
         let currentSongId = null;
         let isPlayerLoading = false;
@@ -3493,46 +3461,190 @@ const availableMusicFunctions = {
     // getSongRecommendations is handled directly by the calling function, so it doesn't need an entry here.
 };
 
-function initializeShards() {
-    const shardElements = document.querySelectorAll('.distortion-shard');
-    
-    const homePositions = [
-        { x: -50, y: -80 }, 
-        { x: 80, y: 40 }, 
-        { x: -70, y: 60 }
-    ];
+        /**
+         * Initializes the entire canvas distortion effect.
+         * Sets up the canvas, adds resize listeners, and starts the animation loop.
+         * This should be called once when the application loads.
+         */
+        function initDistortionCanvas() {
+            distortionCanvas = document.getElementById('distortionCanvas');
+            if (!distortionCanvas) return;
+            ctx = distortionCanvas.getContext('2d');
+            albumArtImage.crossOrigin = 'Anonymous'; // Allow loading cross-origin images
 
-    shardElements.forEach((el, i) => {
-        const homeX = homePositions[i % homePositions.length].x;
-        const homeY = homePositions[i % homePositions.length].y;
+            // Resize the canvas to fill the window and handle future resize events
+            const resizeCanvas = () => {
+                distortionCanvas.width = window.innerWidth;
+                distortionCanvas.height = window.innerHeight;
+                // Re-initialize blobs on resize to ensure they are properly placed
+                if (albumArtImage.src) {
+                    initBlobs();
+                }
+            };
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // Start the animation loop
+            animateCanvas();
+        }
+
+        /**
+         * Loads a new album art image for the canvas background.
+         * Once the image is loaded, it initializes the blobs with sections of the new art.
+         * @param {string} imageUrl - The URL of the album art to load.
+         */
+        function loadAlbumArtForCanvas(imageUrl) {
+            if (!imageUrl) {
+                // If there's no image, clear the canvas and blobs
+                albumArtImage.src = '';
+                blobs = [];
+                return;
+            }
+            // Prevents re-initializing if the art is the same
+            if (albumArtImage.src === imageUrl) return;
+
+            albumArtImage.onload = () => {
+                initBlobs(); // Create new blobs once the image is ready
+            };
+            albumArtImage.src = imageUrl;
+        }
+
+        /**
+         * Creates and initializes the properties for all blobs.
+         * It spreads them evenly across the viewport and assigns each a unique
+         * section of the album art to render.
+         */
+        function initBlobs() {
+            blobs = [];
+            const { width: imgWidth, height: imgHeight } = albumArtImage;
+            const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
+
+            for (let i = 0; i < NUM_BLOBS; i++) {
+                const radius = (Math.random() * 0.15 + 0.1) * Math.min(canvasWidth, canvasHeight);
+                blobs.push({
+                    // Position & Movement
+                    x: Math.random() * canvasWidth,
+                    y: Math.random() * canvasHeight,
+                    vx: (Math.random() - 0.5) * 0.5,
+                    vy: (Math.random() - 0.5) * 0.5,
+                    radius: radius,
+
+                    // Source image region this blob will render
+                    sourceX: Math.random() * (imgWidth - imgWidth * 0.2),
+                    sourceY: Math.random() * (imgHeight - imgHeight * 0.2),
+                    sourceSize: Math.min(imgWidth, imgHeight) * (Math.random() * 0.2 + 0.2),
+                    
+                    // Warp effect properties
+                    time: Math.random() * 1000,
+                    warpAmount: 0, // Extra warp from beat detection
+                    baseWarp: radius * 0.1, // Continuous gentle warp
+                    
+                    // Beat detection properties
+                    contrast: 1,
+                    scale: 1,
+                });
+            }
+        }
+
+        /**
+         * The main animation loop, called on every frame.
+         * It clears the canvas, draws the blurred background, and then updates
+         * and draws each individual blob with its warping effect.
+         */
+        function animateCanvas(timestamp) {
+            animationFrameId = requestAnimationFrame(animateCanvas);
+            if (!ctx || !albumArtImage.src) {
+                ctx.clearRect(0, 0, distortionCanvas.width, distortionCanvas.height);
+                return;
+            };
+
+            const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
+            
+            // 1. Draw the blurred, full-screen background image
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            ctx.globalAlpha = 1;
+            const themeBrightness = document.body.classList.contains('light-theme') ? '1.1' : '0.6';
+            ctx.filter = `blur(50px) saturate(1.5) brightness(${themeBrightness})`;
+            ctx.drawImage(albumArtImage, 0, 0, canvasWidth, canvasHeight);
+            ctx.filter = 'none';
+
+            // 2. Update and draw each blob
+            blobs.forEach(blob => {
+                // --- Update blob properties ---
+                blob.time += 0.01;
+                blob.x += blob.vx;
+                blob.y += blob.vy;
+
+                // Bounce off edges
+                if (blob.x - blob.radius < 0 || blob.x + blob.radius > canvasWidth) blob.vx *= -1;
+                if (blob.y - blob.radius < 0 || blob.y + blob.radius > canvasHeight) blob.vy *= -1;
+                
+                // Gradually decay beat-induced effects back to normal
+                blob.warpAmount *= 0.95; 
+                blob.contrast *= 0.98;
+                if (blob.contrast < 1) blob.contrast = 1;
+                blob.scale += (1 - blob.scale) * 0.1;
+
+
+                // --- Render the blob ---
+                ctx.save();
+                
+                // Create a circular clipping mask for the blob
+                ctx.beginPath();
+                ctx.arc(blob.x, blob.y, blob.radius * blob.scale, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.clip();
+                
+                // Apply contrast from beat detection
+                if (blob.contrast > 1) {
+                    ctx.filter = `contrast(${blob.contrast})`;
+                }
+
+                // Calculate total warp for this frame
+                const totalWarp = blob.baseWarp + blob.warpAmount + Math.sin(blob.time) * (blob.baseWarp * 0.5);
+                
+                // Draw the image inside the circle with a liquid warp effect
+                // This is done by drawing the image in thin vertical strips,
+                // each with a slight sinusoidal y-offset.
+                const numStrips = 30;
+                const stripWidth = (blob.radius * 2 * blob.scale) / numStrips;
+                for (let i = 0; i < numStrips; i++) {
+                    const stripX = blob.x - (blob.radius * blob.scale) + i * stripWidth;
+                    
+                    const sinInput = (i / numStrips) * Math.PI + blob.time;
+                    const yOffset = Math.sin(sinInput) * totalWarp;
+                    
+                    ctx.drawImage(
+                        albumArtImage,
+                        // Source rectangle (from original image)
+                        blob.sourceX + (blob.sourceSize / numStrips) * i,
+                        blob.sourceY,
+                        blob.sourceSize / numStrips,
+                        blob.sourceSize,
+                        // Destination rectangle (on canvas)
+                        stripX,
+                        blob.y - (blob.radius * blob.scale) + yOffset,
+                        stripWidth + 1, // +1 to avoid gaps
+                        blob.radius * 2 * blob.scale
+                    );
+                }
+
+                ctx.restore(); // Remove clipping mask and filter
+            });
+        }
         
-        const magnitude = Math.sqrt(homeX * homeX + homeY * homeY);
-        const dirX = magnitude > 0 ? homeX / magnitude : 0;
-        const dirY = magnitude > 0 ? homeY / magnitude : 0;
-
-        shards.push({
-            element: el,
-            bgPos: `${i * 50}% 50%`, 
-            rotationSpeed: (Math.random() - 0.5) * 0.25,
-            xDrift: (Math.random() - 0.5) * 0.2, 
-            yDrift: (Math.random() - 0.5) * 0.2,
-            rotation: Math.random() * 360,
-            homeX: homeX,
-            homeY: homeY,
-            dirX: dirX,
-            dirY: dirY
-        });
-        el.style.backgroundPosition = shards[i].bgPos;
-    });
-}
-
-function setDistortionBackgrounds(url) {
-    const backgroundUrl = url ? `url('${url}')` : '';
-    shardContainer.querySelector('.background-blur').style.backgroundImage = backgroundUrl;
-    shards.forEach(shard => {
-        shard.element.style.backgroundImage = backgroundUrl;
-    });
-}
+        /**
+         * This function is called from the beat detector in `initVisualizer`.
+         * It randomly selects a blob and spikes its warp and contrast values,
+         * creating a visual "punch" effect in time with the music.
+         */
+        function triggerBeatEffect() {
+            if (blobs.length === 0) return;
+            const blob = blobs[Math.floor(Math.random() * blobs.length)];
+            blob.warpAmount = blob.radius * 0.5; // Spike the warp amount
+            blob.contrast = 2.5; // Spike the contrast
+            blob.scale = 1.05; // Briefly increase size
+        }
 
 async function createResizedImageURL(imageUrl, width, height) {
     return new Promise((resolve, reject) => {
@@ -3560,27 +3672,7 @@ async function createResizedImageURL(imageUrl, width, height) {
 }
 
 async function updateAllBackgrounds(imageUrl) {
-    if (imageUrl === lastOriginalImageUrl && lastResizedImageUrl) {
-        setDistortionBackgrounds(lastResizedImageUrl);
-        return;
-    }
-
-    if (!imageUrl) {
-        setDistortionBackgrounds('');
-        lastOriginalImageUrl = null;
-        lastResizedImageUrl = null;
-        return;
-    }
-
-    try {
-        const resizedUrl = await createResizedImageURL(imageUrl, 64, 64);
-        lastOriginalImageUrl = imageUrl;
-        lastResizedImageUrl = resizedUrl;
-        setDistortionBackgrounds(resizedUrl);
-    } catch (originalUrl) {
-        console.warn("Could not resize background image, falling back to original.");
-        setDistortionBackgrounds(originalUrl);
-    }
+    loadAlbumArtForCanvas(imageUrl);
 }
 
 class BeatDetector {
@@ -3756,29 +3848,14 @@ function initVisualizer() {
 
             if (!isMobile) {
                 const { beatValue: beatPulseTarget } = beatDetector.update(dataArray);
-                smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
-    
-                const distortionRange = peakDistortion - baselineDistortion;
-                const currentDistortion = baselineDistortion + (smoothedPulse * distortionRange);
-
-                if (!isNaN(currentDistortion) && isFinite(currentDistortion)) {
-                    displacementFilter.setAttribute('scale', currentDistortion);
+                
+                // --- Beat Detection Integration ---
+                // If the beat detector returns a strong pulse, trigger our canvas effect.
+                if(beatPulseTarget > 0.9) { // 0.9 is a good threshold for a clear beat
+                    triggerBeatEffect();
                 }
-    
-                const maxShift = 60; 
-                const outwardShift = smoothedPulse * maxShift;
-                const shardTime = Date.now() * 0.00005;
-    
-                shards.forEach((shard) => {
-                    shard.rotation += shard.rotationSpeed;
-                    const baseX = shard.homeX + Math.sin(shardTime * shard.xDrift * 10) * 15;
-                    const baseY = shard.homeY + Math.cos(shardTime * shard.yDrift * 10) * 15;
-                    const totalX = baseX + (shard.dirX * outwardShift);
-                    const totalY = baseY + (shard.dirY * outwardShift);
-                    shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
-                });
-    
-                turbulenceFilter.setAttribute('seed', Date.now() / 30);
+
+                smoothedPulse += (beatPulseTarget - smoothedPulse) * smoothingFactor;
             }
             
             if (canvas.width !== canvas.clientWidth) canvas.width = canvas.clientWidth;
@@ -6058,6 +6135,7 @@ window.addEventListener("load", async () => {
         }
         
         setView('home');
+        initDistortionCanvas();
     } catch (error) {
         console.error('Critical error on application load:', error);
     }
@@ -6584,8 +6662,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         setupLongPressListeners(document.getElementById('search-results-grid'));
         setupLongPressListeners(drawerContent);
 
-        shardContainer = document.getElementById('distortion-container');
-        initializeShards(); 
         initVisualizer();
         setupMediaSessionActions();
 
