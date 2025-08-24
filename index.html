@@ -1188,7 +1188,7 @@
           filter: brightness(1.5);
         }
 
-        #soundcloudToggle {
+        #soundcloudToggle, #lrclibToggle {
             appearance: none;
             width: 50px;
             height: 32px;
@@ -1201,7 +1201,7 @@
             cursor: pointer;
         }
         
-        #soundcloudToggle::before {
+        #soundcloudToggle::before, #lrclibToggle::before {
             content: '';
             position: absolute;
             width: 18px;
@@ -1215,11 +1215,11 @@
             border: 1px solid var(--glass-border);
         }
         
-        #soundcloudToggle:checked {
+        #soundcloudToggle:checked, #lrclibToggle:checked {
             background-color: var(--secondary-text-color);
         }
         
-        #soundcloudToggle:checked::before {
+        #soundcloudToggle:checked::before, #lrclibToggle:checked::before {
             width: 22px;
             height: 22px;
             background-color: var(--background-color);
@@ -2136,6 +2136,11 @@
                 </div>
                 <input type="text" id="soundcloudClientId" placeholder="SoundCloud Client ID" class="search-input" style="padding-left: 15px;">
                 <small>You will need to disable CORS to use SoundCloud streaming. A browser extension may be required.</small>
+
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label for="lrclibToggle">Search LRCLIB for missing lyrics</label>
+                    <input type="checkbox" id="lrclibToggle">
+                </div>
             </div>
 
             <div style="display: flex; justify-content: flex-end; margin-top: 25px;">
@@ -2355,6 +2360,9 @@
         let lastSoundcloudSearchResults = []; // To store API results for filtering
         const SOUNDCLOUD_CACHE_LIMIT = 200 * 1024 * 1024; // 200MB
         let localSongLookup = new Map();
+
+        // --- LRCLIB variables ---
+        let isLrclibEnabled = false;
 
         function sanitize(str) {
             if (!str) return '';
@@ -4647,6 +4655,22 @@ async function renderLyrics() {
     }
     
     const song = currentlyPlayingSong;
+
+    if (song.lyrics === null && isLrclibEnabled && song.storage !== 'soundcloud') {
+        lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">Searching for lyrics...</p>`;
+        const fetchedLyrics = await fetchLyricsFromLrclib(song);
+        if (fetchedLyrics) {
+            song.lyrics = fetchedLyrics.content;
+            if (fetchedLyrics.type === 'lrc') {
+                song.lrcData = parseLRC(fetchedLyrics.content);
+            }
+            saveSongs(); 
+        } else {
+             song.lyrics = ''; 
+             saveSongs();
+        }
+    }
+
     if (!song || !song.lyrics) {
         lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found.</p>`;
         return;
@@ -4670,6 +4694,41 @@ async function renderLyrics() {
         // For plain text lyrics
         lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none; white-space: pre-wrap;">${song.lyrics}</p>`;
     }
+}
+
+async function fetchLyricsFromLrclib(song) {
+    if (!song || !song.artist || !song.name) return null;
+
+    const artist = encodeURIComponent(song.artist);
+    const track = encodeURIComponent(song.name);
+    const album = encodeURIComponent(song.album);
+
+    const url = `https://lrclib.net/api/get?artist_name=${artist}&track_name=${track}&album_name=${album}`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.warn(`LRCLIB request failed with status: ${response.status}`);
+            return null;
+        }
+        
+        const data = await response.json();
+        if (Object.keys(data).length === 0 || (!data.plainLyrics && !data.syncedLyrics)) {
+            console.log(`No LRCLIB lyrics found for "${song.name}"`);
+            return null;
+        }
+
+        if (data.syncedLyrics) {
+            return { type: 'lrc', content: data.syncedLyrics };
+        } else if (data.plainLyrics) {
+            return { type: 'plain', content: data.plainLyrics };
+        }
+
+    } catch (error) {
+        console.error("Error fetching lyrics from LRCLIB:", error);
+        return null;
+    }
+    return null;
 }
         
 async function renderOfflineSoundcloudView() {
@@ -5410,20 +5469,22 @@ function openManageFoldersModal() {
         });
     }
     
-    // Populate SoundCloud settings
+    // Populate settings
     document.getElementById('soundcloudClientId').value = soundcloudClientId;
     document.getElementById('soundcloudToggle').checked = isSoundcloudEnabled;
+    document.getElementById('lrclibToggle').checked = isLrclibEnabled;
     openModal(manageFoldersModal);
 }
 
-async function saveSoundcloudSettings() {
+async function saveIntegrations() {
     soundcloudClientId = document.getElementById('soundcloudClientId').value.trim();
     isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
 
     const tx = db.transaction('config', 'readwrite');
     await Promise.all([
         tx.objectStore('config').put({ key: 'soundcloudClientId', value: soundcloudClientId }),
-        tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled })
+        tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled }),
+        tx.objectStore('config').put({ key: 'isLrclibEnabled', value: isLrclibEnabled })
     ]);
     
     toggleSoundcloudTab();
@@ -6285,9 +6346,11 @@ window.addEventListener("load", async () => {
         
         const scIdResult = await new Promise(r => { scIdReq.onsuccess = () => r(scIdReq.result) });
         const scEnabledResult = await new Promise(r => { scEnabledReq.onsuccess = () => r(scEnabledReq.result) });
+        const lrclibEnabledResult = await new Promise(r => { lrclibEnabledReq.onsuccess = () => r(lrclibEnabledReq.result) });
         
         soundcloudClientId = scIdResult ? scIdResult.value : '';
         isSoundcloudEnabled = scEnabledResult ? scEnabledResult.value : false;
+        isLrclibEnabled = lrclibEnabledResult ? lrclibEnabledResult.value : false;
         toggleSoundcloudTab();
 
         await loadSongsAndPlaylists();
@@ -6969,7 +7032,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
 
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
-        document.getElementById('saveIntegrations').addEventListener('click', saveSoundcloudSettings);
+        document.getElementById('saveIntegrations').addEventListener('click', saveIntegrationSettings);
 
         const soundcloudSearchInput = document.getElementById('soundcloudSearchInput');
         soundcloudSearchInput.addEventListener('input', () => {
