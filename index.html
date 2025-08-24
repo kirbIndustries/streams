@@ -2568,10 +2568,11 @@ function renderSoundcloudSearchResults() {
 }
 
 function setView(viewName) {
-    activeView = viewName;
-    const isNowPlaying = (viewName === 'now-playing');
     const wasNowPlaying = (activeView === 'now-playing');
+    const isNowPlaying = (viewName === 'now-playing');
 
+    activeView = viewName;
+    
     if (isNowPlaying && !wasNowPlaying) {
         // If we are ENTERING the 'now-playing' view, start the loop.
         startVisualizerLoop();
@@ -4125,7 +4126,8 @@ function initVisualizer() {
         }
 
         isVisualizerInitialized = true;
-
+        console.log("Visualizer initialized successfully.");
+        
     } catch(e) {
         console.error("Failed to initialize AudioContext/Visualizer:", e);
     }
