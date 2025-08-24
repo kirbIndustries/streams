@@ -3521,7 +3521,7 @@ function initVisualizer() {
     if (document.body.classList.contains('reduce-animations')) {
         const canvas = document.getElementById('visualizerCanvas');
         if (canvas) canvas.style.display = 'none';
-        return;
+        return; 
     }
 
     if (isVisualizerInitialized) return;
@@ -3537,51 +3537,31 @@ function initVisualizer() {
         eqTreble.type = 'highshelf'; eqTreble.frequency.value = 3000;
         
         analyser = audioContext.createAnalyser();
+        analyser.smoothingTimeConstant = 0.8;
+        
+        // RE-ADDED: Mobile-specific optimizations for performance.
+        if (isMobile) {
+            analyser.fftSize = 128; // Increased slightly for better beat detection on mobile
+        } else {
+            analyser.fftSize = 1024; // A good balance for desktop
+        }
         
         source = audioContext.createMediaElementSource(audioPlayer);
+        source.connect(eqBass).connect(eqMid).connect(eqTreble).connect(analyser).connect(audioContext.destination);
 
-        source.connect(eqBass);
-        eqBass.connect(eqMid);
-        eqMid.connect(eqTreble);
-        eqTreble.connect(analyser);
-        analyser.connect(audioContext.destination);
-
-        if (isMobile) {
-            analyser.fftSize = 64;
-        } else {
-            analyser.fftSize = 2048;
-        }
-        
-        analyser.smoothingTimeConstant = 0.8;
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
-
-        let beatDetector;
-        if (!isMobile) {
-            beatDetector = new BeatDetector([[0, 10], [20, 50], [80, 120]]);
-        }
         
-        // Define separate bar indices for desktop and mobile to match their FFT sizes.
-        const desktopBarIndices = [5, 10, 30, 100, 200, 400];
-        const mobileBarIndices = [1, 3, 6, 12, 20, 28]; // Mapped to a 32-bin array
-        const numBars = 6;
-        
-        const sensitivityMultipliers = [1, 1.05, 1.1, 1.15, 1.25, 1.4];
-        const powerCurve = 2.2;
-        
-        let smoothedPulse = 0.0; 
-        const smoothingFactor = 0.2;
-
+        // --- Canvas and Beat Detection Logic ---
         const distortionCanvas = document.getElementById('distortionCanvas');
         const d_ctx = distortionCanvas.getContext('2d');
         
         const beatDetector = new BeatDetector([
-            { start: 1, end: 5 },     // Bass
-            { start: 40, end: 80 },   // Mids
-            { start: 100, end: 150 }  // Treble
+            { start: 1, end: 5 },     // Bass (for punch)
+            { start: 40, end: 80 },   // Mids (for subtle warp)
+            { start: 100, end: 150 }  // Treble (for brightness flash)
         ]);
 
-        // Define the 4 pieces (quadrants) of the album art
         const pieces = [
             { sx: 0, sy: 0, ang: 0, rotSpeed: 0.0003 },  // Top-left
             { sx: 0.5, sy: 0, ang: 0, rotSpeed: -0.00025 }, // Top-right
@@ -3589,18 +3569,9 @@ function initVisualizer() {
             { sx: 0.5, sy: 0.5, ang: 0, rotSpeed: -0.00035 } // Bottom-right
         ];
 
-        // This is a helper function to draw a warped, textured quadrilateral
         function drawWarpedImage(ctx, img, x1, y1, x2, y2, x3, y3, x4, y4, sx, sy, sw, sh) {
-            // We split the quad into two triangles
             ctx.save();
-            // Triangle 1
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.lineTo(x3, y3);
-            ctx.closePath();
-            ctx.clip();
-            // Use matrix transforms to warp the image onto the triangle
+            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.closePath(); ctx.clip();
             const d = sx * (y3 - y2) + sw * (y1 * (x3 - x2) + y2 * x1 - y3 * x1 + x2 * y3 - x3 * y2) / (x1 * (y2 - y3) + x2 * y3 - x3 * y2);
             const e = sy * (x3 - x2) + sh * (x1 * (y3 - y2) + x2 * y1 - x3 * y1 + y2 * x3 - y3 * x2) / (x1 * (y3 - y2) + x2 * y1 - x3 * y1 + y2 * x3 - y3 * x2);
             ctx.setTransform( (x2 - x1) / sw, (y2 - y1) / sw, (x3 - x1) / sw, (y3 - y1) / sw, x1 - (d * (x2 - x1) + e * (x3 - x1)) / sw, y1 - (d * (y2 - y1) + e * (y3 - y1)) / sw );
@@ -3608,14 +3579,7 @@ function initVisualizer() {
             ctx.restore();
             
             ctx.save();
-            // Triangle 2
-            ctx.beginPath();
-            ctx.moveTo(x3, y3);
-            ctx.lineTo(x2, y2);
-            ctx.lineTo(x4, y4);
-            ctx.closePath();
-            ctx.clip();
-            // Matrix transform for the second triangle
+            ctx.beginPath(); ctx.moveTo(x3, y3); ctx.lineTo(x2, y2); ctx.lineTo(x4, y4); ctx.closePath(); ctx.clip();
             const f = sx * (y3 - y4) + sw * (y2 * (y3 - y4) + y3 * y4 - y4 * y2) / (x2 * (y3 - y4) + x3 * y4 - x4 * y3);
             const g = sy * (x3 - x4) + sh * (x2 * (y4 - y3) + x3 * y2 - x4 * y2) / (x2 * (y4 - y3) + x3 * y2 - x4 * y2);
             ctx.setTransform( (x4 - x2) / sw, (y4 - y2) / sw, (x3 - x2) / sw, (y3 - y2) / sw, x2 - (g * (x4 - x2) + f * (x3 - x2)) / sw, y2 - (g * (y4 - y2) + f * (y3 - y2)) / sw );
@@ -3623,20 +3587,22 @@ function initVisualizer() {
             ctx.restore();
         }
 
-        // --- Main Animation Loop (`draw` function) ---
-
+        // RE-INTEGRATED: Refined drawing logic for the small visualizer.
         const smallVisualizerCanvas = document.getElementById('visualizerCanvas');
         const small_ctx = smallVisualizerCanvas.getContext('2d');
-        const numBars = 6, powerCurve = 2.2, barIndices = [2, 5, 10, 30, 60, 120];
+        const desktopBarIndices = [2, 5, 10, 30, 60, 120]; // Mapped to 512 bins
+        const mobileBarIndices = [1, 3, 6, 12, 20, 28];   // Mapped to 64 bins
+        const numBars = 6;
+        const sensitivityMultipliers = [1, 1.05, 1.1, 1.15, 1.25, 1.4];
+        const powerCurve = 2.2;
 
         function draw() {
             requestAnimationFrame(draw);
             analyser.getByteFrequencyData(dataArray);
 
-            // Update beat detector
             beatDetector.update(dataArray);
 
-            // --- Animate Distortion Canvas ---
+            // --- Animate Main Distortion Canvas ---
             if (isDistortionImageLoaded) {
                 if (distortionCanvas.width !== distortionCanvas.clientWidth) {
                     distortionCanvas.width = distortionCanvas.clientWidth;
@@ -3648,59 +3614,37 @@ function initVisualizer() {
                 d_ctx.globalCompositeOperation = 'source-over';
                 
                 const time = Date.now();
-                const punch = beatDetector.bass * 0.1; // How much the pieces push out on a beat
+                const punch = beatDetector.bass * 0.1;
 
                 pieces.forEach(p => {
-                    const imgW = currentDistortionImage.width / 2;
-                    const imgH = currentDistortionImage.height / 2;
-                    
-                    p.ang += p.rotSpeed * 100 + beatDetector.bass * 0.005; // Base rotation + beat rotation
-
-                    const centerX = (p.sx + 0.25) * w;
-                    const centerY = (p.sy + 0.25) * h;
-                    const sizeX = w * (0.25 + punch); // Base size + punch
-                    const sizeY = h * (0.25 + punch);
-                    
-                    const sin = Math.sin(p.ang);
-                    const cos = Math.cos(p.ang);
-
-                    // Calculate rotated corners
-                    const c1x = centerX + (-sizeX * cos - -sizeY * sin);
-                    const c1y = centerY + (-sizeX * sin + -sizeY * cos);
-                    const c2x = centerX + (sizeX * cos - -sizeY * sin);
-                    const c2y = centerY + (sizeX * sin + -sizeY * cos);
-                    const c3x = centerX + (-sizeX * cos - sizeY * sin);
-                    const c3y = centerY + (-sizeX * sin + sizeY * cos);
-                    const c4x = centerX + (sizeX * cos - sizeY * sin);
-                    const c4y = centerY + (sizeX * sin + sizeY * cos);
-                    
-                    // Add slow sine-wave based warping
-                    const warpFactor = 0.05;
+                    const imgW = currentDistortionImage.width / 2, imgH = currentDistortionImage.height / 2;
+                    p.ang += p.rotSpeed * 100 + beatDetector.bass * 0.005;
+                    const centerX = (p.sx + 0.25) * w, centerY = (p.sy + 0.25) * h;
+                    const sizeX = w * (0.25 + punch), sizeY = h * (0.25 + punch);
+                    const sin = Math.sin(p.ang), cos = Math.cos(p.ang);
+                    const c1x = centerX + (-sizeX*cos - -sizeY*sin), c1y = centerY + (-sizeX*sin + -sizeY*cos);
+                    const c2x = centerX + (sizeX*cos - -sizeY*sin), c2y = centerY + (sizeX*sin + -sizeY*cos);
+                    const c3x = centerX + (-sizeX*cos - sizeY*sin), c3y = centerY + (-sizeX*sin + sizeY*cos);
+                    const c4x = centerX + (sizeX*cos - sizeY*sin), c4y = centerY + (sizeX*sin + sizeY*cos);
+                    const warpFactor = 0.05 + beatDetector.mid * 0.05; // Add mid-range warp
                     const xWarp = Math.sin(time * 0.00015 + p.sx) * w * warpFactor;
                     const yWarp = Math.cos(time * 0.00015 + p.sy) * h * warpFactor;
-
-                    drawWarpedImage(d_ctx, currentDistortionImage,
-                        c1x + xWarp, c1y - yWarp,  // top-left
-                        c2x - xWarp, c2y + yWarp,  // top-right
-                        c3x - xWarp, c3y - yWarp,  // bottom-left
-                        c4x + xWarp, c4y + yWarp,  // bottom-right
-                        p.sx * currentDistortionImage.width, p.sy * currentDistortionImage.height, imgW, imgH);
+                    drawWarpedImage(d_ctx, currentDistortionImage, c1x+xWarp, c1y-yWarp, c2x-xWarp, c2y+yWarp, c3x-xWarp, c3y-yWarp, c4x+xWarp, c4y+yWarp, p.sx*currentDistortionImage.width, p.sy*currentDistortionImage.height, imgW, imgH);
                 });
 
-                // Add brightness flash on beat
-                if (beatDetector.bass > 0.3) {
+                if (beatDetector.treble > 0.2) { // Flash tied to treble
                     const isLightTheme = document.body.classList.contains('light-theme');
                     d_ctx.globalCompositeOperation = isLightTheme ? 'darken' : 'lighter';
-                    d_ctx.fillStyle = isLightTheme ? 'white' : 'black';
-                    d_ctx.globalAlpha = beatDetector.bass * 0.25;
+                    d_ctx.fillStyle = isLightTheme ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+                    d_ctx.globalAlpha = beatDetector.treble * 0.5; // More subtle flash
                     d_ctx.fillRect(0, 0, w, h);
-                    d_ctx.globalAlpha = 1.0; // Reset alpha
+                    d_ctx.globalAlpha = 1.0;
                 }
             } else {
                  d_ctx.clearRect(0, 0, distortionCanvas.width, distortionCanvas.height);
             }
 
-            // --- Animate Small Player Visualizer (existing logic) ---
+            // --- Animate Small Player Visualizer (Restored Logic) ---
             if (smallVisualizerCanvas.width !== smallVisualizerCanvas.clientWidth) smallVisualizerCanvas.width = smallVisualizerCanvas.clientWidth;
             if (smallVisualizerCanvas.height !== smallVisualizerCanvas.clientHeight) smallVisualizerCanvas.height = smallVisualizerCanvas.clientHeight;
             small_ctx.clearRect(0, 0, smallVisualizerCanvas.width, smallVisualizerCanvas.height);
@@ -3708,18 +3652,30 @@ function initVisualizer() {
             const barWidth = (smallVisualizerCanvas.width - (numBars - 1) * gap) / numBars;
             const style = getComputedStyle(document.body);
             small_ctx.fillStyle = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
+            const indicesToUse = isMobile ? mobileBarIndices : desktopBarIndices;
+
             for (let i = 0; i < numBars; i++) {
-                const value = Math.min(dataArray[barIndices[i]], 255);
-                const barHeight = Math.pow(value / 255, powerCurve) * smallVisualizerCanvas.height;
                 const x = i * (barWidth + gap);
-                const y = (smallVisualizerCanvas.height - barHeight) / 2;
-                const pillRadius = barWidth / 2;
-                if (barHeight > 1) {
+                const value = Math.min(dataArray[indicesToUse[i]] * sensitivityMultipliers[i], 255);
+                const barHeight = Math.pow(value / 255, powerCurve) * smallVisualizerCanvas.height;
+                const pillRadius = Math.max(0, barWidth / 2);
+
+                if (barHeight < pillRadius * 2) { // Draw dot for low values
+                    const dotRadius = barHeight / 2;
+                    if (dotRadius < 1) continue;
+                    small_ctx.globalAlpha = barHeight / (pillRadius * 2);
+                    small_ctx.beginPath();
+                    small_ctx.arc(x + pillRadius, smallVisualizerCanvas.height / 2, dotRadius, 0, 2 * Math.PI);
+                    small_ctx.fill();
+                } else { // Draw full bar
+                    const y = (smallVisualizerCanvas.height - barHeight) / 2;
+                    small_ctx.globalAlpha = 1.0;
                     small_ctx.beginPath();
                     small_ctx.roundRect(x, y, barWidth, barHeight, pillRadius);
                     small_ctx.fill();
                 }
             }
+            small_ctx.globalAlpha = 1.0;
         }
 
         draw();
