@@ -6259,7 +6259,6 @@ playPauseBtn.addEventListener('click', async () => {
             playPauseBtn.classList.add('playing');
             updateMiniplayerUI(currentlyPlayingSong, 'playing');
             if (!document.body.classList.contains('reduce-animations')) {
-                document.querySelector('.background-blur').classList.add('rotating');
             }
             updateMediaSessionPlaybackState('playing');
             Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
@@ -6314,7 +6313,6 @@ volumeSlider.addEventListener('input', (e) => {
 
 audioPlayer.addEventListener('play', () => {
     if (!document.body.classList.contains('reduce-animations')) {
-        document.querySelector('.background-blur').classList.add('rotating');
     }
 });
 
