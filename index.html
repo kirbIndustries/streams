@@ -991,6 +991,16 @@
         .music-item.dragging, .album-section.dragging, .queue-item.dragging {
           animation: pulse 1.5s infinite;
         }
+        
+        .background-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -9999;
+        }
                         
         #distortion-container {
             position: fixed;
@@ -1007,13 +1017,18 @@
             filter: blur(50px) saturate(2) brightness(1);
         }
         
-        #distortionCanvas {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 120%; /* Slightly larger to avoid edge artifacts from warping */
-            height: 120%;
+        /* The VERY back layer: heavy blur, no distortion */
+        .background-blur {
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            scale: 2;
+            transition: background-image 0.5s ease;
+        }
+
+        .background-blur.rotating {
+            animation: rotate 45s linear infinite;
         }
 
         @keyframes rotate {
@@ -1023,6 +1038,26 @@
             to {
                 transform: scale(1.42) rotate(360deg);
             }
+        }
+        
+        /* Common style for ALL moving shards */
+        .distortion-shard {
+            position: absolute;
+            width: 150%;
+            height: 150%;
+            top: -25%;
+            left: -25%;
+            background-size: cover;
+            background-position: center;
+            filter: url(#albumArtDistortion);
+            will-change: transform;
+            transition: background-image 0.5s ease, clip-path 3s ease-in-out, filter 0.1s ease-out;
+            scale: 0.75;
+            opacity: 0.5;
+        }
+
+        body.is-mobile .distortion-shard {
+            display: none !important;
         }
         
         .search-container {
@@ -1851,6 +1886,27 @@
     </style>
 </head>
 <body data-app-name="Music">
+    <svg style="position: absolute; width: 0; height: 0;">
+        <filter id="albumArtDistortion">
+            <feTurbulence 
+                id="turbulence"
+                type="turbulence" 
+                baseFrequency="0.002 0.005" 
+                numOctaves="1" 
+                seed="0"
+            />
+            <feGaussianBlur stdDeviation="60" result="blurredTurbulence"/>
+            <feDisplacementMap 
+                id="displacement"
+                in="SourceGraphic" 
+                in2="blurredTurbulence" 
+                scale="0" 
+                xChannelSelector="R" 
+                yChannelSelector="G"
+            />
+        </filter>
+    </svg>
+
     <svg style="display: none">
         <filter id="edge-refraction-only" color-interpolation-filters="linearRGB">
             <!-- Part 1: Create the turbulence that will only be used at the edges -->
@@ -1965,7 +2021,10 @@
     </div>
     <div id="now-playing-view" class="view-container" style="display: none;">
         <div id="distortion-container">
-            <canvas id="distortionCanvas"></canvas>
+            <div class="background-blur"></div>
+            <div class="distortion-shard shape-1"></div>
+            <div class="distortion-shard shape-2"></div>
+            <div class="distortion-shard shape-3"></div>
         </div>
         <div class="now-playing-wrapper">
             <div class="album-art">
@@ -2252,13 +2311,10 @@
         
         let listenAgainIndex = parseInt(localStorage.getItem('listenAgainIndex') || '0');
         let currentMediaSessionArtBlobUrl = null;
+        let shardContainer; 
+        let shards = [];
         let lastOriginalImageUrl = null;
         let lastResizedImageUrl = null;
-        let currentDistortionImage = new Image();
-        let isDistortionImageLoaded = false;
-        currentDistortionImage.crossOrigin = "Anonymous"; // Allow loading images for canvas
-        currentDistortionImage.onload = () => { isDistortionImageLoaded = true; };
-        currentDistortionImage.onerror = () => { isDistortionImageLoaded = false; };
         let songs = [];
         let currentSongId = null;
         let isPlayerLoading = false;
@@ -3426,6 +3482,84 @@ const availableMusicFunctions = {
     // getSongRecommendations is handled directly by the calling function, so it doesn't need an entry here.
 };
 
+function generateRandomClipPath() {
+    const points = 8; // Number of vertices in the polygon
+    let path = [];
+    for (let i = 0; i < points; i++) {
+        // Generate a point on one of the four edges
+        const side = Math.floor(Math.random() * 4);
+        let x, y;
+        switch (side) {
+            case 0: // Top
+                x = Math.random() * 100;
+                y = Math.random() * 20; // Stick close to the edge
+                break;
+            case 1: // Right
+                x = 100 - (Math.random() * 20);
+                y = Math.random() * 100;
+                break;
+            case 2: // Bottom
+                x = Math.random() * 100;
+                y = 100 - (Math.random() * 20);
+                break;
+            case 3: // Left
+                x = Math.random() * 20;
+                y = Math.random() * 100;
+                break;
+        }
+        path.push({ x, y });
+    }
+
+    // Sort points to avoid self-intersecting polygons (simple clockwise sort)
+    const center = path.reduce((acc, { x, y }) => ({ x: acc.x + x / points, y: acc.y + y / points }), { x: 0, y: 0 });
+    path.sort((a, b) => Math.atan2(a.y - center.y, a.x - center.x) - Math.atan2(b.y - center.y, b.x - center.x));
+
+    return `polygon(${path.map(p => `${p.x.toFixed(2)}% ${p.y.toFixed(2)}%`).join(', ')})`;
+}
+
+function initializeShards() {
+    const shardElements = document.querySelectorAll('.distortion-shard');
+    
+    const homePositions = [
+        { x: -50, y: -80 }, 
+        { x: 80, y: 40 }, 
+        { x: -70, y: 60 }
+    ];
+
+    shardElements.forEach((el, i) => {
+        const homeX = homePositions[i % homePositions.length].x;
+        const homeY = homePositions[i % homePositions.length].y;
+        
+        shards.push({
+            element: el,
+            bgPos: `${i * 50}% 50%`, 
+            rotationSpeed: (Math.random() - 0.5) * 0.2, // Slower rotation
+            xDrift: (Math.random() - 0.5) * 0.2, 
+            yDrift: (Math.random() - 0.5) * 0.2,
+            rotation: Math.random() * 360,
+            homeX: homeX,
+            homeY: homeY
+        });
+        el.style.backgroundPosition = shards[i].bgPos;
+        el.style.clipPath = generateRandomClipPath();
+    });
+
+    // Periodically update the shapes to create a morphing effect
+    setInterval(() => {
+        shards.forEach(shard => {
+            shard.element.style.clipPath = generateRandomClipPath();
+        });
+    }, 5000); // Morph every 5 seconds
+}
+
+function setDistortionBackgrounds(url) {
+    const backgroundUrl = url ? `url('${url}')` : '';
+    shardContainer.querySelector('.background-blur').style.backgroundImage = backgroundUrl;
+    shards.forEach(shard => {
+        shard.element.style.backgroundImage = backgroundUrl;
+    });
+}
+
 async function createResizedImageURL(imageUrl, width, height) {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -3452,99 +3586,104 @@ async function createResizedImageURL(imageUrl, width, height) {
 }
 
 async function updateAllBackgrounds(imageUrl) {
-    if (!imageUrl) {
-        isDistortionImageLoaded = false;
-        currentDistortionImage.src = '';
+    if (imageUrl === lastOriginalImageUrl && lastResizedImageUrl) {
+        setDistortionBackgrounds(lastResizedImageUrl);
         return;
     }
 
-    // Use a small, blurred version for performance
+    if (!imageUrl) {
+        setDistortionBackgrounds('');
+        lastOriginalImageUrl = null;
+        lastResizedImageUrl = null;
+        return;
+    }
+
     try {
-        const resizedUrl = await createResizedImageURL(imageUrl, 128, 128);
-        isDistortionImageLoaded = false; // Set to false until new image is loaded
-        currentDistortionImage.src = resizedUrl;
-    } catch (e) {
-        isDistortionImageLoaded = false;
-        console.warn("Could not create resized image for distortion effect.");
+        const resizedUrl = await createResizedImageURL(imageUrl, 64, 64);
+        lastOriginalImageUrl = imageUrl;
+        lastResizedImageUrl = resizedUrl;
+        setDistortionBackgrounds(resizedUrl);
+    } catch (originalUrl) {
+        console.warn("Could not resize background image, falling back to original.");
+        setDistortionBackgrounds(originalUrl);
     }
 }
 
 class BeatDetector {
-    constructor(frequencyBands, historySize = 43, onsetThreshold = 1.3) {
-        this.bands = frequencyBands;
-        this.history = this.bands.map(() => new Array(historySize).fill(0));
-        this.lastEnergies = new Array(this.bands.length).fill(0);
-        this.onsetThreshold = onsetThreshold;
-
-        // Smoothed beat values for different frequency ranges
+    constructor(historySize = 60) {
+        this.historySize = historySize;
+        this.bassHistory = new Array(historySize).fill(0);
+        this.midHistory = new Array(historySize).fill(0);
+        
+        // These are the smoothed output values for animation
         this.bass = 0;
         this.mid = 0;
-        this.treble = 0;
 
-        this.attack = 0.4;  // How quickly the beat value rises
-        this.decay = 0.97; // How quickly it falls
+        // Configuration for how fast the values react and fade
+        this.attack = 0.45; // How quickly it reacts to a beat (0 to 1)
+        this.decay = 0.96;  // How quickly it fades after a beat (0 to 1)
     }
 
     update(dataArray) {
-        this.bands.forEach((band, i) => {
-            // 1. Calculate current energy in the frequency band
-            let energy = 0;
-            for (let j = band.start; j <= band.end; j++) {
-                energy += dataArray[j] * dataArray[j];
-            }
-            energy /= (band.end - band.start + 1);
+        // Calculate energy for bass frequencies (e.g., indices 1-5)
+        let bassEnergy = 0;
+        for (let i = 1; i < 6; i++) {
+            bassEnergy += dataArray[i];
+        }
+        bassEnergy /= 5;
 
-            // 2. Calculate local average energy from history
-            const avgEnergy = this.history[i].reduce((a, b) => a + b, 0) / this.history[i].length;
+        // Calculate energy for mid frequencies (e.g., indices 50-100)
+        let midEnergy = 0;
+        for (let i = 50; i < 101; i++) {
+            midEnergy += dataArray[i];
+        }
+        midEnergy /= 51;
 
-            // 3. Detect an onset (a beat)
-            if (energy > avgEnergy * this.onsetThreshold && energy > 100) { // Min energy threshold
-                // Onset detected, update the corresponding value
-                if (i === 0) this.bass += (1.0 - this.bass) * this.attack;
-                if (i === 1) this.mid += (1.0 - this.mid) * this.attack;
-                if (i === 2) this.treble += (1.0 - this.treble) * this.attack;
-            }
+        // Calculate the average from history
+        const bassAvg = this.bassHistory.reduce((a, b) => a + b, 0) / this.historySize;
+        const midAvg = this.midHistory.reduce((a, b) => a + b, 0) / this.historySize;
 
-            // 4. Update history buffer
-            this.history[i].shift();
-            this.history[i].push(energy);
-        });
+        // If current energy is significantly above average, it's a "beat"
+        if (bassEnergy > bassAvg * 1.25) {
+            // Smoothly increase the bass value towards 1
+            this.bass += (1.0 - this.bass) * this.attack;
+        }
+        if (midEnergy > midAvg * 1.4) {
+            // Smoothly increase the mid value towards 1
+            this.mid += (1.0 - this.mid) * this.attack;
+        }
 
-        // 5. Decay all values smoothly
+        // Smoothly decay the values back to 0
         this.bass *= this.decay;
         this.mid *= this.decay;
-        this.treble *= this.decay;
+
+        // Update the history buffers
+        this.bassHistory.shift();
+        this.bassHistory.push(bassEnergy);
+        this.midHistory.shift();
+        this.midHistory.push(midEnergy);
     }
 }
-
+        
 function initVisualizer() {
     if (document.body.classList.contains('reduce-animations')) {
         const canvas = document.getElementById('visualizerCanvas');
         if (canvas) canvas.style.display = 'none';
         return; 
     }
-
     if (isVisualizerInitialized) return;
 
     try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
-        eqBass = audioContext.createBiquadFilter();
-        eqMid = audioContext.createBiquadFilter();
-        eqTreble = audioContext.createBiquadFilter();
+        eqBass = audioContext.createBiquadFilter(); eqMid = audioContext.createBiquadFilter(); eqTreble = audioContext.createBiquadFilter();
         eqBass.type = 'lowshelf'; eqBass.frequency.value = 300; 
         eqMid.type = 'peaking'; eqMid.frequency.value = 1000; eqMid.Q.value = 1; 
         eqTreble.type = 'highshelf'; eqTreble.frequency.value = 3000;
         
         analyser = audioContext.createAnalyser();
         analyser.smoothingTimeConstant = 0.8;
-        
-        // RE-ADDED: Mobile-specific optimizations for performance.
-        if (isMobile) {
-            analyser.fftSize = 128; // Increased slightly for better beat detection on mobile
-        } else {
-            analyser.fftSize = 1024; // A good balance for desktop
-        }
+        analyser.fftSize = isMobile ? 256 : 1024;
         
         source = audioContext.createMediaElementSource(audioPlayer);
         source.connect(eqBass).connect(eqMid).connect(eqTreble).connect(analyser).connect(audioContext.destination);
@@ -3552,59 +3691,41 @@ function initVisualizer() {
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
         
-        // --- Canvas and Beat Detection Logic ---
         const distortionCanvas = document.getElementById('distortionCanvas');
         const d_ctx = distortionCanvas.getContext('2d');
-        
-        const beatDetector = new BeatDetector([
-            { start: 1, end: 5 },     // Bass (for punch)
-            { start: 40, end: 80 },   // Mids (for subtle warp)
-            { start: 100, end: 150 }  // Treble (for brightness flash)
-        ]);
+        const beatDetector = new BeatDetector();
 
+        // Define the four pieces (quadrants) of the album art
         const pieces = [
-            { sx: 0, sy: 0, ang: 0, rotSpeed: 0.0003 },  // Top-left
-            { sx: 0.5, sy: 0, ang: 0, rotSpeed: -0.00025 }, // Top-right
-            { sx: 0, sy: 0.5, ang: 0, rotSpeed: 0.0002 },   // Bottom-left
-            { sx: 0.5, sy: 0.5, ang: 0, rotSpeed: -0.00035 } // Bottom-right
-        ];
+            // [sourceX, sourceY, baseRotationSpeed, beatRotationMultiplier]
+            [0, 0, 0.00003, 1.5],   // Top-left
+            [0.5, 0, -0.000025, 1.2], // Top-right
+            [0, 0.5, 0.00002, -1],  // Bottom-left
+            [0.5, 0.5, -0.000035, -1.8] // Bottom-right
+        ].map(p => ({
+            sx: p[0], sy: p[1],
+            baseSpeed: p[2], beatSpeed: p[3],
+            rotation: Math.random() * Math.PI * 2 // Start at a random angle
+        }));
 
-        function drawWarpedImage(ctx, img, x1, y1, x2, y2, x3, y3, x4, y4, sx, sy, sw, sh) {
-            ctx.save();
-            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.closePath(); ctx.clip();
-            const d = sx * (y3 - y2) + sw * (y1 * (x3 - x2) + y2 * x1 - y3 * x1 + x2 * y3 - x3 * y2) / (x1 * (y2 - y3) + x2 * y3 - x3 * y2);
-            const e = sy * (x3 - x2) + sh * (x1 * (y3 - y2) + x2 * y1 - x3 * y1 + y2 * x3 - y3 * x2) / (x1 * (y3 - y2) + x2 * y1 - x3 * y1 + y2 * x3 - y3 * x2);
-            ctx.setTransform( (x2 - x1) / sw, (y2 - y1) / sw, (x3 - x1) / sw, (y3 - y1) / sw, x1 - (d * (x2 - x1) + e * (x3 - x1)) / sw, y1 - (d * (y2 - y1) + e * (y3 - y1)) / sw );
-            ctx.drawImage(img, 0, 0);
-            ctx.restore();
-            
-            ctx.save();
-            ctx.beginPath(); ctx.moveTo(x3, y3); ctx.lineTo(x2, y2); ctx.lineTo(x4, y4); ctx.closePath(); ctx.clip();
-            const f = sx * (y3 - y4) + sw * (y2 * (y3 - y4) + y3 * y4 - y4 * y2) / (x2 * (y3 - y4) + x3 * y4 - x4 * y3);
-            const g = sy * (x3 - x4) + sh * (x2 * (y4 - y3) + x3 * y2 - x4 * y2) / (x2 * (y4 - y3) + x3 * y2 - x4 * y2);
-            ctx.setTransform( (x4 - x2) / sw, (y4 - y2) / sw, (x3 - x2) / sw, (y3 - y2) / sw, x2 - (g * (x4 - x2) + f * (x3 - x2)) / sw, y2 - (g * (y4 - y2) + f * (y3 - y2)) / sw );
-            ctx.drawImage(img, 0, 0);
-            ctx.restore();
-        }
-
-        // RE-INTEGRATED: Refined drawing logic for the small visualizer.
         const smallVisualizerCanvas = document.getElementById('visualizerCanvas');
         const small_ctx = smallVisualizerCanvas.getContext('2d');
-        const desktopBarIndices = [2, 5, 10, 30, 60, 120]; // Mapped to 512 bins
-        const mobileBarIndices = [1, 3, 6, 12, 20, 28];   // Mapped to 64 bins
-        const numBars = 6;
-        const sensitivityMultipliers = [1, 1.05, 1.1, 1.15, 1.25, 1.4];
-        const powerCurve = 2.2;
+        const desktopBarIndices = [2, 5, 10, 30, 60, 120];
+        const mobileBarIndices = [1, 3, 6, 12, 20, 28];
+        const numBars = 6, powerCurve = 2.2;
+        let lastTime = 0;
 
-        function draw() {
+        function draw(currentTime) {
             requestAnimationFrame(draw);
             analyser.getByteFrequencyData(dataArray);
-
             beatDetector.update(dataArray);
+            if (!lastTime) lastTime = currentTime;
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
 
             // --- Animate Main Distortion Canvas ---
             if (isDistortionImageLoaded) {
-                if (distortionCanvas.width !== distortionCanvas.clientWidth) {
+                if (distortionCanvas.width !== distortionCanvas.clientWidth || distortionCanvas.height !== distortionCanvas.clientHeight) {
                     distortionCanvas.width = distortionCanvas.clientWidth;
                     distortionCanvas.height = distortionCanvas.clientHeight;
                 }
@@ -3613,32 +3734,47 @@ function initVisualizer() {
                 d_ctx.clearRect(0, 0, w, h);
                 d_ctx.globalCompositeOperation = 'source-over';
                 
-                const time = Date.now();
-                const punch = beatDetector.bass * 0.1;
+                const img = currentDistortionImage;
+                const imgW_half = img.width / 2;
+                const imgH_half = img.height / 2;
 
-                pieces.forEach(p => {
-                    const imgW = currentDistortionImage.width / 2, imgH = currentDistortionImage.height / 2;
-                    p.ang += p.rotSpeed * 100 + beatDetector.bass * 0.005;
-                    const centerX = (p.sx + 0.25) * w, centerY = (p.sy + 0.25) * h;
-                    const sizeX = w * (0.25 + punch), sizeY = h * (0.25 + punch);
-                    const sin = Math.sin(p.ang), cos = Math.cos(p.ang);
-                    const c1x = centerX + (-sizeX*cos - -sizeY*sin), c1y = centerY + (-sizeX*sin + -sizeY*cos);
-                    const c2x = centerX + (sizeX*cos - -sizeY*sin), c2y = centerY + (sizeX*sin + -sizeY*cos);
-                    const c3x = centerX + (-sizeX*cos - sizeY*sin), c3y = centerY + (-sizeX*sin + sizeY*cos);
-                    const c4x = centerX + (sizeX*cos - sizeY*sin), c4y = centerY + (sizeX*sin + sizeY*cos);
-                    const warpFactor = 0.05 + beatDetector.mid * 0.05; // Add mid-range warp
-                    const xWarp = Math.sin(time * 0.00015 + p.sx) * w * warpFactor;
-                    const yWarp = Math.cos(time * 0.00015 + p.sy) * h * warpFactor;
-                    drawWarpedImage(d_ctx, currentDistortionImage, c1x+xWarp, c1y-yWarp, c2x-xWarp, c2y+yWarp, c3x-xWarp, c3y-yWarp, c4x+xWarp, c4y+yWarp, p.sx*currentDistortionImage.width, p.sy*currentDistortionImage.height, imgW, imgH);
+                pieces.forEach((p, i) => {
+                    d_ctx.save();
+                    
+                    // 1. Update rotation: slow base speed + faster speed on beat
+                    p.rotation += (p.baseSpeed + beatDetector.bass * p.baseSpeed * p.beatSpeed) * deltaTime;
+                    
+                    // 2. Determine center position for this piece
+                    const centerX = w * (p.sx + 0.25);
+                    const centerY = h * (p.sy + 0.25);
+                    d_ctx.translate(centerX, centerY);
+                    d_ctx.rotate(p.rotation);
+
+                    // 3. Apply "punch" (scale) based on bass beat
+                    const scale = 1 + beatDetector.bass * 0.15;
+                    d_ctx.scale(scale, scale);
+
+                    // 4. Apply "warp" using a gentle sine wave modified by the mid-range beat
+                    const warpFactor = beatDetector.mid * 0.15;
+                    const warpX = Math.sin(currentTime * 0.0005 + i) * warpFactor;
+                    const warpY = Math.cos(currentTime * 0.0005 + i) * warpFactor;
+                    d_ctx.transform(1, warpY, warpX, 1, 0, 0); // Skew transform
+
+                    // 5. Draw the correct quadrant of the source image, centered on the new origin
+                    d_ctx.drawImage(
+                        img,
+                        p.sx * img.width, p.sy * img.height, imgW_half, imgH_half,
+                        -w / 4, -h / 4, w / 2, h / 2
+                    );
+                    d_ctx.restore();
                 });
 
-                if (beatDetector.treble > 0.2) { // Flash tied to treble
+                // 6. Apply brightness flash over the whole canvas on a bass hit
+                if (beatDetector.bass > 0.1) {
                     const isLightTheme = document.body.classList.contains('light-theme');
-                    d_ctx.globalCompositeOperation = isLightTheme ? 'darken' : 'lighter';
-                    d_ctx.fillStyle = isLightTheme ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
-                    d_ctx.globalAlpha = beatDetector.treble * 0.5; // More subtle flash
+                    d_ctx.globalCompositeOperation = isLightTheme ? 'soft-light' : 'lighter';
+                    d_ctx.fillStyle = isLightTheme ? `rgba(255, 255, 255, ${beatDetector.bass * 0.4})` : `rgba(0, 0, 0, ${beatDetector.bass * 0.4})`;
                     d_ctx.fillRect(0, 0, w, h);
-                    d_ctx.globalAlpha = 1.0;
                 }
             } else {
                  d_ctx.clearRect(0, 0, distortionCanvas.width, distortionCanvas.height);
@@ -3650,37 +3786,23 @@ function initVisualizer() {
             small_ctx.clearRect(0, 0, smallVisualizerCanvas.width, smallVisualizerCanvas.height);
             const gap = 2;
             const barWidth = (smallVisualizerCanvas.width - (numBars - 1) * gap) / numBars;
-            const style = getComputedStyle(document.body);
-            small_ctx.fillStyle = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
+            small_ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-color').trim() || '#FFFFFF';
             const indicesToUse = isMobile ? mobileBarIndices : desktopBarIndices;
 
             for (let i = 0; i < numBars; i++) {
                 const x = i * (barWidth + gap);
-                const value = Math.min(dataArray[indicesToUse[i]] * sensitivityMultipliers[i], 255);
+                const value = dataArray[indicesToUse[i]] || 0;
                 const barHeight = Math.pow(value / 255, powerCurve) * smallVisualizerCanvas.height;
                 const pillRadius = Math.max(0, barWidth / 2);
 
-                if (barHeight < pillRadius * 2) { // Draw dot for low values
-                    const dotRadius = barHeight / 2;
-                    if (dotRadius < 1) continue;
-                    small_ctx.globalAlpha = barHeight / (pillRadius * 2);
-                    small_ctx.beginPath();
-                    small_ctx.arc(x + pillRadius, smallVisualizerCanvas.height / 2, dotRadius, 0, 2 * Math.PI);
-                    small_ctx.fill();
-                } else { // Draw full bar
-                    const y = (smallVisualizerCanvas.height - barHeight) / 2;
-                    small_ctx.globalAlpha = 1.0;
-                    small_ctx.beginPath();
-                    small_ctx.roundRect(x, y, barWidth, barHeight, pillRadius);
-                    small_ctx.fill();
-                }
+                if (barHeight < 1) continue; // Don't draw tiny dots
+                small_ctx.beginPath();
+                small_ctx.roundRect(x, (smallVisualizerCanvas.height - barHeight) / 2, barWidth, barHeight, pillRadius);
+                small_ctx.fill();
             }
-            small_ctx.globalAlpha = 1.0;
         }
-
-        draw();
+        draw(0); // Start the animation loop
         isVisualizerInitialized = true;
-
     } catch(e) {
         console.error("Failed to initialize AudioContext/Visualizer:", e);
     }
@@ -6038,7 +6160,6 @@ playPauseBtn.addEventListener('click', async () => {
             playPauseBtn.classList.add('playing');
             updateMiniplayerUI(currentlyPlayingSong, 'playing');
             if (!document.body.classList.contains('reduce-animations')) {
-                document.querySelector('.background-blur').classList.add('rotating');
             }
             updateMediaSessionPlaybackState('playing');
             Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
@@ -6093,7 +6214,6 @@ volumeSlider.addEventListener('input', (e) => {
 
 audioPlayer.addEventListener('play', () => {
     if (!document.body.classList.contains('reduce-animations')) {
-        document.querySelector('.background-blur').classList.add('rotating');
     }
 });
 
@@ -6441,6 +6561,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         setupLongPressListeners(document.getElementById('search-results-grid'));
         setupLongPressListeners(drawerContent);
 
+        shardContainer = document.getElementById('distortion-container');
+        initializeShards(); 
         initVisualizer();
         setupMediaSessionActions();
 
