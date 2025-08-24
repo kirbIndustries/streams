@@ -6407,19 +6407,6 @@ async function verifyPermission(handle, shouldRequest = false) {
             updateAllBackgrounds(song.albumArt);
             updateFavicon(song.albumArt);
             updateTimeDisplays(progress, audioPlayer.duration);
-            
-            // Hide lyrics button for SoundCloud tracks
-            const lyricsButton = document.querySelector('.lyrics-button');
-            if (song.storage === 'soundcloud') {
-                lyricsButton.style.display = 'none';
-                // If the lyrics panel is open, close it as it's no longer relevant
-                if (isPanelVisible && panelContent === 'lyrics') {
-                    closePanel();
-                }
-            } else {
-                // Use an empty string to revert to the stylesheet's default display property
-                lyricsButton.style.display = ''; 
-            }
         }
 
         function updateTimeDisplays(current = 0, duration = 0) {
