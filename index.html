@@ -2302,6 +2302,7 @@
         let transitionProgress = 0;
         const TRANSITION_DURATION = 15; // in frames (approx. 0.25 seconds)
         let isVisualizerLoopActive = false;
+        let isDistortionLoopActive = false;
         let songs = [];
         let currentSongId = null;
         let isPlayerLoading = false;
@@ -2574,9 +2575,11 @@ function setView(viewName) {
     if (isNowPlaying && !wasNowPlaying) {
         // If we are ENTERING the 'now-playing' view, start the loop.
         startVisualizerLoop();
+        startDistortionLoop();
     } else if (!isNowPlaying && wasNowPlaying) {
         // If we are LEAVING the 'now-playing' view, stop the loop.
         stopVisualizerLoop();
+        stopDistortionLoop();
     }
 
     tabBtns.forEach(btn => {
@@ -3602,8 +3605,6 @@ const availableMusicFunctions = {
             };
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
-
-            animateCanvas();
         }
 
         /**
@@ -3749,11 +3750,33 @@ const availableMusicFunctions = {
             context.restore();
         }
 
+        function startDistortionLoop() {
+            // Prevent starting if it's already running.
+            if (isDistortionLoopActive) return;
+            
+            console.log("Starting distortion canvas loop.");
+            isDistortionLoopActive = true;
+            // Kick off the first frame.
+            animateCanvas();
+        }
+        
+        function stopDistortionLoop() {
+            // Prevent stopping if it's not running.
+            if (!isDistortionLoopActive) return;
+
+            console.log("Stopping distortion canvas loop.");
+            isDistortionLoopActive = false;
+            // This is the crucial step that actually stops the loop.
+            cancelAnimationFrame(animationFrameId);
+        }
+
         /**
          * The animation loop, now featuring a global canvas distortion on beat
          * and passing the beat intensity down to each blob for synchronized animation.
          */
         function animateCanvas() {
+            if (!isDistortionLoopActive) return;
+            
             animationFrameId = requestAnimationFrame(animateCanvas);
             if (!ctx) return;
             
@@ -3841,6 +3864,8 @@ const availableMusicFunctions = {
             if (beatIntensity > 0) {
                 ctx.restore();
             }
+
+            animationFrameId = requestAnimationFrame(animateCanvas);
         }
         
         /**
