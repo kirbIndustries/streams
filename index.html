@@ -1052,7 +1052,7 @@
             filter: url(#albumArtDistortion);
             will-change: transform;
             transition: background-image 0.5s ease, clip-path 3s ease-in-out, filter 0.1s ease-out;
-            scale: 0.75;
+            scale: 0.65;
             opacity: 0.5;
         }
 
@@ -3516,14 +3516,14 @@ function generateRandomClipPath() {
 
     return `polygon(${path.map(p => `${p.x.toFixed(2)}% ${p.y.toFixed(2)}%`).join(', ')})`;
 }
-
 function initializeShards() {
     const shardElements = document.querySelectorAll('.distortion-shard');
     
+    // New positions are more spread out towards the corners and edges
     const homePositions = [
-        { x: -50, y: -80 }, 
-        { x: 80, y: 40 }, 
-        { x: -70, y: 60 }
+        { x: -90, y: -120 }, // Top-left
+        { x: 120, y: 90 },  // Bottom-right
+        { x: 100, y: -100 }  // Top-right
     ];
 
     shardElements.forEach((el, i) => {
@@ -3533,7 +3533,7 @@ function initializeShards() {
         shards.push({
             element: el,
             bgPos: `${i * 50}% 50%`, 
-            rotationSpeed: (Math.random() - 0.5) * 0.2, // Slower rotation
+            rotationSpeed: (Math.random() - 0.5) * 0.4, // Increased rotation speed
             xDrift: (Math.random() - 0.5) * 0.2, 
             yDrift: (Math.random() - 0.5) * 0.2,
             rotation: Math.random() * 360,
@@ -3549,7 +3549,7 @@ function initializeShards() {
         shards.forEach(shard => {
             shard.element.style.clipPath = generateRandomClipPath();
         });
-    }, 5000); // Morph every 5 seconds
+    }, 1000); // Morph every 1 second
 }
 
 function setDistortionBackgrounds(url) {
@@ -3755,7 +3755,7 @@ function initVisualizer() {
 
                 // New: Calculate brightness and contrast based on the beat
                 const contrastValue = 1 + (smoothedPulse * 1.5);
-                const brightnessValue = 1 + (smoothedPulse * 0.2);
+                const brightnessValue = 1 + (smoothedPulse * 0.1); // Reduced brightness strength
     
                 shards.forEach((shard) => {
                     shard.rotation += shard.rotationSpeed;
@@ -3767,7 +3767,7 @@ function initVisualizer() {
                     const baseX = shard.homeX + driftX;
                     const baseY = shard.homeY + driftY;
                     
-                    // Apply base drift and rotation, but no more positional shift from the beat
+                    // Apply base drift and rotation
                     shard.element.style.transform = `translate(${baseX}px, ${baseY}px) rotate(${shard.rotation}deg)`;
                     
                     // Apply the pulsing brightness/contrast filter
