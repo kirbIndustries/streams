@@ -3584,68 +3584,105 @@ async function updateAllBackgrounds(imageUrl) {
 }
 
 class BeatDetector {
-    constructor(frequencyBands, historySize = 60, minThreshold = 5) {
+    constructor(frequencyBands, {
+        emaAlpha = 0.2,
+        minThreshold = 5,
+        decayRate = 0.96,
+        minSensitivity = 1.2,
+        maxSensitivity = 2.4,
+        initialSensitivity = 1.4,
+        increaseFactor = 1.05,
+        decreaseFactor = 0.999,
+        enableGlobalDetection = true,
+        smoothingFactor = 0.3,
+    } = {}) {
         this.frequencyBands = frequencyBands;
-        this.historySize = historySize;
+
+        // Configuration
+        this.emaAlpha = emaAlpha;
         this.minFluxThreshold = minThreshold;
-        this.fluxHistories = this.frequencyBands.map(() => []);
-        this.lastEnergies = new Array(this.frequencyBands.length).fill(0);
+        this.decayRate = decayRate;
+        this.minSensitivity = minSensitivity;
+        this.maxSensitivity = maxSensitivity;
+        this.dynamicSensitivity = initialSensitivity;
+        this.increaseFactor = increaseFactor;
+        this.decreaseFactor = decreaseFactor;
+        this.enableGlobalDetection = enableGlobalDetection;
+        this.smoothingFactor = smoothingFactor;
+
+        // State
+        this.lastEnergies = new Array(frequencyBands.length).fill(0);
+        this.emaFlux = new Array(frequencyBands.length).fill(0);
+        this.emaFluxSquared = new Array(frequencyBands.length).fill(0); // For stdDev
         this.beatValue = 0.0;
-        this.decayRate = 0.96;
-        this.dynamicSensitivity = 1.4;
-        this.minSensitivity = 1.2;
-        this.maxSensitivity = 2.4;
-        this.increaseFactor = 1.05;
-        this.decreaseFactor = 0.999;
+        this.prevTimestamp = null;
     }
 
-    _calculateStandardDeviation(array, mean) {
-        if (array.length < 2) return 0;
-        const variance = array.reduce((acc, val) => acc + (val - mean) ** 2, 0) / array.length;
-        return Math.sqrt(variance);
-    }
+    update(dataArray, currentTimestamp = null) {
+        const detectedBands = [];
+        let globalBeatDetected = false;
 
-    update(dataArray) {
-        let beatDetectedThisFrame = false;
+        // Calculate deltaTime if using time-based decay
+        let deltaTime = 1.0;
+        if (this.prevTimestamp != null && currentTimestamp != null) {
+            deltaTime = (currentTimestamp - this.prevTimestamp) / 1000;
+        }
+        this.prevTimestamp = currentTimestamp;
 
         for (let i = 0; i < this.frequencyBands.length; i++) {
-            const band = this.frequencyBands[i];
-            const history = this.fluxHistories[i];
-            
-            let currentEnergy = 0;
-            for (let j = band[0]; j <= band[1]; j++) currentEnergy += dataArray[j];
-            currentEnergy /= (band[1] - band[0] + 1);
+            const [start, end] = this.frequencyBands[i];
 
+            // Smoothed energy
+            let currentEnergy = 0;
+            for (let j = start; j <= end; j++) {
+                currentEnergy += dataArray[j];
+            }
+            currentEnergy /= (end - start + 1);
+
+            // Apply energy smoothing
+            currentEnergy = this._lerp(this.lastEnergies[i], currentEnergy, this.smoothingFactor);
             const flux = Math.max(0, currentEnergy - this.lastEnergies[i]);
+
             this.lastEnergies[i] = currentEnergy;
 
-            if (history.length < this.historySize) {
-                history.push(flux);
-                continue;
-            }
-            
-            const averageFlux = history.reduce((a, b) => a + b, 0) / history.length;
-            const stdDev = this._calculateStandardDeviation(history, averageFlux);
-            const dynamicThreshold = averageFlux + (this.dynamicSensitivity * stdDev);
+            // Update EMA for flux and its square (used for std dev)
+            const oldEma = this.emaFlux[i];
+            this.emaFlux[i] = this.emaAlpha * flux + (1 - this.emaAlpha) * this.emaFlux[i];
+            this.emaFluxSquared[i] = this.emaAlpha * (flux * flux) + (1 - this.emaAlpha) * this.emaFluxSquared[i];
+
+            const mean = this.emaFlux[i];
+            const variance = this.emaFluxSquared[i] - mean * mean;
+            const stdDev = Math.sqrt(Math.max(variance, 0));
+
+            const dynamicThreshold = mean + this.dynamicSensitivity * stdDev;
 
             if (flux > dynamicThreshold && flux > this.minFluxThreshold) {
-                beatDetectedThisFrame = true;
+                detectedBands.push(i);
+                if (this.enableGlobalDetection) globalBeatDetected = true;
             }
-
-            history.push(flux);
-            history.shift();
         }
 
-        if (beatDetectedThisFrame) {
+        // Beat logic
+        if ((this.enableGlobalDetection && globalBeatDetected) || (!this.enableGlobalDetection && detectedBands.length > 0)) {
             this.beatValue = 1.0;
             this.dynamicSensitivity *= this.increaseFactor;
         } else {
-            this.beatValue *= this.decayRate;
+            this.beatValue *= Math.pow(this.decayRate, deltaTime);
             this.dynamicSensitivity *= this.decreaseFactor;
         }
-        
+
+        // Clamp sensitivity
         this.dynamicSensitivity = Math.max(this.minSensitivity, Math.min(this.maxSensitivity, this.dynamicSensitivity));
-        return this.beatValue;
+
+        return {
+            beatValue: this.beatValue,
+            detectedBands,
+            sensitivity: this.dynamicSensitivity,
+        };
+    }
+
+    _lerp(a, b, t) {
+        return a + (b - a) * t;
     }
 }
 
