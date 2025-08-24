@@ -3822,7 +3822,7 @@ const availableMusicFunctions = {
         function triggerBeatEffect() {
             if (blobs.length === 0) return;
             const blob = blobs[Math.floor(Math.random() * blobs.length)];
-            blob.warpAmount = blob.radius * 0.2;  // Reduced warp ripple by 60%
+            blob.warpAmount = blob.radius * 0.05;  // Reduced warp ripple
             blob.contrast = 1.1;   // A much softer, less intense flash
             blob.scale = 1.02;     // A very small, gentle pulse
         }
