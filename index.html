@@ -1902,11 +1902,11 @@
             <feTurbulence 
                 id="turbulence"
                 type="turbulence" 
-                baseFrequency="0.005 0.01" 
+                baseFrequency="0.002 0.005" 
                 numOctaves="1" 
                 seed="0"
             />
-            <feGaussianBlur stdDeviation="40" result="blurredTurbulence"/>
+            <feGaussianBlur stdDeviation="60" result="blurredTurbulence"/>
             <feDisplacementMap 
                 id="displacement"
                 in="SourceGraphic" 
@@ -3506,9 +3506,10 @@ function initializeShards() {
         const homeX = homePositions[i % homePositions.length].x;
         const homeY = homePositions[i % homePositions.length].y;
         
-        const magnitude = Math.sqrt(homeX * homeX + homeY * homeY);
-        const dirX = magnitude > 0 ? homeX / magnitude : 0;
-        const dirY = magnitude > 0 ? homeY / magnitude : 0;
+        // New: Each shard gets a unique, random pulse direction
+        const randomAngle = Math.random() * 2 * Math.PI;
+        const dirX = Math.cos(randomAngle);
+        const dirY = Math.sin(randomAngle);
 
         shards.push({
             element: el,
@@ -3519,7 +3520,7 @@ function initializeShards() {
             rotation: Math.random() * 360,
             homeX: homeX,
             homeY: homeY,
-            dirX: dirX,
+            dirX: dirX, // Store the random direction
             dirY: dirY
         });
         el.style.backgroundPosition = shards[i].bgPos;
@@ -3692,7 +3693,7 @@ function initVisualizer() {
         const turbulenceFilter = document.getElementById('turbulence');
 
         const baselineDistortion = 80;
-        const peakDistortion = 350; // Increased for more impact
+        const peakDistortion = 500; // Increased significantly for a stronger effect
 
         let beatDetector;
         if (!isMobile) {
@@ -3739,6 +3740,7 @@ function initVisualizer() {
 
                     const baseX = shard.homeX + driftX;
                     const baseY = shard.homeY + driftY;
+                    // Pulse is now applied along each shard's unique random direction
                     const totalX = baseX + (shard.dirX * outwardShift);
                     const totalY = baseY + (shard.dirY * outwardShift);
                     shard.element.style.transform = `translate(${totalX}px, ${totalY}px) rotate(${shard.rotation}deg)`;
