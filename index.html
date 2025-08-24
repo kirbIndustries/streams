@@ -4060,12 +4060,6 @@ function initVisualizer() {
         window.drawVisualizerFrame = function() {
             // If the loop has been told to stop, do nothing.
             if (!isVisualizerLoopActive) return;
-                    
-            animationFrameId = requestAnimationFrame(draw);
-            
-            if (activeView !== 'now-playing') {
-                return;
-            }
             
             analyser.getByteFrequencyData(dataArray);
 
