@@ -1577,8 +1577,7 @@
         @media (max-width: 980px) {
             #lyrics-queue-panel {
                 width: 450px;
-                height: 80vh;
-                max-height: 800px;
+                height: calc(100vh - 160px);
                 background-color: var(--search-background);
                 border: 1px solid var(--glass-border);
                 box-shadow: 0 0 50px rgba(0, 0, 0, 0.2);
@@ -1596,18 +1595,18 @@
                 overflow: auto;
                 position: absolute;
                 top: 50%;
-                right: 20px;
-                transform: translateY(-50%) translateX(20px) scale(0.9) scaleX(0.9);
+                transform: translateY(-50%) translateY(20px) scale(0.9) scaleY(0.9);
                 z-index: 5;
-                width: 90%;
-                max-width: 400px;
+                width: 100%;
+                max-width: -webkit-fill-available;
                 transform-origin: right;
                 filter: blur(1px);
+                margin: 0 2vw;
             }
             
             #lyrics-queue-panel.visible {
                 opacity: 1;
-                transform: translateY(-50%) translateX(0);
+                transform: translateY(-50%) translateY(0);
                 pointer-events: auto;
                 filter: none;
             }
