@@ -1568,11 +1568,6 @@
             filter: none;
         }
 
-        #lyrics-queue-panel.hidden.visible .now-playing-wrapper {
-            padding: 5px 20px 5px 5px !important;
-            align-items: flex-end !important;
-        }
-
         @media (min-width: 981px) {
             .lyrics-container {
                 width: 100%;
@@ -6616,9 +6611,20 @@ function handleProgressDrag(e) { if (isDragging) seekAudio(e.touches ? e.touches
 function closePanel() {
     if (!isPanelVisible) return;
     isPanelVisible = false;
+    
+    // Remove the 'visible' class from the panel
     document.getElementById('lyrics-queue-panel').classList.remove('visible');
+    
+    // Remove the 'active' class from the buttons
     document.querySelector('.lyrics-button').classList.remove('active');
     document.querySelector('.queue-button').classList.remove('active');
+    
+    // Update the .now-playing-wrapper styles
+    const nowPlayingWrapper = document.querySelector('.now-playing-wrapper');
+    if (nowPlayingWrapper) {
+        nowPlayingWrapper.style.padding = '5px';
+        nowPlayingWrapper.style.alignItems = 'center';
+    }
 }
         
 progressBar.addEventListener("click", e => seekAudio(e));
@@ -7004,18 +7010,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Show or switch the panel
                 isPanelVisible = true;
                 panelContent = newContent;
+                
                 if (panelContent === 'lyrics') {
                     renderLyrics();
                 } else {
                     renderQueue();
                     scrollToCurrentSongInQueue();
                 }
+                
                 lyricsQueuePanel.classList.add('visible');
             }
+            
             document.querySelector('.lyrics-button').classList.toggle('active', isPanelVisible && panelContent === 'lyrics');
             document.querySelector('.queue-button').classList.toggle('active', isPanelVisible && panelContent === 'queue');
+            
+            // Modify .now-playing-wrapper styles
+            const nowPlayingWrapper = document.querySelector('.now-playing-wrapper');
+            if (nowPlayingWrapper) {
+                nowPlayingWrapper.style.setProperty('padding', '5px 20px 5px 5px', 'important');
+                nowPlayingWrapper.style.setProperty('align-items', 'flex-end', 'important');
+            }
         };
-
+        
         document.querySelector('.lyrics-button').addEventListener('click', () => togglePanel('lyrics'));
         document.querySelector('.queue-button').addEventListener('click', () => togglePanel('queue'));
                 
