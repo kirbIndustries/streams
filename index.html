@@ -1235,7 +1235,7 @@
             }
 
             #lyrics-queue-panel {
-                transform-origin: right bottom;
+                transform-origin: right bottom !important;
             }
         }
         
@@ -1615,7 +1615,7 @@
                 overflow: auto;
                 position: absolute;
                 top: 50%;
-                transform: translateY(-50%) translateY(20px) scale(0.9) scaleY(0.9);
+                transform: translateY(-50%) scale(0.9) scaleY(0.9);
                 z-index: 5;
                 width: 100%;
                 max-width: -webkit-fill-available;
@@ -1627,7 +1627,7 @@
             
             #lyrics-queue-panel.visible {
                 opacity: 1;
-                transform: translateY(-50%) translateY(0);
+                transform: translateY(-50%);
                 pointer-events: auto;
                 filter: none;
             }
