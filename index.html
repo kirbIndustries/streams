@@ -1557,6 +1557,7 @@
             width: 50%;
             transform-origin: right;
             filter: blur(1px);
+            align-items: flex-start;
         }
         
         #lyrics-queue-panel.visible {
@@ -1565,6 +1566,23 @@
             transform: translateX(0);
             pointer-events: auto;
             filter: none;
+        }
+
+        #lyrics-queue-panel.visible .now-playing-wrapper {
+            padding: 5px 20px 5px 5px !important;
+            align-items: flex-end !important;
+        }
+
+        @media (min-width: 981px) {
+            .lyrics-container {
+                width: 100%;
+                max-width: 500px;
+            }
+
+            .now-queue {
+                width: 100%;
+                max-width: 500px;
+            }
         }
 
         @media (max-width: 980px) {
@@ -1595,6 +1613,7 @@
                 transform-origin: bottom;
                 filter: blur(1px);
                 margin: 0 2vw;
+                align-items: center;
             }
             
             #lyrics-queue-panel.visible {
@@ -4868,9 +4887,11 @@ function renderQueue() {
 
     if (playQueue.length === 0) {
         lyricsQueuePanel.innerHTML = headerHtml + `
-            <div class="no-results" style="flex-grow: 1; justify-content: center;">
-                <span class="material-symbols-rounded">queue_music</span>
-                <p>The queue is empty.</p>
+            <div class="now-queue">
+                <div class="no-results" style="flex-grow: 1; justify-content: center;">
+                    <span class="material-symbols-rounded">queue_music</span>
+                    <p>The queue is empty.</p>
+                </div>
             </div>
         `;
     } else {
@@ -4887,7 +4908,7 @@ function renderQueue() {
             </div>
         `).join('');
         
-        lyricsQueuePanel.innerHTML = headerHtml + `<div class="queue-list-container" style="margin-top: 10px;">${queueHtml}</div>`;
+        lyricsQueuePanel.innerHTML = `<div class="now-queue">${headerHtml}<div class="queue-list-container" style="margin-top: 10px;">${queueHtml}</div></div>`;
     }
 
     // Attach event listener for the new toggle switch
