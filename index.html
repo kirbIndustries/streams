@@ -2226,6 +2226,23 @@
         </div>
     </div>
 
+    <!-- Manual Lyrics Search Modal -->
+    <div id="manualLyricsSearchModal" class="modal-overlay">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 40px; width: 90%; max-width: 450px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
+            <h2 style="margin-bottom: 20px;">Lyrics Search</h2>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <input type="text" id="manualLyricsSearchInput" placeholder="Artist - Title" class="search-input" style="padding-left: 15px;">
+                <button id="manualLyricsSearchBtn" class="filter-btn active" style="flex-shrink: 0;">Search</button>
+            </div>
+            <div id="manualLyricsResults" style="max-height: 250px; overflow-y: auto;">
+                <!-- Search results will be populated here -->
+            </div>
+            <div style="display: flex; justify-content: flex-end; margin-top: 25px;">
+                <button id="closeManualLyricsModal" class="filter-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Sleep Timer Modal -->
     <div id="sleepTimerModal" class="modal-overlay">
         <div style="background: var(--modal-background); padding: 25px; border-radius: 40px; width: 90%; max-width: 300px; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
@@ -4699,8 +4716,11 @@ async function renderLyrics() {
     const lyricsQueuePanel = document.getElementById('lyrics-queue-panel');
     if (!lyricsQueuePanel) return;
 
-    lyricsQueuePanel.innerHTML = `<div class="lyrics-container" id="lyrics-scroll-container"></div>`;
-    const lyricsContainer = lyricsQueuePanel.querySelector('.lyrics-container');
+    const lyricsContainer = lyricsQueuePanel.querySelector('.lyrics-container') || 
+                            (() => {
+                                lyricsQueuePanel.innerHTML = `<div class="lyrics-container" id="lyrics-scroll-container"></div>`;
+                                return lyricsQueuePanel.querySelector('.lyrics-container');
+                            })();
 
     if (!currentSongId) {
         lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No song is currently playing.</p>`;
@@ -4709,8 +4729,8 @@ async function renderLyrics() {
     
     const song = currentlyPlayingSong;
 
-    // 1. If lyrics already exist, display them immediately.
     if (song.lyrics) {
+        // Lyrics already exist, so display them
         if (song.lrcData && song.lrcData.length > 0) {
             lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
                 `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '• • •'}</p>`
@@ -4727,43 +4747,47 @@ async function renderLyrics() {
         return;
     }
 
-    // 2. If lyrics are missing, check if we should search LRCLIB.
     if (isLrclibEnabled) {
         lyricsContainer.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
-        
         const fetchedLyrics = await fetchLyricsFromLrclib(song);
 
         if (fetchedLyrics) {
             song.lyrics = fetchedLyrics.content;
-            if (fetchedLyrics.type === 'lrc') {
-                song.lrcData = parseLRC(fetchedLyrics.content);
-            }
-
-            // **MODIFICATION:** Save lyrics to the correct place.
-            if (song.storage === 'soundcloud') {
-                await updateSoundcloudCacheWithLyrics(song);
-            } else {
-                await saveSongs(); 
-            }
+            if (fetchedLyrics.type === 'lrc') song.lrcData = parseLRC(fetchedLyrics.content);
             
-            renderLyrics(); // Re-run to display the new lyrics
-            return;
+            if (song.storage === 'soundcloud') await updateSoundcloudCacheWithLyrics(song);
+            else await saveSongs();
+            
+            renderLyrics(); // Re-run to display
         } else {
-            lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found.</p>`;
-            return;
+            // Automatic search failed, provide manual option
+            lyricsContainer.innerHTML = `
+                <div class="no-results">
+                    <p>No lyrics found automatically.</p>
+                    <button id="manual-search-trigger" class="goto-btn">Search Manually</button>
+                </div>`;
+            document.getElementById('manual-search-trigger').addEventListener('click', () => {
+                const cleaned = cleanMetadataForLyricsSearch(song);
+                document.getElementById('manualLyricsSearchInput').value = `${cleaned.artist} - ${cleaned.name}`;
+                document.getElementById('manualLyricsResults').innerHTML = ''; // Clear old results
+                openModal(manualLyricsSearchModal);
+            });
         }
+        return;
     }
 
-    // 3. Final fallback if LRCLIB is disabled.
+    // Fallback if LRCLIB is disabled
     lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found.</p>`;
 }
 
 async function fetchLyricsFromLrclib(song) {
-    if (!song || !song.artist || !song.name) return null;
+    if (!song) return null;
 
-    const artist = encodeURIComponent(song.artist);
-    const track = encodeURIComponent(song.name);
-    const album = encodeURIComponent(song.album);
+    // Use the cleaned metadata for the API call
+    const cleanedSong = cleanMetadataForLyricsSearch(song);
+    const artist = encodeURIComponent(cleanedSong.artist);
+    const track = encodeURIComponent(cleanedSong.name);
+    const album = encodeURIComponent(cleanedSong.album);
 
     const url = `https://lrclib.net/api/get?artist_name=${artist}&track_name=${track}&album_name=${album}`;
 
@@ -4776,7 +4800,6 @@ async function fetchLyricsFromLrclib(song) {
         
         const data = await response.json();
         if (Object.keys(data).length === 0 || (!data.plainLyrics && !data.syncedLyrics)) {
-            console.log(`No LRCLIB lyrics found for "${song.name}"`);
             return null;
         }
 
@@ -4788,9 +4811,108 @@ async function fetchLyricsFromLrclib(song) {
 
     } catch (error) {
         console.error("Error fetching lyrics from LRCLIB:", error);
-        return null;
     }
     return null;
+}
+
+// This function cleans metadata before any LRCLIB search
+function cleanMetadataForLyricsSearch(song) {
+    let cleanTitle = song.name || '';
+    let cleanArtist = song.artist || '';
+
+    // Remove common patterns like (feat...), (prod...), [Official Video], etc.
+    const patternsToRemove = [
+        /\s*\(feat\..*?\)/i,
+        /\s*\(prod\..*?\)/i,
+        /\s*\[.*?\]/g,
+        /\s*\(.*?(official|lyric|audio|video|visualizer).*?\)/i,
+        /\s-\s(official|lyric|audio|video|visualizer).*/i,
+        /MV/g
+    ];
+
+    patternsToRemove.forEach(pattern => {
+        cleanTitle = cleanTitle.replace(pattern, '').trim();
+    });
+
+    return { name: cleanTitle, artist: cleanArtist, album: song.album };
+}
+
+// New function to handle the manual search API call
+async function searchLrclibForManualPick() {
+    const query = document.getElementById('manualLyricsSearchInput').value;
+    const resultsContainer = document.getElementById('manualLyricsResults');
+    if (!query) return;
+
+    resultsContainer.innerHTML = `<p>Searching...</p>`;
+    const url = `https://lrclib.net/api/search?q=${encodeURIComponent(query)}`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('API Search failed');
+        const results = await response.json();
+
+        if (results.length === 0) {
+            resultsContainer.innerHTML = '<p>No results found.</p>';
+            return;
+        }
+
+        resultsContainer.innerHTML = results.map(track => `
+            <div class="menu-item" data-id="${track.id}">
+                <div>
+                    <div>${sanitize(track.trackName)}</div>
+                    <div style="font-size: 0.8em; color: var(--secondary-text-color);">${sanitize(track.artistName)}</div>
+                </div>
+            </div>
+        `).join('');
+
+        // Add click listeners to each new result item
+        resultsContainer.querySelectorAll('.menu-item').forEach(item => {
+            item.addEventListener('click', async () => {
+                const trackId = item.dataset.id;
+                await applyLyricsFromLrclibId(trackId);
+                closeModal(manualLyricsSearchModal);
+            });
+        });
+
+    } catch (error) {
+        resultsContainer.innerHTML = `<p>Error during search.</p>`;
+        console.error("Manual LRCLIB search error:", error);
+    }
+}
+
+// New function to fetch lyrics by a specific ID and apply them
+async function applyLyricsFromLrclibId(id) {
+    const url = `https://lrclib.net/api/get?id=${id}`;
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        const song = currentlyPlayingSong;
+        if (!song) return;
+
+        if (data.syncedLyrics) {
+            song.lyrics = data.syncedLyrics;
+            song.lrcData = parseLRC(data.syncedLyrics);
+        } else if (data.plainLyrics) {
+            song.lyrics = data.plainLyrics;
+            song.lrcData = null;
+        } else {
+            return; // No lyrics found for this ID
+        }
+
+        // Save the newly found lyrics
+        if (song.storage === 'soundcloud') {
+            await updateSoundcloudCacheWithLyrics(song);
+        } else {
+            await saveSongs();
+        }
+        
+        // Re-render the lyrics panel to show the result
+        await renderLyrics();
+
+    } catch (error) {
+        console.error("Error applying lyrics from LRCLIB ID:", error);
+    }
 }
         
 async function renderOfflineSoundcloudView() {
@@ -5511,6 +5633,10 @@ function initModalVariables() {
     
     manageFoldersModal = document.getElementById('manageFoldersModal');
     document.getElementById('closeFoldersModal').addEventListener('click', () => closeModal(manageFoldersModal));
+
+    manualLyricsSearchModal = document.getElementById('manualLyricsSearchModal');
+    document.getElementById('manualLyricsSearchBtn').addEventListener('click', searchLrclibForManualPick);
+    document.getElementById('closeManualLyricsModal').addEventListener('click', () => closeModal(manualLyricsSearchModal));
 }
 
 function openManageFoldersModal() {
