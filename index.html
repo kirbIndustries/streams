@@ -3850,23 +3850,13 @@ const availableMusicFunctions = {
             // --- Beat Effect Logic ---
             const BEAT_DECAY_SPEED = 0.95; // Controls how fast the effect fades out (closer to 1 is slower)
 
-            // 1. If a beat is active, smoothly decay the intensity on every frame.
+            // If a beat is active, smoothly decay the intensity on every frame.
             if (beatIntensity > 0.001) {
                 beatIntensity *= BEAT_DECAY_SPEED;
             } else {
                 beatIntensity = 0; // Clamp to zero to prevent tiny residual values
             }
 
-            // 2. Apply a global "thump" effect based on the decaying `beatIntensity`.
-            if (beatIntensity > 0) {
-                // The sine wave creates a smooth pulse that animates both in and out during the decay
-                const zoom = 1 + Math.sin(beatIntensity * Math.PI) * 0.01; // Gentle 1% zoom
-                ctx.save();
-                ctx.translate(canvasWidth / 2, canvasHeight / 2);
-                ctx.scale(zoom, zoom);
-                ctx.translate(-canvasWidth / 2, -canvasHeight / 2);
-            }
-            
             // --- Background Rotation and Drawing (Unchanged) ---
             backgroundRotation += 0.002;
             if (isTransitioning) {
