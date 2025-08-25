@@ -1540,16 +1540,10 @@
         }
         
         #lyrics-queue-panel {
-            width: 450px;
-            height: 80vh;
-            max-height: 800px;
-            background-color: var(--search-background);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 0 50px rgba(0, 0, 0, 0.2);
-            border-radius: 25px;
-            backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter);
+            height: 100%;
+            max-height: 100vh;
             flex-shrink: 0;
-            padding: 20px;
+            padding: 130px 5px 150px 20px;
             display: none;
             flex-direction: column;
             gap: 15px;
@@ -1560,8 +1554,7 @@
             overflow: auto;
             transform: translateX(20px) scale(0.9) scaleX(0.9);
             z-index: 5;
-            width: 90%;
-            max-width: 400px;
+            width: 50%;
             transform-origin: right;
             filter: blur(1px);
         }
@@ -1599,7 +1592,7 @@
                 z-index: 5;
                 width: 100%;
                 max-width: -webkit-fill-available;
-                transform-origin: right;
+                transform-origin: bottom;
                 filter: blur(1px);
                 margin: 0 2vw;
             }
