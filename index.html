@@ -3860,7 +3860,7 @@ const availableMusicFunctions = {
             // 2. Apply a global "thump" effect based on the decaying `beatIntensity`.
             if (beatIntensity > 0) {
                 // The sine wave creates a smooth pulse that animates both in and out during the decay
-                const zoom = 1 + Math.sin(beatIntensity * Math.PI) * 0.02; // Gentle 2% zoom
+                const zoom = 1 + Math.sin(beatIntensity * Math.PI) * 0.01; // Gentle 1% zoom
                 ctx.save();
                 ctx.translate(canvasWidth / 2, canvasHeight / 2);
                 ctx.scale(zoom, zoom);
