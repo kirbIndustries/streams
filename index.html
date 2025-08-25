@@ -817,8 +817,13 @@
         }
 
         .lyrics-button.active, .queue-button.active {
-            background: var(--modal-background);
-            border-radius: 10px;
+            background: var(--secondary-text-color);
+            color: var(--background-color);
+            border-radius: 14px;
+        }
+
+        .lyrics-button.active .material-symbols-rounded, .queue-button.active .material-symbols-rounded {
+            color: var(--background-color);
         }
 
         .volume-control {
