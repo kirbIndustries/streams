@@ -1568,7 +1568,7 @@
             filter: none;
         }
 
-        #lyrics-queue-panel.visible .now-playing-wrapper {
+        #lyrics-queue-panel.hidden.visible .now-playing-wrapper {
             padding: 5px 20px 5px 5px !important;
             align-items: flex-end !important;
         }
@@ -1621,6 +1621,16 @@
                 transform: translateY(-50%) translateY(0);
                 pointer-events: auto;
                 filter: none;
+            }
+
+            .lyrics-container {
+                width: 100%;
+                max-width: none;
+            }
+
+            .now-queue {
+                width: 100%;
+                max-width: none;
             }
         }
 
