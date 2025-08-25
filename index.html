@@ -1550,7 +1550,7 @@
             backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter);
             flex-shrink: 0;
             padding: 20px;
-            display: flex;
+            display: none;
             flex-direction: column;
             gap: 15px;
             opacity: 0;
@@ -1559,9 +1559,7 @@
             pointer-events: none;
             overflow: auto;
             position: absolute;
-            top: 50%;
-            right: 20px;
-            transform: translateY(-50%) translateX(20px) scale(0.9) scaleX(0.9);
+            transform: translateX(20px) scale(0.9) scaleX(0.9);
             z-index: 5;
             width: 90%;
             max-width: 400px;
@@ -1570,10 +1568,50 @@
         }
         
         #lyrics-queue-panel.visible {
+            display: flex;
             opacity: 1;
-            transform: translateY(-50%) translateX(0);
+            transform: translateX(0);
             pointer-events: auto;
             filter: none;
+        }
+
+        @media (min-width: 988px) {
+            #lyrics-queue-panel {
+                width: 450px;
+                height: 80vh;
+                max-height: 800px;
+                background-color: var(--search-background);
+                border: 1px solid var(--glass-border);
+                box-shadow: 0 0 50px rgba(0, 0, 0, 0.2);
+                border-radius: 25px;
+                backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter);
+                flex-shrink: 0;
+                padding: 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+                opacity: 0;
+                transform: translateX(20px);
+                transition: all 0.3s cubic-bezier(.3,1.2,.64,1);
+                pointer-events: none;
+                overflow: auto;
+                position: absolute;
+                top: 50%;
+                right: 20px;
+                transform: translateY(-50%) translateX(20px) scale(0.9) scaleX(0.9);
+                z-index: 5;
+                width: 90%;
+                max-width: 400px;
+                transform-origin: right;
+                filter: blur(1px);
+            }
+            
+            #lyrics-queue-panel.visible {
+                opacity: 1;
+                transform: translateY(-50%) translateX(0);
+                pointer-events: auto;
+                filter: none;
+            }
         }
 
         /* --- Grid View Styles --- */
@@ -2107,9 +2145,9 @@
                     <span>Delete Song</span>
                 </div>
             </div>
-            <div id="lyrics-queue-panel" class="hidden">
-                 <!-- Lyrics or Queue content will be rendered here by JS -->
-            </div>
+        </div>
+        <div id="lyrics-queue-panel" class="hidden">
+            <!-- Lyrics or Queue content will be rendered here by JS -->
         </div>
     </div>
 
