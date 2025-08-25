@@ -3694,29 +3694,36 @@ const availableMusicFunctions = {
 
         /**
          * Asynchronously loads, resizes, and initiates a smooth transition for new album art.
+         * This version includes a full state reset when imageUrl is empty, fixing the bug after resetPlayer.
          * @param {string} imageUrl - The URL of the new high-resolution album art.
          */
         async function loadAlbumArtForCanvas(imageUrl) {
+            // If imageUrl is empty, it's a hard reset call from resetPlayer().
             if (!imageUrl) {
+                // Clear both image sources to prevent any drawing.
                 currentResizedArt.src = '';
+                oldResizedArt.src = '';
+                // Clear the blobs array.
                 blobs = [];
-                return;
+                // Explicitly stop any ongoing transition and reset its progress.
+                isTransitioning = false;
+                transitionProgress = 0;
+                return; // End the function here.
             }
-            // Use the resized source to check if the image is the same
+
+            // The rest of the function only runs if we have a valid imageUrl.
             if (currentResizedArt.src && currentResizedArt.dataset.originalUrl === imageUrl) return;
 
             try {
-                // When a new song starts, the current resized art becomes the old one for the fade-out.
                 if (currentResizedArt.complete && currentResizedArt.src) {
                     oldResizedArt = currentResizedArt;
                 }
 
-                // Create the new resized image.
                 const newResized = await createResizedImage(imageUrl, 64);
-                newResized.dataset.originalUrl = imageUrl; // Store original URL for comparison
+                newResized.dataset.originalUrl = imageUrl;
                 currentResizedArt = newResized;
 
-                // Start the fade transition and create new blobs for the new art
+                // Start a new transition.
                 isTransitioning = true;
                 transitionProgress = 0;
                 initBlobs();
