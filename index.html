@@ -540,13 +540,13 @@
             padding: 5px 1px;
             border: 1px solid var(--glass-border);
             margin: 3px 0;
+            backdrop-filter: blur(5px) saturate(2) var(--edge-refraction-filter);
         }
 
         .queue-item.active .song-title {
             font-family: 'Open Runde';
         }
             
-        
         .album-art {
             border-radius: 12px;
             background-color: var(--modal-transparent);
@@ -679,7 +679,7 @@
             box-sizing: border-box;
             width: 100%;
             justify-content: space-between;
-            margin-bottom: 90px;
+            margin-bottom: 80px;
         }
         
         .player-controls button:nth-child(2),
@@ -1286,6 +1286,20 @@
             
             .drawer {
                 height: calc(100% - 80px); /* Full height minus top toolbar */
+            }
+
+            .player-controls {
+                margin-bottom: 110px;
+            }
+
+            @media (max-height: 980px) {
+                .now-playing-wrapper {
+                    gap: 4vh !important;
+                }
+
+                .player-controls {
+                    margin-bottom: 95px;
+                }
             }
         }
 
