@@ -2400,12 +2400,11 @@
         let animationFrameId;
         let backgroundRotation = 0;
         let currentBeatIntensity = 0; // The smoothly animated intensity used for rendering
-        const NUM_BLOBS_PERF = 15; // Increased for better canvas coverage
         let noise; // This will hold our noise generator function
         let beatIntensity = 0;
         let isTransitioning = false;
         let transitionProgress = 0;
-        const TRANSITION_DURATION = 15; // in frames (approx. 0.25 seconds)
+        const TRANSITION_DURATION = 30; // in frames (approx. 0.5 seconds)
         let visualizerFrameId = null;
         let visualizerDraw = () => {};
         let songs = [];
@@ -3771,27 +3770,44 @@ const availableMusicFunctions = {
         }
 
         /**
-         * Creates a large number of smaller blobs, with each blob being assigned a
-         * unique, random section of the source album art for maximum visual variety.
+         * Creates blobs with density and size optimized for the device type.
+         * On mobile, it uses fewer, larger blobs for better performance and visual clarity.
+         * On desktop, it uses many smaller blobs for a dense, active background.
          */
         function initBlobs() {
             if (!distortionCanvas || !ctx || !currentResizedArt.complete) return;
             blobs = [];
             const { width: imgWidth, height: imgHeight } = currentResizedArt;
             const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
+            
+            // --- Conditional Parameters for Mobile vs. Desktop ---
+            let blobCount;
+            let minRadiusMultiplier, radiusVariance;
             const maxSpeed = 0.5;
 
-            for (let i = 0; i < NUM_BLOBS_PERF; i++) {
-                const radius = (Math.random() * 0.1 + 0.15) * Math.min(canvasWidth, canvasHeight);
+            if (isMobile) {
+                // Mobile Configuration: Fewer, larger blobs.
+                blobCount = 3;
+                // Radius will be between 40% and 60% of the smaller canvas dimension to fill the screen.
+                minRadiusMultiplier = 0.4; 
+                radiusVariance = 0.2;
+            } else {
+                // Desktop Configuration: More, smaller blobs.
+                blobCount = 15;
+                // Radius will be between 15% and 25% of the smaller canvas dimension.
+                minRadiusMultiplier = 0.15;
+                radiusVariance = 0.1;
+            }
 
-                // --- THE FIX: Calculate a unique source rectangle for each blob ---
-                // 1. Determine a random size for the crop, e.g., 30% to 60% of the source image's smaller dimension.
+            for (let i = 0; i < blobCount; i++) { // Use the dynamically set blobCount
+                
+                // Use the dynamic multipliers to calculate the radius for the current device.
+                const radius = (Math.random() * radiusVariance + minRadiusMultiplier) * Math.min(canvasWidth, canvasHeight);
+
+                // This logic for assigning a unique part of the album art remains the same.
                 const sourceSize = Math.min(imgWidth, imgHeight) * (Math.random() * 0.3 + 0.3);
-                // 2. Determine a random X start position, ensuring the crop doesn't go out of bounds.
                 const sourceX = Math.random() * (imgWidth - sourceSize);
-                // 3. Determine a random Y start position, also ensuring it stays in bounds.
                 const sourceY = Math.random() * (imgHeight - sourceSize);
-                // --- End of Fix ---
 
                 blobs.push({
                     x: Math.random() * canvasWidth,
@@ -3801,12 +3817,9 @@ const availableMusicFunctions = {
                     radius: radius,
                     rotation: Math.random() * Math.PI * 2,
                     rotationSpeed: (Math.random() - 0.5) * 0.002,
-                    
-                    // Use the newly calculated unique source rectangle for this blob
                     sourceX: sourceX,
                     sourceY: sourceY,
                     sourceSize: sourceSize,
-
                     time: Math.random() * 1000,
                     warpAmount: 0,
                     baseWarp: radius * 0.1,
