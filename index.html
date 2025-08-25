@@ -7020,9 +7020,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 lyricsQueuePanel.classList.add('visible');
 
-                // Modify .now-playing-wrapper styles
+                // Only modify .now-playing-wrapper if viewport is 981px or larger
                 const nowPlayingWrapper = document.querySelector('.now-playing-wrapper');
-                if (nowPlayingWrapper) {
+                if (nowPlayingWrapper && window.innerWidth >= 981) {
                     nowPlayingWrapper.style.setProperty('padding', '5px 20px 5px 5px', 'important');
                     nowPlayingWrapper.style.setProperty('align-items', 'flex-end', 'important');
                 }
