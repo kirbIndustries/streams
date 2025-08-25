@@ -4704,7 +4704,6 @@ async function renderLyrics() {
     const lyricsQueuePanel = document.getElementById('lyrics-queue-panel');
     if (!lyricsQueuePanel) return;
 
-    // Basic setup
     lyricsQueuePanel.innerHTML = `<div class="lyrics-container" id="lyrics-scroll-container"></div>`;
     const lyricsContainer = lyricsQueuePanel.querySelector('.lyrics-container');
 
@@ -4715,13 +4714,12 @@ async function renderLyrics() {
     
     const song = currentlyPlayingSong;
 
-    // 1. If lyrics already exist (they are not null or empty), display them immediately.
+    // 1. If lyrics already exist, display them immediately.
     if (song.lyrics) {
         if (song.lrcData && song.lrcData.length > 0) {
             lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
                 `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '• • •'}</p>`
             ).join('');
-
             lyricsContainer.querySelectorAll('p').forEach(lineEl => {
                 lineEl.addEventListener('click', () => {
                     const seekTime = parseFloat(lineEl.dataset.time);
@@ -4731,34 +4729,37 @@ async function renderLyrics() {
         } else {
             lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none; white-space: pre-wrap;">${song.lyrics}</p>`;
         }
-        return; // Lyrics were found and displayed, so we are done.
+        return;
     }
 
-    // 2. If we're here, lyrics are missing. Check if we should search LRCLIB.
-    if (isLrclibEnabled && song.storage !== 'soundcloud') {
+    // 2. If lyrics are missing, check if we should search LRCLIB.
+    if (isLrclibEnabled) {
         lyricsContainer.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
         
         const fetchedLyrics = await fetchLyricsFromLrclib(song);
 
         if (fetchedLyrics) {
-            // SUCCESS: We found lyrics!
             song.lyrics = fetchedLyrics.content;
             if (fetchedLyrics.type === 'lrc') {
                 song.lrcData = parseLRC(fetchedLyrics.content);
             }
-            await saveSongs(); // Save the new lyrics to the database
-            renderLyrics(); // Re-run this function to display the new lyrics
+
+            // **MODIFICATION:** Save lyrics to the correct place.
+            if (song.storage === 'soundcloud') {
+                await updateSoundcloudCacheWithLyrics(song);
+            } else {
+                await saveSongs(); 
+            }
+            
+            renderLyrics(); // Re-run to display the new lyrics
             return;
         } else {
-            // FAILURE: The API had no lyrics.
-            // Show a temporary message but DO NOT save an empty string.
-            // This allows the app to try searching again in a future session.
             lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found.</p>`;
             return;
         }
     }
 
-    // 3. This is the final fallback. It runs if LRCLIB is disabled or it's a SoundCloud track.
+    // 3. Final fallback if LRCLIB is disabled.
     lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found.</p>`;
 }
 
@@ -5738,6 +5739,30 @@ async function saveSoundcloudTrackToLibrary() {
     }
 }
 
+async function updateSoundcloudCacheWithLyrics(song) {
+    if (!song || song.storage !== 'soundcloud') return;
+
+    try {
+        const tx = db.transaction('soundcloudCache', 'readwrite');
+        const store = tx.objectStore('soundcloudCache');
+        const request = store.get(song.id);
+
+        request.onsuccess = () => {
+            const entry = request.result;
+            if (entry) {
+                // Add the new lyrics data to the cached metadata
+                entry.metadata.lyrics = song.lyrics;
+                entry.metadata.lrcData = song.lrcData;
+                store.put(entry);
+            }
+        };
+        await tx.done;
+        console.log(`Saved lyrics for SC track "${song.name}" to cache.`);
+    } catch (error) {
+        console.error("Failed to update SoundCloud cache with lyrics:", error);
+    }
+}
+
 async function playSoundcloudTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     
@@ -5753,13 +5778,11 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         if (localSongLookup.has(uniqueKey)) {
             const localSong = localSongLookup.get(uniqueKey);
             console.log(`Redirecting SoundCloud play for "${trackData.title}" to local version.`);
-            // If it exists, play the local version instead and stop.
             playSong(localSong, playContext);
             return; 
         }
 
-        // Step 3: If not found locally, proceed with streaming from SoundCloud as before.
-        console.log(`Playing from SoundCloud: "${trackData.title}"`);
+        // Step 3: If not found locally, proceed with streaming from SoundCloud.
         const tx = db.transaction('soundcloudCache', 'readwrite');
         const store = tx.objectStore('soundcloudCache');
         const cachedEntry = await promiseIDBRequest(store.get(numericTrackId));
@@ -5768,6 +5791,11 @@ async function playSoundcloudTrack(trackId, playContext = null) {
 
         if (cachedEntry) {
             songToPlay = cachedEntry.metadata;
+            // Ensure cached lyrics are loaded
+            if (cachedEntry.metadata.lyrics) {
+                songToPlay.lyrics = cachedEntry.metadata.lyrics;
+                songToPlay.lrcData = cachedEntry.metadata.lrcData;
+            }
             songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
             cachedEntry.timestamp = Date.now();
             store.put(cachedEntry);
@@ -5782,20 +5810,23 @@ async function playSoundcloudTrack(trackId, playContext = null) {
                 id: trackData.id,
                 name: trackData.title,
                 artist: trackData.user.username,
-                album: trackData.title,
+                album: trackData.title, // Using title as album for better LRCLIB matching
                 albumArt: getHighResArtwork(trackData.artwork_url),
                 storage: 'soundcloud',
-                streamUrl: streamData.url
+                streamUrl: streamData.url,
+                lyrics: null, // Initialize lyrics properties
+                lrcData: null
             };
+            // Do not await caching, let it happen in the background
             cacheSoundcloudTrack(songToPlay, streamData.url);
         }
 
-        playSong(songToPlay, playContext); // This now only receives genuine SC songs
+        playSong(songToPlay, playContext);
         await tx.done;
 
     } catch (error) {
         console.error('Error playing or redirecting SoundCloud track:', error);
-        Gurasuraisu.showPopup('Could not play the selected track');
+        Gurasuraisu.showPopup('Could not play selected item');
     }
 }
         
@@ -6476,20 +6507,6 @@ async function verifyPermission(handle, shouldRequest = false) {
             updateAllBackgrounds(song.albumArt);
             updateFavicon(song.albumArt);
             updateTimeDisplays(progress, audioPlayer.duration);
-
-            
-            // Hide lyrics button for SoundCloud tracks
-            const lyricsButton = document.querySelector('.lyrics-button');
-            if (song.storage === 'soundcloud') {
-                lyricsButton.style.display = 'none';
-                // If the lyrics panel is open, close it as it's no longer relevant
-                if (isPanelVisible && panelContent === 'lyrics') {
-                    closePanel();
-                }
-            } else {
-                // Use an empty string to revert to the stylesheet's default display property
-                lyricsButton.style.display = ''; 
-            }
         }
 
         function updateTimeDisplays(current = 0, duration = 0) {
