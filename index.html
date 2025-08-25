@@ -105,18 +105,6 @@
             opacity: 0;
         }
 
-        .toolbar.hidden .album-art {
-            margin-top: 0px !IMPORTANT;
-        }
-
-        .toolbar.hidden .player-controls {
-            display: none;
-        }
-
-        .toolbar.hidden .volume-control {
-            display: none;
-        }
-
         .toolbar::before {
             content: "";
             position: absolute;
@@ -7118,10 +7106,27 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (currentSongId && confirm('Delete this song? This is permanent.')) await deleteSong(currentSongId);
             moreOptionsMenu.classList.remove('visible');
         });
-
+        
         document.getElementById('menuFullscreenBtn').addEventListener('click', () => {
             isFullscreen = !isFullscreen; // Toggle the state
             toolbar.classList.toggle('hidden', isFullscreen); // Update toolbar based on new state
+        
+            // Toggle additional styles based on fullscreen state
+            const albumArt = document.querySelector('.album-art');
+            const playerControls = document.querySelector('.player-controls');
+            const volumeControl = document.querySelector('.volume-control');
+            
+            if (albumArt) {
+                albumArt.style.setProperty('margin-top', isFullscreen ? '0px' : '', 'important');
+            }
+            
+            if (playerControls) {
+                playerControls.style.display = isFullscreen ? 'none' : '';
+            }
+        
+            if (volumeControl) {
+                volumeControl.style.display = isFullscreen ? 'none' : '';
+            }
         });
         
         document.getElementById('menuEditMetadata').addEventListener('click', () => { if (currentSongId) openEditModal(currentSongId); moreOptionsMenu.classList.remove('visible'); });
