@@ -4414,139 +4414,113 @@ function renderLibraryPage() {
     const libraryGrid = document.getElementById('library-grid');
     if (!libraryGrid) return;
 
-    // STEP 1: Show loading spinner
-    libraryView.innerHTML = `
-    <div class="page-content-wrapper">
-        <div class="loading-message">
-            <svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24">
-                <style>
-                    .spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}
-                    .spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}
-                    @keyframes spinner_zKoa{100%{transform:rotate(360deg)}}
-                    @keyframes spinner_YpZS{
-                        0%{stroke-dasharray:0 150;stroke-dashoffset:0}
-                        47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}
-                        95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}
-                    }
-                </style>
-                <g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g>
-            </svg>
-        </div>
-    </div>`;
+    // --- RENDER MAIN LIBRARY VIEW ---
+    const searchFilteredSongs = songs; // No search bar here anymore
 
-    // STEP 2: Wait one frame before rendering the actual library content
+    if (searchFilteredSongs.length === 0) {
+        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">library_music</span><p>Your library is empty.</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Click "Add Music" to get started.</p></div>`;
+        return;
+    }
+    
+    let itemsHtml = ''; // Declare itemsHtml here
+
+    switch (currentFilter) {
+        case 'artists':
+            libraryGrid.className = 'item-grid';
+            const artistsMap = new Map();
+            searchFilteredSongs.forEach(song => {
+                const artist = song.artist || 'Unknown Artist';
+                if (!artistsMap.has(artist)) {
+                    artistsMap.set(artist, song.albumArt);
+                }
+            });
+            let artistsList = Array.from(artistsMap.entries());
+            if (currentSortMode === 'alpha') artistsList.sort((a, b) => a[0].localeCompare(b[0]));
+            
+            itemsHtml = artistsList.map(([artist, art]) => `
+                <div class="item-card" data-artist-name="${artist}">
+                    <img src="${art || generateRandomGradient()}" alt="${artist}" class="item-card-art" style="border-radius: 50%;">
+                    <div class="item-card-info" style="text-align: center;">
+                        <div class="item-card-title">${sanitize(artist)}</div>
+                    </div>
+                </div>`).join('');
+            break;
+        
+        case 'songs':
+            libraryGrid.className = 'item-list'; // Enforce list view
+            const sortedSongs = [...searchFilteredSongs]; // Create a copy to sort
+             if (currentSortMode === 'alpha') searchFilteredSongs.sort((a,b) => a.name.localeCompare(b.name));
+             else searchFilteredSongs.sort((a,b) => b.dateAdded - a.dateAdded);
+
+            itemsHtml = searchFilteredSongs.map(song => `
+                <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                     <div class="song-info">
+                        <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
+                        <div>
+                            <div class="song-title" style="white-space: normal;">${sanitize(song.name)}</div>
+                            <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            break;
+
+        case 'playlists':
+            libraryGrid.className = 'item-grid';
+            
+            // Generate the HTML for the user's existing playlists first
+            itemsHtml = playlists.map(p => {
+                const playlistSongs = p.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+                const art = playlistSongs.length > 0 ? playlistSongs[0].albumArt : generateRandomGradient();
+                return `
+                <div class="item-card" data-playlist-id="${p.id}">
+                    <img src="${art}" alt="${p.name}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${sanitize(p.name)}</div>
+                        <div class="item-card-subtitle">${playlistSongs.length} songs</div>
+                    </div>
+                </div>`;
+            }).join('');
+        
+            // Now, generate the AI creator section ONLY if AI is enabled
+            if (isGuraAiEnabled && musicAiModel) {
+                const aiPlaylistSection = `
+                    <div id="ai-playlist-creator" style="grid-column: 1 / -1; margin: 20px auto 0 auto; max-width: 600px; text-align: center;">
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="aiPlaylistPrompt" placeholder="Create a Playlist with GuraAI" class="library-search-input" style="padding-left: 15px;">
+                            <button id="aiCreatePlaylistBtn" class="action-btn" style="height: auto;"><span class="material-symbols-rounded" style="font-size: 18px;">add</span></button>
+                        </div>
+                    </div>
+                `;
+                // Append the AI section to the end of the playlists HTML
+                itemsHtml += aiPlaylistSection;
+            }
+            break;
+
+        case 'albums':
+        default:
+            libraryGrid.className = 'item-grid'; // Enforce grid view
+            const albums = groupSongsByAlbum(searchFilteredSongs);
+            itemsHtml = albums.map(album => {
+                const albumId = `${album.artist}::${album.originalAlbum}`;
+                return `
+                <div class="item-card" data-album-id="${albumId}">
+                    <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+                    <div class="item-card-info">
+                        <div class="item-card-title">${sanitize(album.name)}</div>
+                        <div class="item-card-subtitle">${sanitize(album.artist)}</div>
+                    </div>
+                </div>`;
+            }).join('');
+            break;
+    }
+    
+    libraryGrid.innerHTML = itemsHtml;
+    
+    // --- SCROLL RESTORATION LOGIC ---
     requestAnimationFrame(() => {
-        // restore original layout skeleton with a grid inside
-        libraryView.innerHTML = `
-        <div class="page-content-wrapper">
-            <div id="library-grid"></div>
-        </div>`;
-        const grid = document.getElementById('library-grid');
-
-        const searchFilteredSongs = songs; // No search bar here anymore
-        if (searchFilteredSongs.length === 0) {
-            grid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;">
-                <span class="material-symbols-rounded">library_music</span>
-                <p>Your library is empty.</p>
-                <p style="font-size: 0.8em; color: var(--secondary-text-color);">Click "Add Music" to get started.</p>
-            </div>`;
-            return;
-        }
-
-        let itemsHtml = '';
-        switch (currentFilter) {
-            case 'artists': {
-                grid.className = 'item-grid';
-                const artistsMap = new Map();
-                searchFilteredSongs.forEach(song => {
-                    const artist = song.artist || 'Unknown Artist';
-                    if (!artistsMap.has(artist)) {
-                        artistsMap.set(artist, song.albumArt);
-                    }
-                });
-                let artistsList = Array.from(artistsMap.entries());
-                if (currentSortMode === 'alpha') {
-                    artistsList.sort((a, b) => a[0].localeCompare(b[0]));
-                }
-                itemsHtml = artistsList.map(([artist, art]) => `
-                    <div class="item-card" data-artist-name="${artist}">
-                        <img src="${art || generateRandomGradient()}" alt="${artist}" class="item-card-art" style="border-radius: 50%;">
-                        <div class="item-card-info" style="text-align: center;">
-                            <div class="item-card-title">${sanitize(artist)}</div>
-                        </div>
-                    </div>`).join('');
-                break;
-            }
-            case 'songs': {
-                grid.className = 'item-list';
-                const sortedSongs = [...searchFilteredSongs];
-                if (currentSortMode === 'alpha') {
-                    sortedSongs.sort((a, b) => a.name.localeCompare(b.name));
-                } else {
-                    sortedSongs.sort((a, b) => b.dateAdded - a.dateAdded);
-                }
-                itemsHtml = sortedSongs.map(song => `
-                    <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
-                        <div class="song-info">
-                            <img src="${song.albumArt}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
-                            <div>
-                                <div class="song-title" style="white-space: normal;">${sanitize(song.name)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(song.artist)}</div>
-                            </div>
-                        </div>
-                    </div>`).join('');
-                break;
-            }
-            case 'playlists': {
-                grid.className = 'item-grid';
-                itemsHtml = playlists.map(p => {
-                    const playlistSongs = p.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
-                    const art = playlistSongs.length > 0 ? playlistSongs[0].albumArt : generateRandomGradient();
-                    return `
-                    <div class="item-card" data-playlist-id="${p.id}">
-                        <img src="${art}" alt="${p.name}" class="item-card-art">
-                        <div class="item-card-info">
-                            <div class="item-card-title">${sanitize(p.name)}</div>
-                            <div class="item-card-subtitle">${playlistSongs.length} songs</div>
-                        </div>
-                    </div>`;
-                }).join('');
-                if (isGuraAiEnabled && musicAiModel) {
-                    itemsHtml += `
-                        <div id="ai-playlist-creator" style="grid-column: 1 / -1; margin: 20px auto 0 auto; max-width: 600px; text-align: center;">
-                            <div style="display: flex; gap: 10px;">
-                                <input type="text" id="aiPlaylistPrompt" placeholder="Create a Playlist with GuraAI" class="library-search-input" style="padding-left: 15px;">
-                                <button id="aiCreatePlaylistBtn" class="action-btn" style="height: auto;"><span class="material-symbols-rounded" style="font-size: 18px;">add</span></button>
-                            </div>
-                        </div>`;
-                }
-                break;
-            }
-            case 'albums':
-            default: {
-                grid.className = 'item-grid';
-                const albums = groupSongsByAlbum(searchFilteredSongs);
-                itemsHtml = albums.map(album => {
-                    const albumId = `${album.artist}::${album.originalAlbum}`;
-                    return `
-                    <div class="item-card" data-album-id="${albumId}">
-                        <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
-                        <div class="item-card-info">
-                            <div class="item-card-title">${sanitize(album.name)}</div>
-                            <div class="item-card-subtitle">${sanitize(album.artist)}</div>
-                        </div>
-                    </div>`;
-                }).join('');
-                break;
-            }
-        }
-
-        grid.innerHTML = itemsHtml;
-
-        // Restore scroll position
-        requestAnimationFrame(() => {
-            libraryView.scrollTop = scrollPositions.library;
-        });
+        const libraryView = document.getElementById('library-view');
+        libraryView.scrollTop = scrollPositions.library;
     });
 }
         
