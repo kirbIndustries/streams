@@ -5975,28 +5975,25 @@ function trimAudioBuffer(audioBuffer, lrcData) {
  */
 async function processAndCacheSoundcloudTrack(songObject, streamUrl) {
     try {
-        // Step 1: Fetch audio and lyrics in parallel
+        // Step 1: Clean metadata and fetch audio/lyrics in parallel
+        const cleanedSong = cleanMetadataForLyricsSearch(songObject);
         const [audioResponse, lrcDataResult] = await Promise.all([
             fetch(streamUrl),
-            fetchLyricsFromLrclib(songObject) // Use our existing function
+            fetchLyricsFromLrclib(cleanedSong) // USE CLEANED METADATA FOR SEARCH
         ]);
         
         if (!audioResponse.ok) throw new Error('Could not download audio for processing.');
         
         const arrayBuffer = await audioResponse.arrayBuffer();
-        if (!audioContext) await initVisualizer(); // Ensure AudioContext is ready
+        if (!audioContext) await initVisualizer();
         
-        // Step 2: Decode the raw audio data
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
-        // Step 3: Analyze and trim the audio
         const lrcData = lrcDataResult && lrcDataResult.type === 'lrc' ? parseLRC(lrcDataResult.content) : null;
         const { trimmedBuffer, newDuration } = trimAudioBuffer(audioBuffer, lrcData);
         
-        // Step 4: Convert the trimmed buffer to a WAV blob
         const audioBlob = audioBufferToWav(trimmedBuffer);
 
-        // Step 5: Prepare and save the complete cache entry
         const cacheEntry = {
             id: songObject.id,
             blob: audioBlob,
@@ -6004,7 +6001,7 @@ async function processAndCacheSoundcloudTrack(songObject, streamUrl) {
             size: audioBlob.size,
             metadata: {
                 ...songObject,
-                trimmedDuration: newDuration, // Save the accurate duration
+                trimmedDuration: newDuration,
                 lyrics: lrcDataResult ? lrcDataResult.content : null,
                 lrcData: lrcData,
             }
@@ -6017,11 +6014,16 @@ async function processAndCacheSoundcloudTrack(songObject, streamUrl) {
         console.log(`Successfully processed and cached trimmed version of "${songObject.name}"`);
         await manageCacheSize();
 
+        // **MODIFICATION**: Return the entry so the player can use it immediately.
+        return cacheEntry;
+
     } catch (error) {
         console.error(`Failed to process and cache ${songObject.name}:`, error);
+        // **MODIFICATION**: Return null on failure.
+        return null;
     }
 }
-
+        
 // This is a NEW function to save a SoundCloud track to the local library
 async function saveSoundcloudTrackToLibrary() {
     if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'soundcloud') return;
@@ -6107,65 +6109,83 @@ async function playSoundcloudTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     
     try {
-        // Step 1: Fetch metadata for the SC track to build our lookup key.
+        const tx = db.transaction('soundcloudCache', 'readonly');
+        const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
+        
+        // --- PATH 1: SONG IS ALREADY CACHED AND PROCESSED ---
+        if (cachedEntry) {
+            const songToPlay = cachedEntry.metadata;
+            songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
+            if (cachedEntry.metadata.trimmedDuration) {
+                songToPlay.duration = cachedEntry.metadata.trimmedDuration;
+            }
+            playSong(songToPlay, playContext);
+            return;
+        }
+
+        // --- PATH 2: NEW SONG, STREAM AND PROCESS ---
         const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
         if (!trackResponse.ok) throw new Error('Could not fetch SC track details.');
         const trackData = await trackResponse.json();
 
         const uniqueKey = `${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`;
-
-        // Step 2: Check if this song exists in our local library.
         if (localSongLookup.has(uniqueKey)) {
-            const localSong = localSongLookup.get(uniqueKey);
-            console.log(`Redirecting SoundCloud play for "${trackData.title}" to local version.`);
-            playSong(localSong, playContext);
-            return; 
+            playSong(localSongLookup.get(uniqueKey), playContext);
+            return;
         }
 
-        // Step 3: If not found locally, proceed with streaming from SoundCloud.
-        const tx = db.transaction('soundcloudCache', 'readwrite');
-        const store = tx.objectStore('soundcloudCache');
-        const cachedEntry = await promiseIDBRequest(store.get(numericTrackId));
+        const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+        if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
+        
+        const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
+        const streamData = await streamResponse.json();
 
-        let songToPlay;
+        const songToPlay = {
+            id: trackData.id,
+            name: trackData.title,
+            artist: trackData.user.username,
+            album: trackData.title,
+            albumArt: getHighResArtwork(trackData.artwork_url),
+            storage: 'soundcloud',
+            streamUrl: streamData.url, // Temporary stream URL
+            lyrics: null,
+            lrcData: null
+        };
 
-        if (cachedEntry) {
-            songToPlay = cachedEntry.metadata;
-            songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
-            // **MODIFICATION**: If we have a trimmed duration, assign it to the song object
-            if (cachedEntry.metadata.trimmedDuration) {
-                songToPlay.duration = cachedEntry.metadata.trimmedDuration;
-            }
-        } else {
-            const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-            if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
-            
-            const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
-            const streamData = await streamResponse.json();
-
-            songToPlay = {
-                id: trackData.id,
-                name: trackData.title,
-                artist: trackData.user.username,
-                album: trackData.title,
-                albumArt: getHighResArtwork(trackData.artwork_url),
-                storage: 'soundcloud',
-                streamUrl: streamData.url,
-                lyrics: null,
-                lrcData: null
-            };
-            
-            // **MODIFICATION**: Call the new processing function in the background.
-            // DO NOT await this call. Playback starts immediately while this runs.
-            processAndCacheSoundcloudTrack(songToPlay, streamData.url);
-        }
-
+        // Start playback immediately with the untrimmed stream
         playSong(songToPlay, playContext);
-        await tx.done;
+
+        // NOW, process in the background and wait for the result
+        const processedEntry = await processAndCacheSoundcloudTrack(songToPlay, streamData.url);
+
+        // After processing, if we're still playing the same song, switch to the trimmed version
+        if (processedEntry && currentSongId === numericTrackId) {
+            const currentTime = audioPlayer.currentTime;
+            
+            // Update the currently playing song object with the new, accurate info
+            currentlyPlayingSong.duration = processedEntry.metadata.trimmedDuration;
+            currentlyPlayingSong.lyrics = processedEntry.metadata.lyrics;
+            currentlyPlayingSong.lrcData = processedEntry.metadata.lrcData;
+
+            const newBlobUrl = URL.createObjectURL(processedEntry.blob);
+            
+            if (audioPlayer.src.startsWith('blob:')) {
+                URL.revokeObjectURL(audioPlayer.src);
+            }
+            
+            audioPlayer.src = newBlobUrl;
+            // Seek to the correct time in the new source
+            audioPlayer.addEventListener('loadedmetadata', () => {
+                 audioPlayer.currentTime = currentTime;
+                 audioPlayer.play();
+                 // Update the UI to reflect the new, shorter duration
+                 updatePlayerUI(currentlyPlayingSong, currentTime);
+            }, { once: true });
+        }
 
     } catch (error) {
-        console.error('Error playing or redirecting SoundCloud track:', error);
-        Gurasuraisu.showPopup('Could not play selected item');
+        console.error('Error playing or processing SoundCloud track:', error);
+        Gurasuraisu.showPopup('Could not play the selected item');
     }
 }
         
