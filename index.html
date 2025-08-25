@@ -2389,6 +2389,7 @@
         let transitionProgress = 0;
         const TRANSITION_DURATION = 15; // in frames (approx. 0.25 seconds)
         let visualizerFrameId = null;
+        let visualizerDraw = () => {};
         let songs = [];
         let currentSongId = null;
         let isPlayerLoading = false;
