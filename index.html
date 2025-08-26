@@ -6975,8 +6975,8 @@ audioPlayer.addEventListener('timeupdate', async () => {
                     const isActive = (index === newLrcLineIndex);
                     const distance = Math.abs(index - newLrcLineIndex);
         
-                    // Feature: Change font for active line
-                    el.style.fontFamily = isActive ? "'Open Runde', sans-serif" : "'Inter', sans-serif";
+                    // Feature: Change font for active line (DISABLED)
+                    // el.style.fontFamily = isActive ? "'Open Runde', sans-serif" : "'Inter', sans-serif";
         
                     // Bug Fix: Restore blur and opacity logic
                     const blurValue = isActive ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
