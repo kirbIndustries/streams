@@ -6994,8 +6994,6 @@ audioPlayer.addEventListener('timeupdate', async () => {
                     const elTime = parseFloat(el.dataset.time);
                     const isActive = (elTime === trueActiveTimestamp);
                     const distance = Math.abs(index - lastPassedMainLineIndex);
-        
-                    el.style.fontFamily = isActive ? "'Open Runde', sans-serif" : "'Inter', sans-serif";
                     
                     // Blur and opacity are based on distance from the last passed main line
                     const blurValue = (index === lastPassedMainLineIndex) ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
