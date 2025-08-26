@@ -6982,18 +6982,36 @@ audioPlayer.addEventListener('timeupdate', async () => {
         
                 // 3. Style all main lyric lines
                 allMainLineElements.forEach((el, index) => {
-                    const elTime = parseFloat(el.dataset.time);
-                    const isActive = (elTime === trueActiveTimestamp);
-                    const distance = Math.abs(index - lastPassedMainLineIndex);
+                    const distance = index - lastPassedMainLineIndex;
+                    let opacity = 0;
+                    let blur = '5px';
         
-                    el.style.fontFamily = isActive ? "'Open Runde', sans-serif" : "'Inter', sans-serif";
-                    
-                    // Blur and opacity are based on distance from the last passed main line
-                    const blurValue = (index === lastPassedMainLineIndex) ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
-                    const opacityValue = (index === lastPassedMainLineIndex) ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
+                    if (distance === 0) {
+                        // Rule: Active line
+                        opacity = 1;
+                        blur = '0px';
+                    } else if (distance > 0) {
+                        // Rules: Lines BELOW the active line
+                        switch (distance) {
+                            case 1: opacity = 0.8; blur = '1.5px'; break;
+                            case 2: opacity = 0.6; blur = '2.5px'; break;
+                            case 3: opacity = 0.4; blur = '3.5px'; break;
+                            case 4: opacity = 0.2; blur = '4.5px'; break;
+                            default: opacity = 0; blur = '5px'; break; // 5th+ line
+                        }
+                    } else { // distance < 0
+                        // Rules: Lines ABOVE the active line
+                        if (distance === -1) { // The line immediately above
+                            opacity = 0.5;
+                            blur = '2px';
+                        } else { // 2nd+ line above
+                            opacity = 0;
+                            blur = '3px';
+                        }
+                    }
         
-                    el.style.filter = `blur(${blurValue}px)`;
-                    el.style.opacity = opacityValue;
+                    el.style.opacity = opacity;
+                    el.style.filter = `blur(${blur})`;
                 });
         
                 // 4. Style all aside elements
