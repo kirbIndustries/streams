@@ -1407,7 +1407,7 @@
             font-size: 1.5rem;
             font-weight: 600;
             line-height: 1.4; /* Improves readability */
-            font-family: 'Inter', sans-serif; /* Default font */
+            font-family: 'Open Runde';
         }
 
         .lyrics-container p.lyric-aside {
@@ -1417,7 +1417,6 @@
             margin: -10px 0 18px 0;
             opacity: 0.8;
             cursor: default;
-            transition: all 0.4s ease-out;
         }
 
         .lyrics-container p.active {
@@ -4793,9 +4792,10 @@ async function renderLyrics() {
             const lyricsHtml = song.lrcData.lyrics.map(item => {
                 switch(item.type) {
                     case 'line':
+                        // **THE FIX**: Removed the "lyric-line" class from here
                         return `<p id="lyric-line-${lineIndex++}" data-time="${item.time}">${item.text || '• • •'}</p>`;
                     case 'aside':
-                        return `<p class="lyric-aside" data-time="${item.time}">${item.text}</p>`;
+                        return `<p class="lyric-aside">${item.text}</p>`;
                     default:
                         return '';
                 }
@@ -4833,7 +4833,7 @@ async function renderLyrics() {
         } else {
             lyricsContainer.innerHTML = `
                 <div class="no-results">
-                    <p>No lyrics found.</p>
+                    <p>No lyrics found automatically.</p>
                     <button id="manual-search-trigger" class="goto-btn">Search Manually</button>
                 </div>`;
             document.getElementById('manual-search-trigger').addEventListener('click', () => {
@@ -6949,12 +6949,13 @@ audioPlayer.addEventListener('timeupdate', async () => {
 
         if (song && song.lrcData && song.lrcData.lyrics && isPanelVisible && panelContent === 'lyrics') {
             const currentTime = audioPlayer.currentTime;
-            // Filter to get only the actual lyric lines for processing
+            // Filter to get only the actual lyric lines, which we will work with
             const lines = song.lrcData.lyrics.filter(l => l.type === 'line');
             if (lines.length === 0) return;
         
-            // --- Step 1: Find the single, most recent active line index (the reliable method) ---
             let newLrcLineIndex = -1;
+        
+            // Find the index of the last line that has passed
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].time <= currentTime) {
                     newLrcLineIndex = i;
@@ -6962,58 +6963,30 @@ audioPlayer.addEventListener('timeupdate', async () => {
                     break;
                 }
             }
-        
-            // --- Step 2: Only update the DOM if the main active line has changed ---
+            
+            // Only update the DOM if the active line has actually changed
             if (newLrcLineIndex !== currentLrcLineIndex) {
+                // Query for all main lyric P tags in the DOM
+                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p:not(.lyric-aside)');
+                if(allLyricElements.length === 0) return;
         
-                // --- Step 3: Now, find all lines (including overlaps) to highlight ---
-                const activeTimestamp = (newLrcLineIndex !== -1) ? lines[newLrcLineIndex].time : -1;
-                const activeIndices = [];
-                if (newLrcLineIndex !== -1) {
-                    activeIndices.push(newLrcLineIndex);
-                    // Scan backwards from the main line to find any others with the same timestamp
-                    for (let i = newLrcLineIndex - 1; i >= 0; i--) {
-                        if (lines[i].time === activeTimestamp) {
-                            activeIndices.push(i);
-                        } else {
-                            break;
-                        }
-                    }
-                }
-        
-                // --- Step 4: Update the styles for all lyric and aside elements ---
-                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p.lyric-line');
-                const allAsideElements = document.querySelectorAll('#lyrics-scroll-container p.lyric-aside');
                 const MAX_BLUR = 5.0, BLUR_STEP = 1.5, MIN_OPACITY = 0.4, OPACITY_STEP = 0.2;
-        
-                // Style main lyric lines based on the 'activeIndices' array
+                
+                // Apply blur and opacity based on distance from the single new active line
                 allLyricElements.forEach((el, index) => {
-                    const isActive = activeIndices.includes(index);
-                    // Base the distance calculation on the primary new line for consistent blur
                     const distance = Math.abs(index - newLrcLineIndex);
-        
-                    el.style.fontFamily = isActive ? "'Open Runde', sans-serif" : ""; // Use Open Runde for active lines
-                    el.style.filter = isActive ? 'blur(0px)' : `blur(${Math.min(MAX_BLUR, distance * BLUR_STEP)}px)`;
-                    el.style.opacity = isActive ? '1' : `${Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP)}`;
+                    const blurValue = (distance === 0) ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
+                    const opacityValue = (distance === 0) ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
+                    el.style.filter = `blur(${blurValue}px)`;
+                    el.style.opacity = opacityValue;
                 });
         
-                // Style asides based on the active timestamp
-                allAsideElements.forEach(el => {
-                    const elTime = parseFloat(el.dataset.time);
-                    const isAsideActive = elTime === activeTimestamp;
-                    el.style.opacity = isAsideActive ? '0.8' : '0.3';
-                    el.style.filter = isAsideActive ? 'blur(0px)' : 'blur(2px)';
-                });
-        
-                // --- Step 5: Scroll the new primary line into view ---
-                if (newLrcLineIndex !== -1) {
-                    const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
-                    if (newLine) {
-                        newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
+                const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
+                if (newLine) {
+                    newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
         
-                // --- Step 6: Update the state for the next check ---
+                // Update the global index for the next check
                 currentLrcLineIndex = newLrcLineIndex;
             }
         }
