@@ -6922,7 +6922,6 @@ async function verifyPermission(handle, shouldRequest = false) {
         }
 
 let currentLrcLineIndex = -1;
-let currentLrcLineIndices = [];
 
 audioPlayer.addEventListener('timeupdate', async () => {
     if (currentSongId) {
@@ -6950,67 +6949,72 @@ audioPlayer.addEventListener('timeupdate', async () => {
 
         if (song && song.lrcData && song.lrcData.lyrics && isPanelVisible && panelContent === 'lyrics') {
             const currentTime = audioPlayer.currentTime;
+            // Filter to get only the actual lyric lines for processing
             const lines = song.lrcData.lyrics.filter(l => l.type === 'line');
             if (lines.length === 0) return;
         
-            let lastPassedLineIndex = -1;
+            // --- Step 1: Find the single, most recent active line index (the reliable method) ---
+            let newLrcLineIndex = -1;
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].time <= currentTime) {
-                    lastPassedLineIndex = i;
+                    newLrcLineIndex = i;
                 } else {
                     break;
                 }
             }
         
-            let activeIndices = [];
-            let activeTimestamp = -1;
-            if (lastPassedLineIndex !== -1) {
-                activeTimestamp = lines[lastPassedLineIndex].time;
-                activeIndices.push(lastPassedLineIndex);
-                // Scan backwards for any other lines with the same timestamp (for overlaps)
-                for (let i = lastPassedLineIndex - 1; i >= 0; i--) {
-                    if (lines[i].time === activeTimestamp) {
-                        activeIndices.push(i);
-                    } else {
-                        break;
+            // --- Step 2: Only update the DOM if the main active line has changed ---
+            if (newLrcLineIndex !== currentLrcLineIndex) {
+        
+                // --- Step 3: Now, find all lines (including overlaps) to highlight ---
+                const activeTimestamp = (newLrcLineIndex !== -1) ? lines[newLrcLineIndex].time : -1;
+                const activeIndices = [];
+                if (newLrcLineIndex !== -1) {
+                    activeIndices.push(newLrcLineIndex);
+                    // Scan backwards from the main line to find any others with the same timestamp
+                    for (let i = newLrcLineIndex - 1; i >= 0; i--) {
+                        if (lines[i].time === activeTimestamp) {
+                            activeIndices.push(i);
+                        } else {
+                            break;
+                        }
                     }
                 }
-            }
         
-            // Only update the DOM if the set of active lines has changed
-            if (activeIndices.join(',') !== currentLrcLineIndices.join(',')) {
-                currentLrcLineIndices = activeIndices;
-                
+                // --- Step 4: Update the styles for all lyric and aside elements ---
                 const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p.lyric-line');
                 const allAsideElements = document.querySelectorAll('#lyrics-scroll-container p.lyric-aside');
-                
                 const MAX_BLUR = 5.0, BLUR_STEP = 1.5, MIN_OPACITY = 0.4, OPACITY_STEP = 0.2;
-                
-                // Style main lyric lines
+        
+                // Style main lyric lines based on the 'activeIndices' array
                 allLyricElements.forEach((el, index) => {
                     const isActive = activeIndices.includes(index);
-                    const focusIndex = activeIndices.length > 0 ? activeIndices[0] : -1;
-                    const distance = Math.abs(index - focusIndex);
+                    // Base the distance calculation on the primary new line for consistent blur
+                    const distance = Math.abs(index - newLrcLineIndex);
         
-                    el.style.fontFamily = isActive ? "'Open Runde'" : ""; // "" reverts to CSS default
+                    el.style.fontFamily = isActive ? "'Open Runde', sans-serif" : ""; // Use Open Runde for active lines
                     el.style.filter = isActive ? 'blur(0px)' : `blur(${Math.min(MAX_BLUR, distance * BLUR_STEP)}px)`;
                     el.style.opacity = isActive ? '1' : `${Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP)}`;
                 });
-                
+        
                 // Style asides based on the active timestamp
                 allAsideElements.forEach(el => {
                     const elTime = parseFloat(el.dataset.time);
-                    // An aside is "active" if its timestamp matches the currently sung line
                     const isAsideActive = elTime === activeTimestamp;
-                    el.style.opacity = isAsideActive ? '0.8' : '0.3'; // Make inactive asides much fainter
+                    el.style.opacity = isAsideActive ? '0.8' : '0.3';
+                    el.style.filter = isAsideActive ? 'blur(0px)' : 'blur(2px)';
                 });
         
-                if (activeIndices.length > 0) {
-                    const firstActiveLine = document.getElementById(`lyric-line-${activeIndices[0]}`);
-                    if (firstActiveLine) {
-                        firstActiveLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // --- Step 5: Scroll the new primary line into view ---
+                if (newLrcLineIndex !== -1) {
+                    const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
+                    if (newLine) {
+                        newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
                 }
+        
+                // --- Step 6: Update the state for the next check ---
+                currentLrcLineIndex = newLrcLineIndex;
             }
         }
     }
