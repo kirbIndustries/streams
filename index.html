@@ -6922,6 +6922,7 @@ async function verifyPermission(handle, shouldRequest = false) {
         }
 
 let currentLrcLineIndex = -1;
+let currentLrcLineIndices = [];
 
 audioPlayer.addEventListener('timeupdate', async () => {
     if (currentSongId) {
