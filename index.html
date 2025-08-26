@@ -4811,13 +4811,26 @@ async function renderLyrics() {
             
             lyricsContainer.innerHTML = lyricsHtml;
 
-            // This selector is now simpler
             lyricsContainer.querySelectorAll('p:not(.lyric-aside)').forEach(lineEl => {
                 lineEl.addEventListener('click', () => {
                     const seekTime = parseFloat(lineEl.dataset.time);
                     if (!isNaN(seekTime)) audioPlayer.currentTime = seekTime;
                 });
             });
+
+            lyricsContainer.addEventListener('scroll', () => {
+                isUserScrollingLyrics = true;
+                clearTimeout(lyricsScrollTimeout);
+                lyricsContainer.querySelectorAll('p').forEach(p => {
+                    p.style.filter = 'none';
+                    p.style.opacity = 1;
+                });
+                lyricsScrollTimeout = setTimeout(() => {
+                    isUserScrollingLyrics = false;
+                    lastActiveIndex = -1; // Force a style recalculation
+                }, 250);
+            });
+
         } else {
             lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none; white-space: pre-wrap;">${song.lyrics}</p>`;
         }
@@ -6930,7 +6943,9 @@ async function verifyPermission(handle, shouldRequest = false) {
             durationDisplay.textContent = formatTime(duration);
         }
 
-let lastActiveTimestamp = -1;
+let lastActiveIndex = -1;
+let isUserScrollingLyrics = false;
+let lyricsScrollTimeout = null;
 
 audioPlayer.addEventListener('timeupdate', async () => {
     if (currentSongId) {
@@ -6957,69 +6972,50 @@ audioPlayer.addEventListener('timeupdate', async () => {
         }
         
         if (song && song.lrcData && song.lrcData.lyrics && isPanelVisible && panelContent === 'lyrics') {
+            if (isUserScrollingLyrics) return; // Halt updates while user scrolls
+
             const currentTime = audioPlayer.currentTime;
-            const allLyrics = song.lrcData.lyrics;
-        
-            // 1. Find the timestamp of the most recent event (line or aside)
-            let trueActiveTimestamp = -1;
-            for (const item of allLyrics) {
-                if (item.time <= currentTime) {
-                    trueActiveTimestamp = item.time;
-                } else {
-                    break; // The list is sorted, so we can stop.
+            const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p');
+            if (allLyricElements.length === 0) return;
+
+            let activeIndex = -1;
+            allLyricElements.forEach((el, index) => {
+                const elTime = parseFloat(el.dataset.time);
+                if (!isNaN(elTime) && elTime <= currentTime) {
+                    activeIndex = index;
                 }
-            }
-        
-            // 2. Only update the DOM if the active timestamp has changed.
-            // This is the key fix that correctly detects changes for asides.
-            if (trueActiveTimestamp !== lastActiveTimestamp) {
-                const allMainLineElements = document.querySelectorAll('#lyrics-scroll-container p:not(.lyric-aside)');
-                const allAsideElements = document.querySelectorAll('#lyrics-scroll-container p.lyric-aside');
-        
-                const MAX_BLUR = 5.0, BLUR_STEP = 1.5, MIN_OPACITY = 0.4, OPACITY_STEP = 0.2;
-        
-                // Find the index of the last main line for scrolling and distance calculation
-                let lastPassedMainLineIndex = -1;
-                const mainLines = allLyrics.filter(l => l.type === 'line');
-                for (let i = 0; i < mainLines.length; i++) {
-                    if (mainLines[i].time <= currentTime) {
-                        lastPassedMainLineIndex = i;
-                    } else {
-                        break;
+            });
+
+            if (activeIndex !== lastActiveIndex) {
+                allLyricElements.forEach((el, index) => {
+                    const distance = index - activeIndex;
+                    let blur = 0;
+                    let opacity = 1;
+
+                    if (distance > 0) { // Lines below active line
+                        if (distance >= 5) {
+                            blur = 5; opacity = 0;
+                        } else {
+                            blur = distance * 1.25;
+                            opacity = 1 - (distance * 0.25);
+                        }
+                    } else if (distance < 0) { // Lines above active line
+                        const absDist = Math.abs(distance);
+                        if (absDist >= 2) {
+                            blur = 3; opacity = 0;
+                        } else { // absDist is 1
+                            blur = 1.5; opacity = 0.5;
+                        }
                     }
-                }
-        
-                // 3. Style all main lyric lines
-                allMainLineElements.forEach((el, index) => {
-                    const elTime = parseFloat(el.dataset.time);
-                    const isActive = (elTime === trueActiveTimestamp);
-                    const distance = Math.abs(index - lastPassedMainLineIndex);
-                    
-                    // Blur and opacity are based on distance from the last passed main line
-                    const blurValue = (index === lastPassedMainLineIndex) ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
-                    const opacityValue = (index === lastPassedMainLineIndex) ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
-        
-                    el.style.filter = `blur(${blurValue}px)`;
-                    el.style.opacity = opacityValue;
+                    el.style.filter = `blur(${blur}px)`;
+                    el.style.opacity = opacity;
                 });
-        
-                // 4. Style all aside elements
-                allAsideElements.forEach(el => {
-                    const elTime = parseFloat(el.dataset.time);
-                    const isActive = (elTime === trueActiveTimestamp);
-        
-                    el.style.filter = isActive ? 'blur(0px)' : `blur(${MAX_BLUR}px)`;
-                    el.style.opacity = isActive ? 0.8 : MIN_OPACITY;
-                });
-        
-                // 5. Scroll the last passed MAIN line into view
-                const newLine = document.getElementById(`lyric-line-${lastPassedMainLineIndex}`);
-                if (newLine) {
-                    newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                const activeElement = allLyricElements[activeIndex];
+                if (activeElement) {
+                    activeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
-        
-                // 6. Update the state for the next check
-                lastActiveTimestamp = trueActiveTimestamp;
+                lastActiveIndex = activeIndex;
             }
         }
     }
