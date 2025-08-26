@@ -1407,37 +1407,12 @@
             font-size: 1.5rem;
             font-weight: 600;
             line-height: 1.4; /* Improves readability */
+            font-family: 'Open Runde';
         }
 
-        .instrumental-break {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: var(--secondary-text-color);
-            opacity: 0; /* Initially hidden */
-            transition: opacity 0.5s ease;
-            margin: 25px 0;
-            text-align: center;
-        }
-
-        .instrumental-break.active {
-            opacity: 1;
-        }
-
-        .instrumental-break span {
-            transition: opacity 0.3s ease;
-            opacity: 0.3;
-        }
-
-        .parenthetical-lyrics {
-            margin-top: 40px;
-            padding-top: 20px;
-        }
-
-        .parenthetical-lyrics p {
-            font-size: 0.9rem;
-            color: var(--secondary-text-color);
-            margin: 8px 0;
-            font-weight: normal;
+        .lyrics-container p.active {
+            background: var(--search-background);
+            scale: 0.96;
         }
  
         .queue-item .song-info {
@@ -4785,69 +4760,22 @@ async function renderLyrics() {
         return;
     }
     
+    // Capture the ID of the song at the moment this function is called.
     const songIdForThisRender = currentSongId;
     const song = currentlyPlayingSong;
-
+    
     if (song.lyrics) {
+        // Lyrics already exist, so display them
         if (song.lrcData && song.lrcData.length > 0) {
-            // --- NEW: Pre-processing logic ---
-            const INSTRUMENTAL_THRESHOLD = 5; // 5 seconds
-            const processedLyrics = [];
-            const parentheticalLyrics = [];
-
-            // 1. Separate parenthetical lines
-            const mainLyrics = song.lrcData.filter(line => {
-                const isParenthetical = (line.text.startsWith('(') && line.text.endsWith(')')) || (line.text.startsWith('[') && line.text.endsWith(']'));
-                if (isParenthetical) {
-                    parentheticalLyrics.push(line);
-                }
-                return !isParenthetical;
-            });
-
-            // 2. Identify instrumental breaks in the main lyrics
-            for (let i = 0; i < mainLyrics.length; i++) {
-                processedLyrics.push(mainLyrics[i]);
-                const currentLine = mainLyrics[i];
-                const nextLine = mainLyrics[i + 1];
-                if (nextLine) {
-                    const timeDiff = nextLine.time - currentLine.time;
-                    if (timeDiff > INSTRUMENTAL_THRESHOLD) {
-                        processedLyrics.push({
-                            isInstrumental: true,
-                            time: currentLine.time + 0.1, // Starts just after the last line
-                            nextTime: nextLine.time - 0.1 // Ends just before the next line
-                        });
-                    }
-                }
-            }
-
-            // 3. Render the processed lyrics
-            let html = processedLyrics.map((line, index) => {
-                if (line.isInstrumental) {
-                    // Mark as active if the current time falls within its duration
-                    const isActive = audioPlayer.currentTime >= line.time && audioPlayer.currentTime < line.nextTime;
-                    return `<div class="instrumental-break ${isActive ? 'active' : ''}" data-time="${line.time}" data-next-time="${line.nextTime}"><span>.</span><span>.</span><span>.</span></div>`;
-                } else {
-                    return `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '• • •'}</p>`;
-                }
-            }).join('');
-            
-            // 4. Append the parenthetical lyrics at the end
-            if (parentheticalLyrics.length > 0) {
-                html += '<div class="parenthetical-lyrics">';
-                html += parentheticalLyrics.map(line => `<p>${line.text}</p>`).join('');
-                html += '</div>';
-            }
-
-            lyricsContainer.innerHTML = html;
-
-            lyricsContainer.querySelectorAll('p[data-time]').forEach(lineEl => {
+            lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
+                `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '• • •'}</p>`
+            ).join('');
+            lyricsContainer.querySelectorAll('p').forEach(lineEl => {
                 lineEl.addEventListener('click', () => {
                     const seekTime = parseFloat(lineEl.dataset.time);
                     if (!isNaN(seekTime)) audioPlayer.currentTime = seekTime;
                 });
             });
-
         } else {
             lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none; white-space: pre-wrap;">${song.lyrics}</p>`;
         }
@@ -4870,26 +4798,28 @@ async function renderLyrics() {
             if (song.storage === 'soundcloud') await updateSoundcloudCacheWithLyrics(song);
             else await saveSongs();
             
-            renderLyrics();
+            renderLyrics(); // Re-run to display
         } else {
+            // Automatic search failed, provide manual option
             lyricsContainer.innerHTML = `
                 <div class="no-results">
-                    <p>No lyrics found.</p>
+                    <p>No lyrics found automatically.</p>
                     <button id="manual-search-trigger" class="goto-btn">Search Manually</button>
                 </div>`;
             document.getElementById('manual-search-trigger').addEventListener('click', () => {
                 const cleaned = cleanMetadataForLyricsSearch(song);
                 document.getElementById('manualLyricsSearchInput').value = `${cleaned.artist} - ${cleaned.name}`;
-                document.getElementById('manualLyricsResults').innerHTML = '';
+                document.getElementById('manualLyricsResults').innerHTML = ''; // Clear old results
                 openModal(manualLyricsSearchModal);
             });
         }
         return;
     }
 
+    // Fallback if LRCLIB is disabled
     lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found.</p>`;
 }
-        
+
 async function fetchLyricsFromLrclib(song) {
     if (!song) return null;
 
@@ -6987,59 +6917,35 @@ audioPlayer.addEventListener('timeupdate', async () => {
              audioPlayer.isFading = true;
              playNextSong({ isTransition: true });
         }
-        
+
         if (song && song.lrcData && isPanelVisible && panelContent === 'lyrics') {
             const currentTime = audioPlayer.currentTime;
             let newLrcLineIndex = -1;
 
             for (let i = 0; i < song.lrcData.length; i++) {
-                // Find the index of the line that should be active
-                if (!song.lrcData[i].isInstrumental && song.lrcData[i].time <= currentTime) {
-                    newLrcLineIndex = i;
-                }
+                if (song.lrcData[i].time <= currentTime) newLrcLineIndex = i;
+                else break;
             }
             
             if (newLrcLineIndex !== currentLrcLineIndex) {
-                currentLrcLineIndex = newLrcLineIndex; // Update the global index
-
-                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p, #lyrics-scroll-container .instrumental-break');
+                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p');
                 if(allLyricElements.length === 0) return;
 
                 const MAX_BLUR = 5.0, BLUR_STEP = 1.5, MIN_OPACITY = 0.4, OPACITY_STEP = 0.2;
                 
                 allLyricElements.forEach((el, index) => {
-                    // We now use the updated global index for distance calculation
-                    const distance = Math.abs(index - currentLrcLineIndex);
+                    const distance = Math.abs(index - newLrcLineIndex);
                     const blurValue = (distance === 0) ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
                     const opacityValue = (distance === 0) ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
-                    
-                    if (!el.classList.contains('instrumental-break')) {
-                        el.style.filter = `blur(${blurValue}px)`;
-                        el.style.opacity = opacityValue;
-                    }
+                    el.style.filter = `blur(${blurValue}px)`;
+                    el.style.opacity = opacityValue;
                 });
 
-                const newLine = document.getElementById(`lyric-line-${currentLrcLineIndex}`);
-                if (newLine) {
-                    newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
+                const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
+                if (newLine) newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                currentLrcLineIndex = newLrcLineIndex;
             }
-
-            // --- NEW: Handle Instrumental Break Animation ---
-            document.querySelectorAll('.instrumental-break.active').forEach(breakEl => {
-                const startTime = parseFloat(breakEl.dataset.time);
-                const nextTime = parseFloat(breakEl.dataset.nextTime);
-                const breakDuration = nextTime - startTime;
-                const progressInBreak = (currentTime - startTime) / breakDuration;
-
-                const dot1 = breakEl.querySelector('span:nth-child(1)');
-                const dot2 = breakEl.querySelector('span:nth-child(2)');
-                const dot3 = breakEl.querySelector('span:nth-child(3)');
-
-                if (dot1) dot1.style.opacity = progressInBreak > 0.1 ? '1' : '0.3';
-                if (dot2) dot2.style.opacity = progressInBreak > 0.33 ? '1' : '0.3';
-                if (dot3) dot3.style.opacity = progressInBreak > 0.66 ? '1' : '0.3';
-            });
         }
     }
 });
