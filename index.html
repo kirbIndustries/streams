@@ -6945,61 +6945,78 @@ audioPlayer.addEventListener('timeupdate', async () => {
              audioPlayer.isFading = true;
              playNextSong({ isTransition: true });
         }
-
+        
         if (song && song.lrcData && song.lrcData.lyrics && isPanelVisible && panelContent === 'lyrics') {
             const currentTime = audioPlayer.currentTime;
-            const lines = song.lrcData.lyrics.filter(l => l.type === 'line');
-            if (lines.length === 0) return;
+            const allLyrics = song.lrcData.lyrics;
+            const mainLines = allLyrics.filter(l => l.type === 'line');
+            if (mainLines.length === 0) return; // Only proceed if there are main lyrics to highlight
         
-            let newLrcLineIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                if (lines[i].time <= currentTime) {
-                    newLrcLineIndex = i;
+            // --- NEW LOGIC: Determine the true active state ---
+        
+            // 1. Find the timestamp of the most recent event (line or aside) that has passed.
+            let trueActiveTimestamp = -1;
+            for (const item of allLyrics) {
+                if (item.time <= currentTime) {
+                    trueActiveTimestamp = item.time;
+                } else {
+                    break; // The list is sorted, so we can stop.
+                }
+            }
+        
+            // 2. Find the index of the most recent MAIN line that has passed.
+            // This is used for scrolling and calculating blur distance.
+            let lastPassedMainLineIndex = -1;
+            for (let i = 0; i < mainLines.length; i++) {
+                if (mainLines[i].time <= currentTime) {
+                    lastPassedMainLineIndex = i;
                 } else {
                     break;
                 }
             }
             
-            if (newLrcLineIndex !== currentLrcLineIndex) {
-                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p:not(.lyric-aside)');
+            // 3. Only update the DOM if the main active line has changed (for efficiency).
+            if (lastPassedMainLineIndex !== currentLrcLineIndex) {
+                const allMainLineElements = document.querySelectorAll('#lyrics-scroll-container p:not(.lyric-aside)');
                 const allAsideElements = document.querySelectorAll('#lyrics-scroll-container p.lyric-aside');
-                if (allLyricElements.length === 0 && allAsideElements.length === 0) return;
         
                 const MAX_BLUR = 5.0, BLUR_STEP = 1.5, MIN_OPACITY = 0.4, OPACITY_STEP = 0.2;
                 
-                // Get the timestamp of the currently active main line
-                const activeTimestamp = (newLrcLineIndex > -1) ? lines[newLrcLineIndex].time : -1;
+                // 4. Style the main lyric lines.
+                allMainLineElements.forEach((el, index) => {
+                    const elTime = parseFloat(el.dataset.time);
+                    // A line is "active" if its timestamp matches the true active timestamp.
+                    const isActive = (elTime === trueActiveTimestamp);
+                    const distance = Math.abs(index - lastPassedMainLineIndex);
         
-                // Style the main lyric lines
-                allLyricElements.forEach((el, index) => {
-                    const isActive = (index === newLrcLineIndex);
-                    const distance = Math.abs(index - newLrcLineIndex);
-        
-                    // Feature: Change font for active line
                     el.style.fontFamily = isActive ? "'Open Runde', sans-serif" : "'Inter', sans-serif";
+                    
+                    // Blur and opacity are based on distance from the last passed main line.
+                    const blurValue = (index === lastPassedMainLineIndex) ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
+                    const opacityValue = (index === lastPassedMainLineIndex) ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
         
-                    // Bug Fix: Restore blur and opacity logic
-                    const blurValue = isActive ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
-                    const opacityValue = isActive ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
                     el.style.filter = `blur(${blurValue}px)`;
                     el.style.opacity = opacityValue;
                 });
         
-                // Bug Fix: Style the asides based on the active timestamp
+                // 5. Style the asides.
                 allAsideElements.forEach(el => {
                     const elTime = parseFloat(el.dataset.time);
-                    const isAssociatedWithActiveLine = (elTime === activeTimestamp);
+                    // An aside is "active" if its timestamp matches the true active timestamp.
+                    const isActive = (elTime === trueActiveTimestamp);
         
-                    el.style.filter = isAssociatedWithActiveLine ? 'blur(0px)' : `blur(${MAX_BLUR}px)`;
-                    el.style.opacity = isAssociatedWithActiveLine ? 0.8 : MIN_OPACITY;
+                    el.style.filter = isActive ? 'blur(0px)' : `blur(${MAX_BLUR}px)`;
+                    el.style.opacity = isActive ? 0.8 : MIN_OPACITY;
                 });
         
-                const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
+                // 6. Scroll the last passed MAIN line into view.
+                const newLine = document.getElementById(`lyric-line-${lastPassedMainLineIndex}`);
                 if (newLine) {
                     newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
         
-                currentLrcLineIndex = newLrcLineIndex;
+                // 7. Update the state for the next check.
+                currentLrcLineIndex = lastPassedMainLineIndex;
             }
         }
     }
