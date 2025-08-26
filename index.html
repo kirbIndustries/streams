@@ -1413,7 +1413,6 @@
         .lyrics-container p.lyric-aside {
             font-size: 1rem;
             font-weight: 500;
-            font-style: italic;
             color: var(--secondary-text-color);
             margin: -10px 0 18px 0;
             opacity: 0.8;
@@ -3384,7 +3383,8 @@ function parseLRC(lrcText) {
 
                 // If the part matches the aside format, classify it as 'aside'
                 if (asideRegex.test(text)) {
-                    allEntries.push({ time, text, type: 'aside' });
+                    const cleanedAsideText = text.slice(1, -1);
+                    allEntries.push({ time, text: cleanedAsideText, type: 'aside' });
                 } else {
                     allEntries.push({ time, text, type: 'line' });
                 }
@@ -6922,6 +6922,7 @@ async function verifyPermission(handle, shouldRequest = false) {
         }
 
 let currentLrcLineIndex = -1;
+let currentLrcLineIndices = [];
 
 audioPlayer.addEventListener('timeupdate', async () => {
     if (currentSongId) {
