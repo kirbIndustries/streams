@@ -1414,6 +1414,27 @@
             background: var(--search-background);
             scale: 0.96;
         }
+
+        .lyrics-container p.lyric-line {
+            white-space: pre-wrap;
+            transition: all 0.4s ease-out; /* Smooth transition for filter and opacity */
+            margin: 18px 0;
+            padding: 0 10px;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 1.5rem;
+            font-weight: 600;
+            line-height: 1.4; /* Improves readability */
+        }
+        
+        .lyrics-container p.lyric-marker {
+            font-size: 1rem;
+            font-weight: 500;
+            font-style: italic;
+            color: var(--secondary-text-color);
+            margin: 15px 0;
+            opacity: 0.7;
+        }
  
         .queue-item .song-info {
             display: flex;
@@ -2458,6 +2479,7 @@
         // --- LRCLIB variables ---
         let isLrclibEnabled = false;
         let lastLrclibSearchResults = [];
+        
 
         function sanitize(str) {
             if (!str) return '';
@@ -3346,32 +3368,39 @@ function parseLRC(lrcText) {
         return null;
     }
 
-    const lrcData = [];
+    const lrcData = {
+        lines: [],
+        markers: []
+    };
     const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/g;
     
-    const matches = [...lrcText.matchAll(timeRegex)];
+    const lines = lrcText.split('\n');
 
-    if (matches.length === 0) {
-        return null;
-    }
+    lines.forEach(line => {
+        const matches = [...line.matchAll(timeRegex)];
+        if (matches.length === 0) return;
 
-    matches.forEach((match, index) => {
-        const minutes = parseInt(match[1], 10);
-        const seconds = parseInt(match[2], 10);
-        const milliseconds = parseInt(match[3].padEnd(3, '0'), 10);
-        const time = minutes * 60 + seconds + milliseconds / 1000;
+        const text = line.substring(matches[matches.length - 1].index + matches[matches.length - 1][0].length).trim();
 
-        const textStartIndex = match.index + match[0].length;
-        
-        const nextMatch = matches[index + 1];
-        const textEndIndex = nextMatch ? nextMatch.index : lrcText.length;
-        
-        const text = lrcText.substring(textStartIndex, textEndIndex).trim();
+        matches.forEach(match => {
+            const minutes = parseInt(match[1], 10);
+            const seconds = parseInt(match[2], 10);
+            const milliseconds = parseInt(match[3].padEnd(3, '0'), 10);
+            const time = minutes * 60 + seconds + milliseconds / 1000;
 
-        lrcData.push({ time, text });
+            if (text.startsWith('[') && text.endsWith(']')) {
+                lrcData.markers.push({ time, text });
+            } else {
+                lrcData.lines.push({ time, text });
+            }
+        });
     });
 
-    return lrcData.length > 0 ? lrcData : null;
+    // Sort both arrays by time, as multiple timestamps can be on one line
+    lrcData.lines.sort((a, b) => a.time - b.time);
+    lrcData.markers.sort((a, b) => a.time - b.time);
+
+    return (lrcData.lines.length > 0 || lrcData.markers.length > 0) ? lrcData : null;
 }
         
 async function loadSongsFromStorage() {
@@ -4760,17 +4789,21 @@ async function renderLyrics() {
         return;
     }
     
-    // Capture the ID of the song at the moment this function is called.
     const songIdForThisRender = currentSongId;
     const song = currentlyPlayingSong;
-    
+
     if (song.lyrics) {
-        // Lyrics already exist, so display them
-        if (song.lrcData && song.lrcData.length > 0) {
-            lyricsContainer.innerHTML = song.lrcData.map((line, index) => 
-                `<p id="lyric-line-${index}" data-time="${line.time}">${line.text || '• • •'}</p>`
+        if (song.lrcData && (song.lrcData.lines.length > 0 || song.lrcData.markers.length > 0)) {
+            const linesHtml = song.lrcData.lines.map((line, index) => 
+                `<p class="lyric-line" id="lyric-line-${index}" data-time="${line.time}">${line.text || '• • •'}</p>`
             ).join('');
-            lyricsContainer.querySelectorAll('p').forEach(lineEl => {
+            const markersHtml = song.lrcData.markers.map(marker => 
+                `<p class="lyric-marker">${marker.text}</p>`
+            ).join('');
+            
+            lyricsContainer.innerHTML = linesHtml + markersHtml;
+
+            lyricsContainer.querySelectorAll('p.lyric-line').forEach(lineEl => {
                 lineEl.addEventListener('click', () => {
                     const seekTime = parseFloat(lineEl.dataset.time);
                     if (!isNaN(seekTime)) audioPlayer.currentTime = seekTime;
@@ -4787,7 +4820,6 @@ async function renderLyrics() {
         const fetchedLyrics = await fetchLyricsFromLrclib(song);
 
         if (songIdForThisRender !== currentSongId) {
-            console.log("Lyric fetch aborted; song changed during request.");
             return; 
         }
 
@@ -4798,9 +4830,8 @@ async function renderLyrics() {
             if (song.storage === 'soundcloud') await updateSoundcloudCacheWithLyrics(song);
             else await saveSongs();
             
-            renderLyrics(); // Re-run to display
+            renderLyrics();
         } else {
-            // Automatic search failed, provide manual option
             lyricsContainer.innerHTML = `
                 <div class="no-results">
                     <p>No lyrics found automatically.</p>
@@ -4809,14 +4840,13 @@ async function renderLyrics() {
             document.getElementById('manual-search-trigger').addEventListener('click', () => {
                 const cleaned = cleanMetadataForLyricsSearch(song);
                 document.getElementById('manualLyricsSearchInput').value = `${cleaned.artist} - ${cleaned.name}`;
-                document.getElementById('manualLyricsResults').innerHTML = ''; // Clear old results
+                document.getElementById('manualLyricsResults').innerHTML = '';
                 openModal(manualLyricsSearchModal);
             });
         }
         return;
     }
 
-    // Fallback if LRCLIB is disabled
     lyricsContainer.innerHTML = `<p style="opacity: 1; filter: none;">No lyrics found.</p>`;
 }
 
@@ -5483,6 +5513,7 @@ async function playSong(song, playContext = null) {
 
     try {
         audioPlayer.pause();
+        currentLrcLineIndices = [];
         song.hasBeenLogged = false;
         currentlyPlayingSong = song;
         
@@ -6893,6 +6924,7 @@ async function verifyPermission(handle, shouldRequest = false) {
         }
 
 let currentLrcLineIndex = -1;
+let currentLrcLineIndices = [];
 
 audioPlayer.addEventListener('timeupdate', async () => {
     if (currentSongId) {
@@ -6918,33 +6950,57 @@ audioPlayer.addEventListener('timeupdate', async () => {
              playNextSong({ isTransition: true });
         }
 
-        if (song && song.lrcData && isPanelVisible && panelContent === 'lyrics') {
+        if (song && song.lrcData && song.lrcData.lines.length > 0 && isPanelVisible && panelContent === 'lyrics') {
             const currentTime = audioPlayer.currentTime;
-            let newLrcLineIndex = -1;
+            const lines = song.lrcData.lines;
+            
+            let lastPassedLineIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].time <= currentTime) {
+                    lastPassedLineIndex = i;
+                } else {
+                    break;
+                }
+            }
 
-            for (let i = 0; i < song.lrcData.length; i++) {
-                if (song.lrcData[i].time <= currentTime) newLrcLineIndex = i;
-                else break;
+            let newActiveIndices = [];
+            if (lastPassedLineIndex !== -1) {
+                const currentTimestamp = lines[lastPassedLineIndex].time;
+                newActiveIndices.push(lastPassedLineIndex);
+                // Scan backwards for any other lines with the same timestamp (for overlaps)
+                for (let i = lastPassedLineIndex - 1; i >= 0; i--) {
+                    if (lines[i].time === currentTimestamp) {
+                        newActiveIndices.push(i);
+                    } else {
+                        break;
+                    }
+                }
             }
             
-            if (newLrcLineIndex !== currentLrcLineIndex) {
-                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p');
+            if (newActiveIndices.join(',') !== currentLrcLineIndices.join(',')) {
+                currentLrcLineIndices = newActiveIndices;
+                
+                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container .lyric-line');
                 if(allLyricElements.length === 0) return;
 
                 const MAX_BLUR = 5.0, BLUR_STEP = 1.5, MIN_OPACITY = 0.4, OPACITY_STEP = 0.2;
                 
                 allLyricElements.forEach((el, index) => {
-                    const distance = Math.abs(index - newLrcLineIndex);
-                    const blurValue = (distance === 0) ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
-                    const opacityValue = (distance === 0) ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
+                    const isActive = currentLrcLineIndices.includes(index);
+                    const focusIndex = currentLrcLineIndices.length > 0 ? currentLrcLineIndices[0] : -1;
+                    const distance = Math.abs(index - focusIndex);
+
+                    const blurValue = isActive ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
+                    const opacityValue = isActive ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
+                    
                     el.style.filter = `blur(${blurValue}px)`;
                     el.style.opacity = opacityValue;
                 });
 
-                const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
-                if (newLine) newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-                currentLrcLineIndex = newLrcLineIndex;
+                if (currentLrcLineIndices.length > 0) {
+                    const firstActiveLine = document.getElementById(`lyric-line-${currentLrcLineIndices[0]}`);
+                    if (firstActiveLine) firstActiveLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
             }
         }
     }
