@@ -4827,9 +4827,17 @@ async function fetchLyricsFromLrclib(song) {
     const cleanedSong = cleanMetadataForLyricsSearch(song);
     const artist = encodeURIComponent(cleanedSong.artist);
     const track = encodeURIComponent(cleanedSong.name);
-    const album = encodeURIComponent(cleanedSong.album);
 
-    const url = `https://lrclib.net/api/get?artist_name=${artist}&track_name=${track}&album_name=${album}`;
+    // Start building the URL with the required parameters
+    let url = `https://lrclib.net/api/get?artist_name=${artist}&track_name=${track}`;
+
+    // --- THE FIX ---
+    // Only add the album_name parameter if it's NOT a SoundCloud song
+    // and if an album name actually exists.
+    if (song.storage !== 'soundcloud' && cleanedSong.album) {
+        const album = encodeURIComponent(cleanedSong.album);
+        url += `&album_name=${album}`;
+    }
 
     try {
         const response = await fetch(url);
