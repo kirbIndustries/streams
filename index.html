@@ -4819,6 +4819,10 @@ async function renderLyrics() {
             });
 
             lyricsContainer.addEventListener('scroll', () => {
+                // If the scroll was triggered by our code, ignore it.
+                if (isProgrammaticScroll) return;
+
+                // Otherwise, it's a user scroll.
                 isUserScrollingLyrics = true;
                 clearTimeout(lyricsScrollTimeout);
                 lyricsContainer.querySelectorAll('p').forEach(p => {
@@ -6946,6 +6950,7 @@ async function verifyPermission(handle, shouldRequest = false) {
 let lastActiveIndex = -1;
 let isUserScrollingLyrics = false;
 let lyricsScrollTimeout = null;
+let isProgrammaticScroll = false;
 
 audioPlayer.addEventListener('timeupdate', async () => {
     if (currentSongId) {
@@ -6978,44 +6983,67 @@ audioPlayer.addEventListener('timeupdate', async () => {
             const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p');
             if (allLyricElements.length === 0) return;
 
-            let activeIndex = -1;
-            allLyricElements.forEach((el, index) => {
+            // 1. Find the single active timestamp
+            let activeTime = -1;
+            allLyricElements.forEach(el => {
                 const elTime = parseFloat(el.dataset.time);
                 if (!isNaN(elTime) && elTime <= currentTime) {
-                    activeIndex = index;
+                    activeTime = elTime;
                 }
             });
 
-            if (activeIndex !== lastActiveIndex) {
+            // 2. Find all indices that match this active time
+            const activeIndices = [];
+            if (activeTime > -1) {
                 allLyricElements.forEach((el, index) => {
-                    const distance = index - activeIndex;
+                    if (parseFloat(el.dataset.time) === activeTime) {
+                        activeIndices.push(index);
+                    }
+                });
+            }
+
+            const referenceIndex = activeIndices.length > 0 ? activeIndices[0] : -1;
+
+            if (referenceIndex !== lastActiveIndex) { // Check for change to prevent redundant updates
+                const firstActiveIndex = activeIndices.length > 0 ? activeIndices[0] : -1;
+                const lastActiveIndexInGroup = activeIndices.length > 0 ? activeIndices[activeIndices.length - 1] : -1;
+
+                allLyricElements.forEach((el, index) => {
+                    const isActive = activeIndices.includes(index);
                     let blur = 0;
                     let opacity = 1;
 
-                    if (distance > 0) { // Lines below active line
-                        if (distance >= 5) {
-                            blur = 5; opacity = 0;
-                        } else {
-                            blur = distance * 1.25;
-                            opacity = 1 - (distance * 0.25);
-                        }
-                    } else if (distance < 0) { // Lines above active line
-                        const absDist = Math.abs(distance);
-                        if (absDist >= 2) {
-                            blur = 3; opacity = 0;
-                        } else { // absDist is 1
-                            blur = 1.5; opacity = 0.5;
+                    if (!isActive) {
+                        if (index > lastActiveIndexInGroup) { // Lines below active group
+                            const distance = index - lastActiveIndexInGroup;
+                            if (distance >= 5) {
+                                blur = 5; opacity = 0;
+                            } else {
+                                blur = distance * 1.25;
+                                opacity = 1 - (distance * 0.25);
+                            }
+                        } else { // Lines above active group
+                            const distance = firstActiveIndex - index;
+                            if (distance >= 2) {
+                                blur = 3; opacity = 0;
+                            } else { // distance is 1
+                                blur = 1.5; opacity = 0.5;
+                            }
                         }
                     }
+
                     el.style.filter = `blur(${blur}px)`;
                     el.style.opacity = opacity;
                 });
 
-                const activeElement = allLyricElements[activeIndex];
+                const activeElement = allLyricElements[referenceIndex];
                 if (activeElement) {
+                    isProgrammaticScroll = true;
                     activeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    // After a delay, reset the flag so user scrolls work again
+                    setTimeout(() => { isProgrammaticScroll = false; }, 500);
                 }
-                lastActiveIndex = activeIndex;
+                lastActiveIndex = referenceIndex;
             }
         }
     }
