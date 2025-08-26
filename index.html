@@ -6922,7 +6922,6 @@ async function verifyPermission(handle, shouldRequest = false) {
         }
 
 let currentLrcLineIndex = -1;
-let currentLrcLineIndices = [];
 
 audioPlayer.addEventListener('timeupdate', async () => {
     if (currentSongId) {
@@ -6950,56 +6949,45 @@ audioPlayer.addEventListener('timeupdate', async () => {
 
         if (song && song.lrcData && song.lrcData.lyrics && isPanelVisible && panelContent === 'lyrics') {
             const currentTime = audioPlayer.currentTime;
-            // Filter to get only the actual lyric lines for highlighting logic
+            // Filter to get only the actual lyric lines, which we will work with
             const lines = song.lrcData.lyrics.filter(l => l.type === 'line');
             if (lines.length === 0) return;
         
-            let lastPassedLineIndex = -1;
+            let newLrcLineIndex = -1;
+        
+            // Find the index of the last line that has passed
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].time <= currentTime) {
-                    lastPassedLineIndex = i;
+                    newLrcLineIndex = i;
                 } else {
                     break;
                 }
             }
-        
-            let newActiveIndices = [];
-            if (lastPassedLineIndex !== -1) {
-                const currentTimestamp = lines[lastPassedLineIndex].time;
-                newActiveIndices.push(lastPassedLineIndex);
-                for (let i = lastPassedLineIndex - 1; i >= 0; i--) {
-                    if (lines[i].time === currentTimestamp) {
-                        newActiveIndices.push(i);
-                    } else {
-                        break;
-                    }
-                }
-            }
             
-            if (newActiveIndices.join(',') !== currentLrcLineIndices.join(',')) {
-                currentLrcLineIndices = newActiveIndices;
-                
-                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container .lyric-line');
+            // Only update the DOM if the active line has actually changed
+            if (newLrcLineIndex !== currentLrcLineIndex) {
+                // Query for all main lyric P tags in the DOM
+                const allLyricElements = document.querySelectorAll('#lyrics-scroll-container p:not(.lyric-aside)');
                 if(allLyricElements.length === 0) return;
         
                 const MAX_BLUR = 5.0, BLUR_STEP = 1.5, MIN_OPACITY = 0.4, OPACITY_STEP = 0.2;
                 
+                // Apply blur and opacity based on distance from the single new active line
                 allLyricElements.forEach((el, index) => {
-                    const isActive = currentLrcLineIndices.includes(index);
-                    const focusIndex = currentLrcLineIndices.length > 0 ? currentLrcLineIndices[0] : -1;
-                    const distance = Math.abs(index - focusIndex);
-        
-                    const blurValue = isActive ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
-                    const opacityValue = isActive ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
-                    
+                    const distance = Math.abs(index - newLrcLineIndex);
+                    const blurValue = (distance === 0) ? 0 : Math.min(MAX_BLUR, distance * BLUR_STEP);
+                    const opacityValue = (distance === 0) ? 1 : Math.max(MIN_OPACITY, 1 - distance * OPACITY_STEP);
                     el.style.filter = `blur(${blurValue}px)`;
                     el.style.opacity = opacityValue;
                 });
         
-                if (currentLrcLineIndices.length > 0) {
-                    const firstActiveLine = document.getElementById(`lyric-line-${currentLrcLineIndices[0]}`);
-                    if (firstActiveLine) firstActiveLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                const newLine = document.getElementById(`lyric-line-${newLrcLineIndex}`);
+                if (newLine) {
+                    newLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
+        
+                // Update the global index for the next check
+                currentLrcLineIndex = newLrcLineIndex;
             }
         }
     }
