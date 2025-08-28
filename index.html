@@ -568,7 +568,7 @@
             transform: scale(0.95);
         }
         
-        .album-art img, .album-art video {
+        .album-art img {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -1857,7 +1857,7 @@
             transition: all 0.1s cubic-bezier(0.2, 0, 0.38, 0.9);
             filter: brightness(1.5);
         }
-        .highlight-card img, .highlight-card video {
+        .highlight-card img {
             width: 80px;
             height: 80px;
             border-radius: 12px;
@@ -2164,10 +2164,6 @@
                     <span class="material-symbols-rounded">edit</span>
                     <span>Edit Info</span>
                 </div>
-                <div class="menu-item" id="menuFindCover">
-                    <span class="material-symbols-rounded">image_search</span>
-                    <span>Find Cover Art</span>
-                </div>
                 <div class="menu-item" id="menuSaveToLibrary">
                     <span class="material-symbols-rounded">save</span>
                     <span>Save to Library</span>
@@ -2262,24 +2258,6 @@
             <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px;">
                 <button id="cancelEdit" class="filter-btn">Cancel</button>
                 <button id="saveEdit" class="filter-btn active">Save</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Cover Art Finder Modal -->
-    <div id="coverArtModal" class="modal-overlay">
-        <div style="background: var(--modal-background); padding: 25px; border-radius: 40px; width: 90%; max-width: 800px; height: 90%; display: flex; flex-direction: column; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
-            <h2 style="margin-bottom: 15px;">Find Cover Art</h2>
-            <p style="font-size: 0.9em; color: var(--secondary-text-color); margin-bottom: 15px;">
-                Use the window below to find artwork. Once you've found the desired cover, copy its image or video address and paste it into the field.
-            </p>
-            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <input type="text" id="coverArtUrlInput" placeholder="Paste Image/Video URL here" class="search-input" style="padding-left: 15px;">
-                <button id="applyCoverArtBtn" class="filter-btn active"><span class="material-symbols-rounded" style="font-size: 18px;">check</span></button>
-            </div>
-            <iframe id="coverArtFrame" style="width: 100%; height: 100%; border: 1px solid var(--glass-border); border-radius: 20px;"></iframe>
-            <div style="display: flex; justify-content: flex-end; margin-top: 15px;">
-                <button id="closeCoverArtModal" class="filter-btn">Close</button>
             </div>
         </div>
     </div>
@@ -2483,8 +2461,6 @@
         let playlistModal, sleepTimerModal;
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let activeAlbum = null; // Will store { artist, name } of the selected album
-        const DEFAULT_ART_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAH0CAYAAADL1t+KAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAPgSURBVHhe7cEBAQAAAIIg/69uSEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACcqAFFFQAB8Dl/nAAAAABJRU5ErkJggg==";
-        let coverArtModal;
 
         // --- SoundCloud variables ---
         let soundcloudClientId = '';
@@ -3159,47 +3135,44 @@ async function preloadSongs(files) {
     }
 }
 
-async function updateFavicon(albumArt) {
-    if (!albumArt) return;
+function updateFavicon(albumArt) {
+  if (!albumArt) return;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const size = 32; 
+  const radius = 10;
 
-    const blobUrl = await fetchImageAsBlobUrl(albumArt);
-    if (!blobUrl) {
-        console.error("Could not fetch album art for favicon.");
-        return;
+  canvas.width = size;
+  canvas.height = size;
+
+  const img = new Image();
+  if (!albumArt.startsWith('data:')) {
+    img.crossOrigin = 'anonymous';
+  }
+
+  img.onload = function() {
+    ctx.clearRect(0, 0, size, size);
+    ctx.beginPath();
+    if (ctx.roundRect) {
+        ctx.roundRect(0, 0, size, size, radius);
+    } else { // Fallback for older browsers
+        ctx.rect(0, 0, size, size);
     }
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(img, 0, 0, size, size);
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const size = 32;
-    const radius = 10;
-    canvas.width = size;
-    canvas.height = size;
+    const roundedImageURL = canvas.toDataURL('image/png');
+    const existingFavicon = document.getElementById('favicon');
+    if (existingFavicon) {
+        existingFavicon.href = roundedImageURL;
+    }
+  };
 
-    const img = new Image();
-    img.onload = function() {
-        ctx.clearRect(0, 0, size, size);
-        ctx.beginPath();
-        if (ctx.roundRect) {
-            ctx.roundRect(0, 0, size, size, radius);
-        } else {
-            ctx.rect(0, 0, size, size);
-        }
-        ctx.closePath();
-        ctx.clip();
-        ctx.drawImage(img, 0, 0, size, size);
-
-        const roundedImageURL = canvas.toDataURL('image/png');
-        const existingFavicon = document.getElementById('favicon');
-        if (existingFavicon) {
-            existingFavicon.href = roundedImageURL;
-        }
-        URL.revokeObjectURL(blobUrl);
-    };
-    img.onerror = function() {
-        console.error('Error loading image blob for favicon');
-        URL.revokeObjectURL(blobUrl);
-    };
-    img.src = blobUrl;
+  img.onerror = function() {
+    console.error('Error loading album art for favicon');
+  };
+  img.src = albumArt;
 }
 
 async function loadSong(song) {
@@ -3318,7 +3291,6 @@ async function addSongs(files, storageType) {
                 dateAdded: Date.now(),
                 year: metadata.year,
                 albumArt: metadata.albumArt,
-                albumArtPoster: metadata.albumArt, // Poster defaults to the art itself
                 trackNumber: metadata.trackNumber,
                 discNumber: metadata.discNumber,
                 lyrics: metadata.lyrics,
@@ -3664,44 +3636,40 @@ const availableMusicFunctions = {
          * @returns {Promise<HTMLImageElement>} A promise that resolves with the new, loaded, resized image.
          */
         function createResizedImage(src, maxSize) {
-            return new Promise(async (resolve, reject) => {
-                const blobUrl = await fetchImageAsBlobUrl(src);
-                if (!blobUrl) {
-                    reject(new Error(`Could not create blob URL for ${src}`));
-                    return;
-                }
-        
+            return new Promise((resolve, reject) => {
                 const highResImage = new Image();
+                highResImage.crossOrigin = 'Anonymous';
                 highResImage.onload = () => {
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
                     let { width, height } = highResImage;
-        
+
+                    // Calculate new dimensions while maintaining aspect ratio
                     if (width > height) {
-                        if (width > maxSize) { height *= maxSize / width; width = maxSize; }
+                        if (width > maxSize) {
+                            height *= maxSize / width;
+                            width = maxSize;
+                        }
                     } else {
-                        if (height > maxSize) { width *= maxSize / height; height = maxSize; }
+                        if (height > maxSize) {
+                            width *= maxSize / height;
+                            height = maxSize;
+                        }
                     }
                     canvas.width = width;
                     canvas.height = height;
+
+                    // Draw the high-res image onto the small canvas
                     context.drawImage(highResImage, 0, 0, width, height);
                     
+                    // Create a new Image object from the small canvas data
                     const resizedImage = new Image();
-                    resizedImage.onload = () => {
-                        URL.revokeObjectURL(blobUrl);
-                        resolve(resizedImage);
-                    };
-                    resizedImage.onerror = (e) => {
-                        URL.revokeObjectURL(blobUrl);
-                        reject(e);
-                    };
-                    resizedImage.src = canvas.toDataURL('image/jpeg', 0.8);
+                    resizedImage.onload = () => resolve(resizedImage);
+                    resizedImage.onerror = reject;
+                    resizedImage.src = canvas.toDataURL('image/jpeg', 0.8); // Use JPEG for better compression
                 };
-                highResImage.onerror = (e) => {
-                    URL.revokeObjectURL(blobUrl);
-                    reject(e);
-                };
-                highResImage.src = blobUrl;
+                highResImage.onerror = reject;
+                highResImage.src = src;
             });
         }
 
@@ -4073,9 +4041,8 @@ async function createResizedImageURL(imageUrl, width, height) {
     });
 }
 
-async function updateAllBackgrounds(imageUrl, posterUrl) {
-    // The distortion canvas should always use the static poster image.
-    loadAlbumArtForCanvas(posterUrl || imageUrl);
+async function updateAllBackgrounds(imageUrl) {
+    loadAlbumArtForCanvas(imageUrl);
 }
 
 class BeatDetector {
@@ -4620,7 +4587,7 @@ function renderLibraryPage() {
                 const albumId = `${album.artist}::${album.originalAlbum}`;
                 return `
                 <div class="item-card" data-album-id="${albumId}">
-                    <img src="${album.albumArtPoster || album.albumArt}" alt="${album.name}" class="item-card-art">
+                    <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
                     <div class="item-card-info">
                         <div class="item-card-title">${sanitize(album.name)}</div>
                         <div class="item-card-subtitle">${sanitize(album.artist)}</div>
@@ -4771,7 +4738,7 @@ function renderSongs(albums, isArtistView = false) {
          data-album-artist="${album.artist}" 
          data-album-name="${album.originalAlbum}">
       <div class="album-header">
-        <img src="${album.albumArtPoster || album.albumArt}" alt="${album.name}" class="album-thumbnail">
+        <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
         <div class="album-info">
           <div class="album-name">${album.name}</div>
           ${isArtistView ? '' : `<div class="album-artist">${album.artist}</div>`}
@@ -5648,16 +5615,19 @@ async function playSong(song, playContext = null) {
 }
 
 function updateMiniplayerUI(song, state) {
+    // If we are on the Now Playing screen, the miniplayer should ALWAYS be hidden.
     if (activeView === 'now-playing') {
         miniplayer.classList.add('hidden');
         return;
     }
+
     if (!song || !currentSongId) {
         miniplayer.classList.add('hidden');
         return;
     }
+
     miniplayer.classList.remove('hidden');
-    miniplayerArt.src = getDisplayArt(song); // Use helper to get poster
+    miniplayerArt.src = song.albumArt;
     miniplayerTitle.textContent = sanitize(song.name);
     miniplayerArtist.textContent = sanitize(song.artist);
     miniplayerPlayBtn.innerHTML = `<span class="material-symbols-rounded">${state === 'playing' ? 'pause' : 'play_arrow'}</span>`;
@@ -5764,147 +5734,6 @@ function initModalVariables() {
     manualLyricsSearchModal = document.getElementById('manualLyricsSearchModal');
     document.getElementById('manualLyricsSearchBtn').addEventListener('click', searchLrclibForManualPick);
     document.getElementById('closeManualLyricsModal').addEventListener('click', () => closeModal(manualLyricsSearchModal));
-    
-    coverArtModal = document.getElementById('coverArtModal');
-    document.getElementById('applyCoverArtBtn').addEventListener('click', applyNewCoverArt);
-    document.getElementById('closeCoverArtModal').addEventListener('click', () => closeModal(coverArtModal));
-}
-
-function openCoverArtFinder() {
-    if (!currentlyPlayingSong) {
-        Gurasuraisu.showPopup('No song is playing.');
-        return;
-    }
-    const artist = encodeURIComponent(currentlyPlayingSong.artist);
-    const album = encodeURIComponent(currentlyPlayingSong.album);
-    const searchTerm = `${artist} ${album}`;
-    const searchUrl = `https://covers.musichoarders.xyz/#/search/${searchTerm}`;
-    document.getElementById('coverArtFrame').src = searchUrl;
-    document.getElementById('coverArtUrlInput').value = '';
-    openModal(coverArtModal);
-}
-
-async function applyNewCoverArt() {
-    const url = document.getElementById('coverArtUrlInput').value.trim();
-    if (!url || !currentlyPlayingSong) return;
-    const applyBtn = document.getElementById('applyCoverArtBtn');
-    applyBtn.disabled = true;
-    applyBtn.innerHTML = '<div class="loading-message"><svg width="18" height="18" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>';
-    try {
-        const isVideo = url.endsWith('.mp4') || url.endsWith('.mov');
-        let posterUrl = url;
-        if (isVideo) {
-            try {
-                posterUrl = await getPosterForVideo(url);
-            } catch (error) {
-                console.error(error);
-                Gurasuraisu.showPopup('Could not process video. Please try a different URL.');
-                return;
-            }
-        }
-        const targetAlbum = currentlyPlayingSong.album;
-        const targetArtist = currentlyPlayingSong.albumArtist;
-        let updatedCount = 0;
-        songs.forEach(song => {
-            if (song.album === targetAlbum && song.albumArtist === targetArtist) {
-                song.albumArt = url;
-                song.albumArtPoster = posterUrl;
-                updatedCount++;
-            }
-        });
-        await saveSongs();
-        updatePlayerUI(currentlyPlayingSong);
-        updateMiniplayerUI(currentlyPlayingSong, audioPlayer.paused ? 'paused' : 'playing');
-        await updateMediaSessionMetadata(currentlyPlayingSong);
-        if (activeView === 'library') renderLibraryPage();
-        if (activeView === 'home') renderHomePage();
-        Gurasuraisu.showPopup(`Cover art updated for ${updatedCount} song(s)!`);
-        closeModal(coverArtModal);
-    } catch (error) {
-        console.error('Failed to apply new cover art:', error);
-        Gurasuraisu.showPopup('An error occurred while applying the new cover.');
-    } finally {
-        applyBtn.disabled = false;
-        applyBtn.innerHTML = '<span class="material-symbols-rounded" style="font-size: 18px;">check</span>';
-    }
-}
-
-async function updateSoundcloudCacheArt(songId, newArtUrl) {
-    try {
-        const tx = db.transaction('soundcloudCache', 'readwrite');
-        const store = tx.objectStore('soundcloudCache');
-        const request = store.get(songId);
-        request.onsuccess = () => {
-            const entry = request.result;
-            if (entry) {
-                entry.metadata.albumArt = newArtUrl;
-                store.put(entry);
-            }
-        };
-        await tx.done;
-    } catch (error) {
-        console.error("Failed to update SoundCloud cache with new art:", error);
-    }
-}
-
-async function fetchImageAsBlobUrl(url) {
-    try {
-        const response = await fetch(url, { mode: 'cors' });
-        if (!response.ok) {
-            throw new Error(`Network response was not ok, status: ${response.status}`);
-        }
-        const blob = await response.blob();
-        return URL.createObjectURL(blob);
-    } catch (error) {
-        console.error(`Failed to fetch image as blob URL for '${url}':`, error);
-        return null; // Return null on failure
-    }
-}
-        
-function getPosterForVideo(videoUrl) {
-    return new Promise(async (resolve, reject) => {
-        let blobUrl = '';
-        try {
-            const response = await fetch(videoUrl);
-            if (!response.ok) throw new Error('Network response was not ok for video');
-            const videoBlob = await response.blob();
-            blobUrl = URL.createObjectURL(videoBlob);
-
-            const video = document.createElement('video');
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-
-            video.addEventListener('loadeddata', () => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const posterDataUrl = canvas.toDataURL('image/jpeg', 0.9);
-                URL.revokeObjectURL(blobUrl);
-                video.remove();
-                canvas.remove();
-                resolve(posterDataUrl);
-            }, { once: true });
-
-            video.addEventListener('error', (e) => {
-                URL.revokeObjectURL(blobUrl);
-                video.remove();
-                canvas.remove();
-                reject(`Failed to load video from blob for poster generation: ${e.message}`);
-            }, { once: true });
-
-            video.src = blobUrl;
-            video.load();
-
-        } catch (error) {
-            if (blobUrl) URL.revokeObjectURL(blobUrl);
-            reject(`Failed to fetch video as blob: ${error.message}`);
-        }
-    });
-}
-        
-function getDisplayArt(song) {
-    if (!song || !song.albumArt) return DEFAULT_ART_SRC;
-    return song.albumArtPoster || song.albumArt;
 }
 
 function openManageFoldersModal() {
@@ -6387,7 +6216,6 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             artist: trackData.user.username,
             album: trackData.title,
             albumArt: getHighResArtwork(trackData.artwork_url),
-            albumArtPoster: getHighResArtwork(trackData.artwork_url),
             storage: 'soundcloud',
             streamUrl: streamData.url, // Temporary stream URL
             lyrics: null,
@@ -6921,39 +6749,39 @@ function groupSongsByAlbum(songsToRender) {
 async function updateMediaSessionMetadata(song) {
     if (!('mediaSession' in navigator)) return;
 
-    const displayArtUrl = getDisplayArt(song);
-
+    // Phase 1: Immediately update text metadata, reusing the old artwork temporarily.
+    // This prevents the notification from disappearing.
     const metadata = {
         title: song.name,
         artist: song.artist,
         album: song.album,
     };
 
-    const temporaryArtworkSrc = currentMediaSessionArtBlobUrl || displayArtUrl;
-
+    const temporaryArtworkSrc = currentMediaSessionArtBlobUrl || song.albumArt;
+    
     navigator.mediaSession.metadata = new MediaMetadata({
         ...metadata,
         artwork: [{ src: temporaryArtworkSrc, sizes: '512x512', type: 'image/png' }]
     });
 
+    // Phase 2: Asynchronously create the new blob URL and update the artwork.
     const oldBlobUrl = currentMediaSessionArtBlobUrl;
     let newBlobUrl = null;
 
-    if (displayArtUrl && (displayArtUrl.startsWith('data:') || displayArtUrl.startsWith('blob:'))) {
+    if (song.albumArt && song.albumArt.startsWith('data:')) {
         try {
-            const response = await fetch(displayArtUrl);
+            const response = await fetch(song.albumArt);
             const blob = await response.blob();
             newBlobUrl = URL.createObjectURL(blob);
         } catch (e) {
             console.error("Failed to create blob URL for media session artwork", e);
         }
-    } else if (displayArtUrl) {
-        newBlobUrl = displayArtUrl; // Use URL directly if not data/blob
     }
-
+    
     currentMediaSessionArtBlobUrl = newBlobUrl;
 
-    const finalArtworkSrc = newBlobUrl || displayArtUrl;
+    // Update the metadata again, this time with the final, correct artwork.
+    const finalArtworkSrc = newBlobUrl || song.albumArt;
     navigator.mediaSession.metadata = new MediaMetadata({
         ...metadata,
         artwork: [
@@ -6966,7 +6794,8 @@ async function updateMediaSessionMetadata(song) {
         ]
     });
 
-    if (oldBlobUrl && oldBlobUrl !== newBlobUrl && oldBlobUrl.startsWith('blob:')) {
+    // Now that the new artwork is in place, it's safe to revoke the old URL.
+    if (oldBlobUrl && oldBlobUrl !== newBlobUrl) {
         URL.revokeObjectURL(oldBlobUrl);
     }
 }
@@ -7099,47 +6928,19 @@ async function verifyPermission(handle, shouldRequest = false) {
     return false;
 }
 
-function updatePlayerUI(song, progress = 0) {
-    musicTitle.textContent = sanitize(song.name);
-    musicArtist.textContent = song.artist;
+        function updatePlayerUI(song, progress = 0) {
+            musicTitle.textContent = sanitize(song.name);
+            musicArtist.textContent = song.artist;
+            albumArtImg.src = song.albumArt;
+            albumArtImg.classList.remove('fade-out');
+            updateAllBackgrounds(song.albumArt);
+            updateFavicon(song.albumArt);
+            updateTimeDisplays(progress, audioPlayer.duration);
 
-    const albumArtContainer = document.querySelector('.album-art');
-    const artUrl = song.albumArt;
-    const isVideo = artUrl && (artUrl.endsWith('.mp4') || artUrl.endsWith('.mov'));
-
-    let mediaElement = albumArtContainer.querySelector('video, img');
-
-    if (isVideo) {
-        if (mediaElement && mediaElement.tagName === 'VIDEO') {
-            if (mediaElement.src !== artUrl) mediaElement.src = artUrl;
-        } else {
-            albumArtContainer.innerHTML = '';
-            const video = document.createElement('video');
-            video.src = artUrl;
-            video.autoplay = true;
-            video.loop = true;
-            video.muted = true;
-            video.playsInline = true;
-            albumArtContainer.appendChild(video);
+            // **MODIFICATION**: Prioritize the known (trimmed) duration from the song object
+            const displayDuration = song.duration || audioPlayer.duration || 0;
+            updateTimeDisplays(progress, displayDuration);
         }
-    } else {
-        if (mediaElement && mediaElement.tagName === 'IMG') {
-            if (mediaElement.src !== (artUrl || DEFAULT_ART_SRC)) mediaElement.src = artUrl || DEFAULT_ART_SRC;
-        } else {
-            albumArtContainer.innerHTML = '';
-            const img = document.createElement('img');
-            img.src = artUrl || DEFAULT_ART_SRC;
-            img.id = 'albumArtImg';
-            img.alt = 'Album Art';
-            albumArtContainer.appendChild(img);
-        }
-    }
-
-    updateAllBackgrounds(song.albumArt);
-    updateFavicon(song.albumArt);
-    const displayDuration = song.duration || audioPlayer.duration || 0;
-    updateTimeDisplays(progress, displayDuration);
-}
 
         function updateTimeDisplays(current = 0, duration = 0) {
             currentTimeDisplay.textContent = formatTime(current);
@@ -7443,7 +7244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const artistAlbums = groupSongsByAlbum(songs.filter(s => s.artist === artistName));
                 const contentHtml = `<div class="item-grid">${artistAlbums.map(album => `
                     <div class="item-card" data-album-id="${album.artist}::${album.originalAlbum}">
-                        <img src="${album.albumArtPoster || album.albumArt}" alt="${album.name}" class="item-card-art">
+                        <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
                         <div class="item-card-info">
                             <div class="item-card-title">${sanitize(album.name)}</div>
                         </div>
@@ -7481,7 +7282,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const albumId = `${album.artist}::${album.originalAlbum}`;
                     return `
                     <div class="item-card" data-album-id="${sanitize(albumId)}">
-                        <img src="${album.albumArtPoster || album.albumArt}" alt="${sanitize(album.name)}" class="item-card-art">
+                        <img src="${album.albumArt}" alt="${sanitize(album.name)}" class="item-card-art">
                         <div class="item-card-info">
                             <div class="item-card-title">${sanitize(album.name)}</div>
                         </div>
@@ -7836,11 +7637,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
         document.getElementById('saveIntegrations').addEventListener('click', saveIntegrationSettings);
-
-        document.getElementById('menuFindCover').addEventListener('click', () => {
-            openCoverArtFinder();
-            moreOptionsMenu.classList.remove('visible');
-        });
 
         const soundcloudSearchInput = document.getElementById('soundcloudSearchInput');
         soundcloudSearchInput.addEventListener('input', () => {
