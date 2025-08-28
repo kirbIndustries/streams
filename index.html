@@ -3315,6 +3315,7 @@ async function addSongs(files, storageType) {
                 dateAdded: Date.now(),
                 year: metadata.year,
                 albumArt: metadata.albumArt,
+                albumArtPoster: metadata.albumArt, // Poster defaults to the art itself
                 trackNumber: metadata.trackNumber,
                 discNumber: metadata.discNumber,
                 lyrics: metadata.lyrics,
@@ -4065,8 +4066,9 @@ async function createResizedImageURL(imageUrl, width, height) {
     });
 }
 
-async function updateAllBackgrounds(imageUrl) {
-    loadAlbumArtForCanvas(imageUrl);
+async function updateAllBackgrounds(imageUrl, posterUrl) {
+    // The distortion canvas should always use the static poster image.
+    loadAlbumArtForCanvas(posterUrl || imageUrl);
 }
 
 class BeatDetector {
@@ -4611,7 +4613,7 @@ function renderLibraryPage() {
                 const albumId = `${album.artist}::${album.originalAlbum}`;
                 return `
                 <div class="item-card" data-album-id="${albumId}">
-                    <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+                    <img src="${album.albumArtPoster || album.albumArt}" alt="${album.name}" class="item-card-art">
                     <div class="item-card-info">
                         <div class="item-card-title">${sanitize(album.name)}</div>
                         <div class="item-card-subtitle">${sanitize(album.artist)}</div>
@@ -4762,7 +4764,7 @@ function renderSongs(albums, isArtistView = false) {
          data-album-artist="${album.artist}" 
          data-album-name="${album.originalAlbum}">
       <div class="album-header">
-        <img src="${album.albumArt}" alt="${album.name}" class="album-thumbnail">
+        <img src="${album.albumArtPoster || album.albumArt}" alt="${album.name}" class="album-thumbnail">
         <div class="album-info">
           <div class="album-name">${album.name}</div>
           ${isArtistView ? '' : `<div class="album-artist">${album.artist}</div>`}
@@ -5639,19 +5641,16 @@ async function playSong(song, playContext = null) {
 }
 
 function updateMiniplayerUI(song, state) {
-    // If we are on the Now Playing screen, the miniplayer should ALWAYS be hidden.
     if (activeView === 'now-playing') {
         miniplayer.classList.add('hidden');
         return;
     }
-
     if (!song || !currentSongId) {
         miniplayer.classList.add('hidden');
         return;
     }
-
     miniplayer.classList.remove('hidden');
-    miniplayerArt.src = song.albumArt;
+    miniplayerArt.src = getDisplayArt(song); // Use helper to get poster
     miniplayerTitle.textContent = sanitize(song.name);
     miniplayerArtist.textContent = sanitize(song.artist);
     miniplayerPlayBtn.innerHTML = `<span class="material-symbols-rounded">${state === 'playing' ? 'pause' : 'play_arrow'}</span>`;
@@ -5781,18 +5780,46 @@ function openCoverArtFinder() {
 async function applyNewCoverArt() {
     const url = document.getElementById('coverArtUrlInput').value.trim();
     if (!url || !currentlyPlayingSong) return;
-    const song = currentlyPlayingSong;
-    song.albumArt = url;
-    updatePlayerUI(song);
-    miniplayerArt.src = url;
-    await updateMediaSessionMetadata(song);
-    if (song.storage === 'soundcloud') {
-        await updateSoundcloudCacheArt(song.id, url);
-    } else {
+    const applyBtn = document.getElementById('applyCoverArtBtn');
+    applyBtn.disabled = true;
+    applyBtn.innerHTML = 'Applying...';
+    try {
+        const isVideo = url.endsWith('.mp4') || url.endsWith('.mov');
+        let posterUrl = url;
+        if (isVideo) {
+            try {
+                posterUrl = await getPosterForVideo(url);
+            } catch (error) {
+                console.error(error);
+                Gurasuraisu.showPopup('Could not process video. Please try a different URL.');
+                return;
+            }
+        }
+        const targetAlbum = currentlyPlayingSong.album;
+        const targetArtist = currentlyPlayingSong.albumArtist;
+        let updatedCount = 0;
+        songs.forEach(song => {
+            if (song.album === targetAlbum && song.albumArtist === targetArtist) {
+                song.albumArt = url;
+                song.albumArtPoster = posterUrl;
+                updatedCount++;
+            }
+        });
         await saveSongs();
+        updatePlayerUI(currentlyPlayingSong);
+        updateMiniplayerUI(currentlyPlayingSong, audioPlayer.paused ? 'paused' : 'playing');
+        await updateMediaSessionMetadata(currentlyPlayingSong);
+        if (activeView === 'library') renderLibraryPage();
+        if (activeView === 'home') renderHomePage();
+        Gurasuraisu.showPopup(`Cover art updated for ${updatedCount} song(s)!`);
+        closeModal(coverArtModal);
+    } catch (error) {
+        console.error('Failed to apply new cover art:', error);
+        Gurasuraisu.showPopup('An error occurred while applying the new cover.');
+    } finally {
+        applyBtn.disabled = false;
+        applyBtn.innerHTML = 'Apply';
     }
-    Gurasuraisu.showPopup('Cover art updated!');
-    closeModal(coverArtModal);
 }
 
 async function updateSoundcloudCacheArt(songId, newArtUrl) {
@@ -5811,6 +5838,35 @@ async function updateSoundcloudCacheArt(songId, newArtUrl) {
     } catch (error) {
         console.error("Failed to update SoundCloud cache with new art:", error);
     }
+}
+
+function getPosterForVideo(videoUrl) {
+    return new Promise((resolve, reject) => {
+        const video = document.createElement('video');
+        video.crossOrigin = 'anonymous';
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        video.addEventListener('loadeddata', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.9));
+            video.remove();
+            canvas.remove();
+        }, { once: true });
+        video.addEventListener('error', (e) => {
+            reject(`Failed to load video for poster generation: ${e.message}`);
+            video.remove();
+            canvas.remove();
+        }, { once: true });
+        video.src = videoUrl;
+        video.load();
+    });
+}
+
+function getDisplayArt(song) {
+    if (!song || !song.albumArt) return DEFAULT_ART_SRC;
+    return song.albumArtPoster || song.albumArt;
 }
 
 function openManageFoldersModal() {
@@ -6293,6 +6349,7 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             artist: trackData.user.username,
             album: trackData.title,
             albumArt: getHighResArtwork(trackData.artwork_url),
+            albumArtPoster: getHighResArtwork(trackData.artwork_url),
             storage: 'soundcloud',
             streamUrl: streamData.url, // Temporary stream URL
             lyrics: null,
@@ -6826,39 +6883,39 @@ function groupSongsByAlbum(songsToRender) {
 async function updateMediaSessionMetadata(song) {
     if (!('mediaSession' in navigator)) return;
 
-    // Phase 1: Immediately update text metadata, reusing the old artwork temporarily.
-    // This prevents the notification from disappearing.
+    const displayArtUrl = getDisplayArt(song);
+
     const metadata = {
         title: song.name,
         artist: song.artist,
         album: song.album,
     };
 
-    const temporaryArtworkSrc = currentMediaSessionArtBlobUrl || song.albumArt;
-    
+    const temporaryArtworkSrc = currentMediaSessionArtBlobUrl || displayArtUrl;
+
     navigator.mediaSession.metadata = new MediaMetadata({
         ...metadata,
         artwork: [{ src: temporaryArtworkSrc, sizes: '512x512', type: 'image/png' }]
     });
 
-    // Phase 2: Asynchronously create the new blob URL and update the artwork.
     const oldBlobUrl = currentMediaSessionArtBlobUrl;
     let newBlobUrl = null;
 
-    if (song.albumArt && song.albumArt.startsWith('data:')) {
+    if (displayArtUrl && (displayArtUrl.startsWith('data:') || displayArtUrl.startsWith('blob:'))) {
         try {
-            const response = await fetch(song.albumArt);
+            const response = await fetch(displayArtUrl);
             const blob = await response.blob();
             newBlobUrl = URL.createObjectURL(blob);
         } catch (e) {
             console.error("Failed to create blob URL for media session artwork", e);
         }
+    } else if (displayArtUrl) {
+        newBlobUrl = displayArtUrl; // Use URL directly if not data/blob
     }
-    
+
     currentMediaSessionArtBlobUrl = newBlobUrl;
 
-    // Update the metadata again, this time with the final, correct artwork.
-    const finalArtworkSrc = newBlobUrl || song.albumArt;
+    const finalArtworkSrc = newBlobUrl || displayArtUrl;
     navigator.mediaSession.metadata = new MediaMetadata({
         ...metadata,
         artwork: [
@@ -6871,8 +6928,7 @@ async function updateMediaSessionMetadata(song) {
         ]
     });
 
-    // Now that the new artwork is in place, it's safe to revoke the old URL.
-    if (oldBlobUrl && oldBlobUrl !== newBlobUrl) {
+    if (oldBlobUrl && oldBlobUrl !== newBlobUrl && oldBlobUrl.startsWith('blob:')) {
         URL.revokeObjectURL(oldBlobUrl);
     }
 }
@@ -7349,7 +7405,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const artistAlbums = groupSongsByAlbum(songs.filter(s => s.artist === artistName));
                 const contentHtml = `<div class="item-grid">${artistAlbums.map(album => `
                     <div class="item-card" data-album-id="${album.artist}::${album.originalAlbum}">
-                        <img src="${album.albumArt}" alt="${album.name}" class="item-card-art">
+                        <img src="${album.albumArtPoster || album.albumArt}" alt="${album.name}" class="item-card-art">
                         <div class="item-card-info">
                             <div class="item-card-title">${sanitize(album.name)}</div>
                         </div>
@@ -7387,7 +7443,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const albumId = `${album.artist}::${album.originalAlbum}`;
                     return `
                     <div class="item-card" data-album-id="${sanitize(albumId)}">
-                        <img src="${album.albumArt}" alt="${sanitize(album.name)}" class="item-card-art">
+                        <img src="${album.albumArtPoster || album.albumArt}" alt="${sanitize(album.name)}" class="item-card-art">
                         <div class="item-card-info">
                             <div class="item-card-title">${sanitize(album.name)}</div>
                         </div>
