@@ -3160,43 +3160,54 @@ async function preloadSongs(files) {
 }
 
 function updateFavicon(albumArt) {
-  if (!albumArt) return;
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  const size = 32; 
-  const radius = 10;
+    if (!albumArt) return;
 
-  canvas.width = size;
-  canvas.height = size;
+    const processImage = (imageUrl) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const size = 32;
+        const radius = 10;
+        canvas.width = size;
+        canvas.height = size;
 
-  const img = new Image();
-  if (!albumArt.startsWith('data:')) {
-    img.crossOrigin = 'anonymous';
-  }
+        const img = new Image();
+        img.onload = function() {
+            ctx.clearRect(0, 0, size, size);
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(0, 0, size, size, radius);
+            } else {
+                ctx.rect(0, 0, size, size);
+            }
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(img, 0, 0, size, size);
 
-  img.onload = function() {
-    ctx.clearRect(0, 0, size, size);
-    ctx.beginPath();
-    if (ctx.roundRect) {
-        ctx.roundRect(0, 0, size, size, radius);
-    } else { // Fallback for older browsers
-        ctx.rect(0, 0, size, size);
-    }
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(img, 0, 0, size, size);
+            const roundedImageURL = canvas.toDataURL('image/png');
+            const existingFavicon = document.getElementById('favicon');
+            if (existingFavicon) {
+                existingFavicon.href = roundedImageURL;
+            }
+            if (imageUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(imageUrl); // Clean up blob URL
+            }
+        };
+        img.onerror = function() {
+            console.error('Error loading image for favicon');
+            if (imageUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(imageUrl); // Clean up blob URL on error
+            }
+        };
+        img.src = imageUrl;
+    };
 
-    const roundedImageURL = canvas.toDataURL('image/png');
-    const existingFavicon = document.getElementById('favicon');
-    if (existingFavicon) {
-        existingFavicon.href = roundedImageURL;
-    }
-  };
-
-  img.onerror = function() {
-    console.error('Error loading album art for favicon');
-  };
-  img.src = albumArt;
+    fetch(albumArt)
+        .then(response => response.blob())
+        .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            processImage(blobUrl);
+        })
+        .catch(e => console.error("Could not fetch album art for favicon:", e));
 }
 
 async function loadSong(song) {
@@ -3661,40 +3672,56 @@ const availableMusicFunctions = {
          * @returns {Promise<HTMLImageElement>} A promise that resolves with the new, loaded, resized image.
          */
         function createResizedImage(src, maxSize) {
-            return new Promise((resolve, reject) => {
-                const highResImage = new Image();
-                highResImage.crossOrigin = 'Anonymous';
-                highResImage.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    let { width, height } = highResImage;
-
-                    // Calculate new dimensions while maintaining aspect ratio
-                    if (width > height) {
-                        if (width > maxSize) {
-                            height *= maxSize / width;
-                            width = maxSize;
+            return new Promise(async (resolve, reject) => {
+                let blobUrl = '';
+                try {
+                    const response = await fetch(src);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    const imageBlob = await response.blob();
+                    blobUrl = URL.createObjectURL(imageBlob);
+        
+                    const highResImage = new Image();
+                    highResImage.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        let { width, height } = highResImage;
+        
+                        if (width > height) {
+                            if (width > maxSize) {
+                                height *= maxSize / width;
+                                width = maxSize;
+                            }
+                        } else {
+                            if (height > maxSize) {
+                                width *= maxSize / height;
+                                height = maxSize;
+                            }
                         }
-                    } else {
-                        if (height > maxSize) {
-                            width *= maxSize / height;
-                            height = maxSize;
-                        }
-                    }
-                    canvas.width = width;
-                    canvas.height = height;
-
-                    // Draw the high-res image onto the small canvas
-                    context.drawImage(highResImage, 0, 0, width, height);
-                    
-                    // Create a new Image object from the small canvas data
-                    const resizedImage = new Image();
-                    resizedImage.onload = () => resolve(resizedImage);
-                    resizedImage.onerror = reject;
-                    resizedImage.src = canvas.toDataURL('image/jpeg', 0.8); // Use JPEG for better compression
-                };
-                highResImage.onerror = reject;
-                highResImage.src = src;
+                        canvas.width = width;
+                        canvas.height = height;
+                        context.drawImage(highResImage, 0, 0, width, height);
+                        
+                        const resizedImage = new Image();
+                        resizedImage.onload = () => {
+                            resolve(resizedImage);
+                            URL.revokeObjectURL(blobUrl); // Clean up
+                        };
+                        resizedImage.onerror = () => {
+                            reject(new Event('error'));
+                            URL.revokeObjectURL(blobUrl); // Clean up
+                        };
+                        resizedImage.src = canvas.toDataURL('image/jpeg', 0.8);
+                    };
+                    highResImage.onerror = () => {
+                        reject(new Event('error'));
+                        URL.revokeObjectURL(blobUrl); // Clean up
+                    };
+                    highResImage.src = blobUrl;
+        
+                } catch (error) {
+                    if (blobUrl) URL.revokeObjectURL(blobUrl);
+                    reject(error);
+                }
             });
         }
 
@@ -5841,26 +5868,42 @@ async function updateSoundcloudCacheArt(songId, newArtUrl) {
 }
 
 function getPosterForVideo(videoUrl) {
-    return new Promise((resolve, reject) => {
-        const video = document.createElement('video');
-        video.crossOrigin = 'anonymous';
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        video.addEventListener('loadeddata', () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.9));
-            video.remove();
-            canvas.remove();
-        }, { once: true });
-        video.addEventListener('error', (e) => {
-            reject(`Failed to load video for poster generation: ${e.message}`);
-            video.remove();
-            canvas.remove();
-        }, { once: true });
-        video.src = videoUrl;
-        video.load();
+    return new Promise(async (resolve, reject) => {
+        let blobUrl = '';
+        try {
+            const response = await fetch(videoUrl);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const videoBlob = await response.blob();
+            blobUrl = URL.createObjectURL(videoBlob);
+
+            const video = document.createElement('video');
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+
+            video.addEventListener('loadeddata', () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', 0.9));
+                URL.revokeObjectURL(blobUrl); // Clean up memory
+                video.remove();
+                canvas.remove();
+            }, { once: true });
+
+            video.addEventListener('error', (e) => {
+                reject(`Failed to load video blob for poster generation: ${e.message}`);
+                URL.revokeObjectURL(blobUrl); // Clean up memory
+                video.remove();
+                canvas.remove();
+            }, { once: true });
+
+            video.src = blobUrl;
+            video.load();
+
+        } catch (error) {
+            if (blobUrl) URL.revokeObjectURL(blobUrl);
+            reject(`Failed to fetch video as blob: ${error.message}`);
+        }
     });
 }
 
