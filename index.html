@@ -568,7 +568,7 @@
             transform: scale(0.95);
         }
         
-        .album-art img {
+        .album-art img, .album-art video {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -2164,6 +2164,10 @@
                     <span class="material-symbols-rounded">edit</span>
                     <span>Edit Info</span>
                 </div>
+                <div class="menu-item" id="menuFindCover">
+                    <span class="material-symbols-rounded">image_search</span>
+                    <span>Find Cover Art</span>
+                </div>
                 <div class="menu-item" id="menuSaveToLibrary">
                     <span class="material-symbols-rounded">save</span>
                     <span>Save to Library</span>
@@ -2258,6 +2262,24 @@
             <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px;">
                 <button id="cancelEdit" class="filter-btn">Cancel</button>
                 <button id="saveEdit" class="filter-btn active">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cover Art Finder Modal -->
+    <div id="coverArtModal" class="modal-overlay">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 40px; width: 90%; max-width: 800px; height: 90%; display: flex; flex-direction: column; backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter); border: 1px solid var(--glass-border);">
+            <h2 style="margin-bottom: 15px;">Find Cover Art</h2>
+            <p style="font-size: 0.9em; color: var(--secondary-text-color); margin-bottom: 15px;">
+                Use the window below to find artwork. Once you've found the desired cover, copy its image or video address and paste it into the field.
+            </p>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <input type="text" id="coverArtUrlInput" placeholder="Paste Image/Video URL here" class="search-input" style="padding-left: 15px;">
+                <button id="applyCoverArtBtn" class="filter-btn active">Apply</button>
+            </div>
+            <iframe id="coverArtFrame" style="width: 100%; height: 100%; border: 1px solid var(--glass-border); border-radius: 20px;"></iframe>
+            <div style="display: flex; justify-content: flex-end; margin-top: 15px;">
+                <button id="closeCoverArtModal" class="filter-btn">Close</button>
             </div>
         </div>
     </div>
@@ -2461,6 +2483,8 @@
         let playlistModal, sleepTimerModal;
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let activeAlbum = null; // Will store { artist, name } of the selected album
+        const DEFAULT_ART_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAH0CAYAAADL1t+KAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAPgSURBVHhe7cEBAQAAAIIg/69uSEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACcqAFFFQAB8Dl/nAAAAABJRU5ErkJggg==";
+        let coverArtModal;
 
         // --- SoundCloud variables ---
         let soundcloudClientId = '';
@@ -5734,6 +5758,59 @@ function initModalVariables() {
     manualLyricsSearchModal = document.getElementById('manualLyricsSearchModal');
     document.getElementById('manualLyricsSearchBtn').addEventListener('click', searchLrclibForManualPick);
     document.getElementById('closeManualLyricsModal').addEventListener('click', () => closeModal(manualLyricsSearchModal));
+    
+    coverArtModal = document.getElementById('coverArtModal');
+    document.getElementById('applyCoverArtBtn').addEventListener('click', applyNewCoverArt);
+    document.getElementById('closeCoverArtModal').addEventListener('click', () => closeModal(coverArtModal));
+}
+
+function openCoverArtFinder() {
+    if (!currentlyPlayingSong) {
+        Gurasuraisu.showPopup('No song is playing.');
+        return;
+    }
+    const artist = encodeURIComponent(currentlyPlayingSong.artist);
+    const album = encodeURIComponent(currentlyPlayingSong.album);
+    const searchTerm = `${artist} ${album}`;
+    const searchUrl = `https://covers.musichoarders.xyz/#/search/${searchTerm}`;
+    document.getElementById('coverArtFrame').src = searchUrl;
+    document.getElementById('coverArtUrlInput').value = '';
+    openModal(coverArtModal);
+}
+
+async function applyNewCoverArt() {
+    const url = document.getElementById('coverArtUrlInput').value.trim();
+    if (!url || !currentlyPlayingSong) return;
+    const song = currentlyPlayingSong;
+    song.albumArt = url;
+    updatePlayerUI(song);
+    miniplayerArt.src = url;
+    await updateMediaSessionMetadata(song);
+    if (song.storage === 'soundcloud') {
+        await updateSoundcloudCacheArt(song.id, url);
+    } else {
+        await saveSongs();
+    }
+    Gurasuraisu.showPopup('Cover art updated!');
+    closeModal(coverArtModal);
+}
+
+async function updateSoundcloudCacheArt(songId, newArtUrl) {
+    try {
+        const tx = db.transaction('soundcloudCache', 'readwrite');
+        const store = tx.objectStore('soundcloudCache');
+        const request = store.get(songId);
+        request.onsuccess = () => {
+            const entry = request.result;
+            if (entry) {
+                entry.metadata.albumArt = newArtUrl;
+                store.put(entry);
+            }
+        };
+        await tx.done;
+    } catch (error) {
+        console.error("Failed to update SoundCloud cache with new art:", error);
+    }
 }
 
 function openManageFoldersModal() {
@@ -6928,19 +7005,47 @@ async function verifyPermission(handle, shouldRequest = false) {
     return false;
 }
 
-        function updatePlayerUI(song, progress = 0) {
-            musicTitle.textContent = sanitize(song.name);
-            musicArtist.textContent = song.artist;
-            albumArtImg.src = song.albumArt;
-            albumArtImg.classList.remove('fade-out');
-            updateAllBackgrounds(song.albumArt);
-            updateFavicon(song.albumArt);
-            updateTimeDisplays(progress, audioPlayer.duration);
+function updatePlayerUI(song, progress = 0) {
+    musicTitle.textContent = sanitize(song.name);
+    musicArtist.textContent = song.artist;
 
-            // **MODIFICATION**: Prioritize the known (trimmed) duration from the song object
-            const displayDuration = song.duration || audioPlayer.duration || 0;
-            updateTimeDisplays(progress, displayDuration);
+    const albumArtContainer = document.querySelector('.album-art');
+    const artUrl = song.albumArt;
+    const isVideo = artUrl && (artUrl.endsWith('.mp4') || artUrl.endsWith('.mov'));
+
+    let mediaElement = albumArtContainer.querySelector('video, img');
+
+    if (isVideo) {
+        if (mediaElement && mediaElement.tagName === 'VIDEO') {
+            if (mediaElement.src !== artUrl) mediaElement.src = artUrl;
+        } else {
+            albumArtContainer.innerHTML = '';
+            const video = document.createElement('video');
+            video.src = artUrl;
+            video.autoplay = true;
+            video.loop = true;
+            video.muted = true;
+            video.playsInline = true;
+            albumArtContainer.appendChild(video);
         }
+    } else {
+        if (mediaElement && mediaElement.tagName === 'IMG') {
+            if (mediaElement.src !== (artUrl || DEFAULT_ART_SRC)) mediaElement.src = artUrl || DEFAULT_ART_SRC;
+        } else {
+            albumArtContainer.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = artUrl || DEFAULT_ART_SRC;
+            img.id = 'albumArtImg';
+            img.alt = 'Album Art';
+            albumArtContainer.appendChild(img);
+        }
+    }
+
+    updateAllBackgrounds(song.albumArt);
+    updateFavicon(song.albumArt);
+    const displayDuration = song.duration || audioPlayer.duration || 0;
+    updateTimeDisplays(progress, displayDuration);
+}
 
         function updateTimeDisplays(current = 0, duration = 0) {
             currentTimeDisplay.textContent = formatTime(current);
@@ -7637,6 +7742,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
         document.getElementById('saveIntegrations').addEventListener('click', saveIntegrationSettings);
+
+        document.getElementById('menuFindCover').addEventListener('click', () => {
+            openCoverArtFinder();
+            moreOptionsMenu.classList.remove('visible');
+        });
 
         const soundcloudSearchInput = document.getElementById('soundcloudSearchInput');
         soundcloudSearchInput.addEventListener('input', () => {
