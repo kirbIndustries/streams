@@ -2702,6 +2702,7 @@ function setView(viewName) {
     const isNowPlaying = (viewName === 'now-playing');
 
     if (isNowPlaying) {
+        body.style.backgroundColor = 'var(--background-color)';
         if (!animationFrameId) {
             animateCanvas();
         }
@@ -2709,7 +2710,6 @@ function setView(viewName) {
         if (!visualizerFrameId && visualizerDraw) {
             visualizerDraw();
         }
-        body.style.backgroundColor = 'var(--background-color)';
     } else {
         if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
@@ -2719,6 +2719,7 @@ function setView(viewName) {
             cancelAnimationFrame(visualizerFrameId);
             visualizerFrameId = null;
         }
+        body.style.backgroundColor = '';
     }
     
     tabBtns.forEach(btn => {
