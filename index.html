@@ -5645,7 +5645,7 @@ function updateMiniplayerUI(song, state) {
     miniplayerArt.src = song.albumArt;
     miniplayerTitle.textContent = sanitize(song.name);
     miniplayerArtist.textContent = sanitize(song.artist);
-    miniplayerPlayBtn.innerHTML = `<span class="material-symbols-rounded">${state === 'playing' ? 'pause' : 'play_arrow'}</span>`;
+    miniplayerPlayBtn.innerHTML = `<span class="material-symbols-rounded" style="font-size: 28px;">${state === 'playing' ? 'pause' : 'play_arrow'}</span>`;
 }
         
 async function getSongFileUrl(song) {
