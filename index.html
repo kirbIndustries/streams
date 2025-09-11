@@ -3907,7 +3907,7 @@ const availableMusicFunctions = {
             
             // --- Apply Beat Animations ---
             // NEW: Apply contrast filter based on the blob's animated contrast property
-            const contrastValue = 1 + blob.currentContrast * 0.75; // Max 175% contrast
+            const contrastValue = 1 + blob.currentContrast * 1; // Max 200% contrast
             context.filter = `contrast(${contrastValue})`;
             
             context.translate(blob.x, blob.y);
@@ -3924,8 +3924,7 @@ const availableMusicFunctions = {
                 const y = Math.sin(angle);
                 const noiseVal = noise((x + 1) * noiseFrequency, (y + 1) * noiseFrequency, blob.time * noiseSpeed);
                 
-                // Use the base radius, no more scaling with the beat
-                const radius = blob.radius + (noiseVal * blob.radius * 0.3);
+                const radius = (blob.radius + (noiseVal * blob.radius * 0.3)) * (1 + blob.currentContrast * 0.05);
 
                 const pointX = x * radius;
                 const pointY = y * radius;
@@ -4022,7 +4021,7 @@ const availableMusicFunctions = {
                 blob.time += 0.1;
 
                 // NEW: Animate contrast and handle decay timer
-                const attackSpeed = 0.22; // Animates up in ~0.15s
+                const attackSpeed = 0.55; // Animates up
                 const decaySpeed = 0.11;  // Animates down in ~0.3s
                 const speed = blob.targetContrast > blob.currentContrast ? attackSpeed : decaySpeed;
                 blob.currentContrast += (blob.targetContrast - blob.currentContrast) * speed;
