@@ -3887,10 +3887,8 @@ const availableMusicFunctions = {
                     time: Math.random() * 1000,
                     warpAmount: 0,
                     baseWarp: radius * 0.1,
-                    // NEW properties for beat effect
-                    targetContrast: 0,
-                    currentContrast: 0,
-                    decayTimer: 0,
+                    contrast: 1,
+                    scale: 1,
                 });
             }
         }
@@ -3901,17 +3899,19 @@ const availableMusicFunctions = {
          * @param {CanvasRenderingContext2D} context - The canvas context to draw on.
          * @param {object} blob - The blob object containing its properties.
          * @param {HTMLImageElement} imageToDraw - The pre-resized album art.
+         * @param {number} currentBeatIntensity - The global beat intensity (0 to 1).
          */
-        function drawOrganicBlob(context, blob, imageToDraw) {
+        function drawOrganicBlob(context, blob, imageToDraw, currentBeatIntensity) {
             context.save();
             
             // --- Apply Beat Animations ---
-            // NEW: Apply contrast filter based on the blob's animated contrast property
-            const contrastValue = 1 + blob.currentContrast * 1; // Max 200% contrast
-            context.filter = `contrast(${contrastValue})`;
-            
+            // 1. Calculate an effective scale for the blob (base size + beat pulse).
+            const effectiveScale = 1 + currentBeatIntensity * 0.05; // 5% size increase on beat
+            // 2. Calculate an effective rotation (base rotation + beat kick).
+            const effectiveRotation = blob.rotation + currentBeatIntensity * 0.075; // Add a rotational nudge
+
             context.translate(blob.x, blob.y);
-            context.rotate(blob.rotation);
+            context.rotate(effectiveRotation); // Use the animated rotation
             
             context.beginPath();
             const points = 20;
@@ -3924,7 +3924,8 @@ const availableMusicFunctions = {
                 const y = Math.sin(angle);
                 const noiseVal = noise((x + 1) * noiseFrequency, (y + 1) * noiseFrequency, blob.time * noiseSpeed);
                 
-                const radius = (blob.radius + (noiseVal * blob.radius * 0.3)) * (1 + blob.currentContrast * 0.05);
+                // Use the animated scale to calculate the radius for this frame
+                const radius = blob.radius * effectiveScale + (noiseVal * blob.radius * 0.3);
 
                 const pointX = x * radius;
                 const pointY = y * radius;
@@ -3937,9 +3938,9 @@ const availableMusicFunctions = {
             // The liquid strip effect (unchanged)
             const totalWarp = blob.baseWarp + Math.sin(blob.time * 0.1) * (blob.baseWarp * 0.5);
             const numStrips = 30;
-            const stripWidth = (blob.radius * 2) / numStrips;
+            const stripWidth = (blob.radius * 2 * effectiveScale) / numStrips; // Use effectiveScale here too
             for (let i = 0; i < numStrips; i++) {
-                const stripX = -blob.radius + i * stripWidth;
+                const stripX = -blob.radius * effectiveScale + i * stripWidth;
                 const sinInput = (i / numStrips) * Math.PI + blob.time * 0.1;
                 const yOffset = Math.sin(sinInput) * totalWarp;
                 
@@ -3947,8 +3948,8 @@ const availableMusicFunctions = {
                     imageToDraw,
                     blob.sourceX + (blob.sourceSize / numStrips) * i, blob.sourceY,
                     blob.sourceSize / numStrips, blob.sourceSize,
-                    stripX, -blob.radius + yOffset,
-                    stripWidth + 1, blob.radius * 2
+                    stripX, -blob.radius * effectiveScale + yOffset,
+                    stripWidth + 1, blob.radius * 2 * effectiveScale
                 );
             }
 
@@ -4012,7 +4013,7 @@ const availableMusicFunctions = {
                 blob.x += blob.vx;
                 blob.y += blob.vy;
                 blob.rotation += blob.rotationSpeed;
-                const radius = blob.radius; // Use base radius for wrapping
+                const radius = blob.radius * (1 + beatIntensity * 0.1); // Use an effective radius for wrapping
                 if (blob.x - radius > canvasWidth) { blob.x = -radius; } 
                 else if (blob.x + radius < 0) { blob.x = canvasWidth + radius; }
                 if (blob.y - radius > canvasHeight) { blob.y = -radius; } 
@@ -4020,28 +4021,15 @@ const availableMusicFunctions = {
 
                 blob.time += 0.1;
 
-                // NEW: Animate contrast and handle decay timer
-                const attackSpeed = 0.55; // Animates up
-                const decaySpeed = 0.11;  // Animates down in ~0.3s
-                const speed = blob.targetContrast > blob.currentContrast ? attackSpeed : decaySpeed;
-                blob.currentContrast += (blob.targetContrast - blob.currentContrast) * speed;
-
-                if (blob.decayTimer > 0) {
-                    blob.decayTimer--;
-                    if (blob.decayTimer === 0) {
-                        // Timer ran out, start decaying back to normal
-                        blob.targetContrast = 0;
-                    }
-                }
-
                 // --- Draw Blobs with Transition and Beat Intensity ---
+                // Pass the decaying `beatIntensity` to the drawing function
                 if (isTransitioning && oldResizedArt.complete && oldResizedArt.src) {
                     ctx.globalAlpha = 1 - transitionProgress;
-                    drawOrganicBlob(ctx, blob, oldResizedArt);
+                    drawOrganicBlob(ctx, blob, oldResizedArt, beatIntensity);
                 }
                 if (currentResizedArt.complete && currentResizedArt.src) {
                     ctx.globalAlpha = isTransitioning ? transitionProgress : 1;
-                    drawOrganicBlob(ctx, blob, currentResizedArt);
+                    drawOrganicBlob(ctx, blob, currentResizedArt, beatIntensity);
                 }
                 ctx.globalAlpha = 1;
             });
@@ -4057,18 +4045,7 @@ const availableMusicFunctions = {
          * The animateCanvas function will handle the decay and animation.
          */
         function triggerBeatEffect() {
-            if (!blobs || blobs.length === 0) return;
-
-            const numBlobsToActivate = isMobile ? 1 : 3;
-            const decayFrames = 18; // Approx 0.3s at 60fps
-
-            for (let i = 0; i < numBlobsToActivate; i++) {
-                const randomIndex = Math.floor(Math.random() * blobs.length);
-                const blob = blobs[randomIndex];
-                // Set the target to high contrast and reset the decay timer
-                blob.targetContrast = 1;
-                blob.decayTimer = decayFrames;
-            }
+            beatIntensity = 1;
         }
         
 async function createResizedImageURL(imageUrl, width, height) {
