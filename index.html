@@ -1467,6 +1467,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            box-shadow: none;
         }
         
         .remove-from-queue-btn {
@@ -1799,6 +1800,7 @@
             opacity: 0.5;
             transition: opacity 0.2s, background-color 0.2s;
             z-index: 5;
+            box-shadow: var(--sun-shadow);
         }
 
         /* App Drawer Styles */
@@ -1872,6 +1874,7 @@
             gap: 15px;
             cursor: pointer;
             transition: all 0.3s cubic-bezier(.3,1.2,.64,1);
+            box-shadow: var(--sun-shadow);
         }
         .highlight-card:active {
             transform: scale(0.96);
@@ -2109,7 +2112,7 @@
 
             <div class="search-container" id="soundcloud-search-container" style="position: absolute; width: 90%; z-index: 1; left: 50%; transform: translateX(-50%);">
                 <span class="material-symbols-rounded search-icon" style="padding-left: 2px;">search</span>
-                <input type="text" id="soundcloudSearchInput" placeholder="Search SoundCloud" class="library-search-input" style="box-shadow: 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
+                <input type="text" id="soundcloudSearchInput" placeholder="Search SoundCloud" class="library-search-input" style="box-shadow: var(--sun-shadow), 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
             </div>
             
             <div id="soundcloud-results-grid" class="item-grid" style="padding-top: 60px; padding-bottom: 240px;">
@@ -2121,7 +2124,7 @@
         <div class="page-content-wrapper">
             <div class="search-container" style="position: absolute; width: 90%; z-index: 1; left: 50%; transform: translateX(-50%);">
                 <span class="material-symbols-rounded search-icon" style="padding-left: 2px;">search</span>
-                <input type="text" id="searchInput" placeholder="Search your Library" class="library-search-input" style="box-shadow: 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
+                <input type="text" id="searchInput" placeholder="Search your Library" class="library-search-input" style="box-shadow: var(--sun-shadow), 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
             </div>
             <div id="search-results-grid" class="item-grid" style="padding-top: 60px;">
                 <!-- Search results will be rendered here -->
