@@ -501,9 +501,11 @@
           position: relative;
           z-index: 1000;
           transition: transform 0.1s ease;
+          border-radius: 12px;
         }
         
         .music-item {
+            box-shadow: var(--sun-shadow);
             padding: 12px 16px;
             background-color: var(--search-background);
             border: none;
@@ -532,6 +534,7 @@
             overflow: hidden;
             min-height: fit-content;
             position: relative;
+            box-shadow: none;
         }
         
         .music-item.active {
@@ -544,7 +547,7 @@
         .queue-item.active {
             background-color: var(--search-background) !important;
             font-weight: bold;
-            border-radius: 11px;
+            border-radius: 12px;
             transition: all 0.3s ease;
             padding: 5px 1px;
             border: 1px solid var(--glass-border);
