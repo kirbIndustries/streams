@@ -383,6 +383,7 @@
             padding: 8px 16px;
             height: 42px;
             border-radius: 10px;
+            text-wrap-mode: nowrap;
         }
 
         .filter-container .filter-btn:active, .filter-container .filter-btn-sc:active {
@@ -1103,7 +1104,6 @@
         .filter-container {
             display: flex;
             gap: 6px;
-            max-width: 340px;
             justify-content: center;
         }
         
@@ -2097,7 +2097,7 @@
     <div id="soundcloud-view" class="view-container" style="display: none;">
         <div class="page-content-wrapper">
             <div class="library-controls" id="soundcloud-controls">
-                <div class="filter-container" id="soundcloud-filter-container" style="max-width: 246px;">
+                <div class="filter-container" id="soundcloud-filter-container">
                     <button class="filter-btn-sc" data-filter="albums" style="border-radius: 25px 10px 10px 25px;">Albums</button>
                     <button class="filter-btn-sc" data-filter="artists">Artists</button>
                     <button class="filter-btn-sc active" data-filter="tracks" style="border-radius: 10px 25px 25px 10px;">Songs</button>
