@@ -6094,32 +6094,37 @@ function trimAudioBuffer(audioBuffer, lrcData) {
 
 async function processAndCacheHlsTrack(songObject, m3u8Url) {
     try {
-        // Step 1: Fetch the m3u8 playlist file
         const playlistResponse = await fetch(m3u8Url);
         if (!playlistResponse.ok) throw new Error('Failed to fetch HLS playlist.');
         const playlistText = await playlistResponse.text();
 
-        // Step 2: Parse the playlist to get segment URLs
-        // THIS IS THE FIX: Only select lines that contain the '.m4s' segment extension.
-        // This is much more reliable than just filtering out lines starting with '#'.
+        // Find the initialization segment URI from the playlist (essential for decoding)
+        const mapLine = playlistText.split('\n').find(line => line.startsWith('#EXT-X-MAP:URI'));
+        if (!mapLine) throw new Error('No initialization segment found in HLS playlist.');
+        
+        const uriMatch = mapLine.match(/URI="([^"]+)"/);
+        if (!uriMatch || !uriMatch[1]) throw new Error('Could not parse initialization segment URI.');
+        
+        const initSegmentUrl = new URL(uriMatch[1], m3u8Url).href;
+        
+        // Find all the media segment URLs
         const segmentUrls = playlistText.split('\n')
-            .filter(line => line.includes('.m4s'))
+            .filter(line => line.trim().length > 0 && !line.startsWith('#'))
             .map(line => new URL(line, m3u8Url).href);
-
-        if (segmentUrls.length === 0) throw new Error('No valid .m4s segments found in HLS playlist.');
-
-        // Step 3: Download all segments in parallel
-        const segmentBlobs = await Promise.all(
-            segmentUrls.map(url => fetch(url).then(res => {
+        if (segmentUrls.length === 0) throw new Error('No media segments found in HLS playlist.');
+        
+        // Download the initialization and media segments in parallel
+        const [initSegmentBlob, ...segmentBlobs] = await Promise.all(
+            [initSegmentUrl, ...segmentUrls].map(url => fetch(url).then(res => {
                 if (!res.ok) throw new Error(`Failed to fetch segment: ${url}`);
                 return res.blob();
             }))
         );
 
-        // Step 4: Concatenate all segment blobs into one
-        const concatenatedBlob = new Blob(segmentBlobs, { type: 'audio/mp4' }); // AAC is in an MP4 container
+        // Concatenate them: initialization segment FIRST, then all data segments.
+        const concatenatedBlob = new Blob([initSegmentBlob, ...segmentBlobs], { type: 'audio/mp4' });
 
-        // Step 5: Decode, trim, and re-encode the concatenated audio
+        // Now, decode the valid concatenated file
         if (!audioContext) await initVisualizer();
         const arrayBuffer = await concatenatedBlob.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -6129,9 +6134,8 @@ async function processAndCacheHlsTrack(songObject, m3u8Url) {
         const lrcData = lrcDataResult && lrcDataResult.type === 'lrc' ? parseLRC(lrcDataResult.content) : null;
 
         const { trimmedBuffer, newDuration } = trimAudioBuffer(audioBuffer, lrcData);
-        const finalAudioBlob = audioBufferToWav(trimmedBuffer); // The existing function saves as WAV
+        const finalAudioBlob = audioBufferToWav(trimmedBuffer);
 
-        // Step 6: Save the final processed blob to the cache
         const cacheEntry = {
             id: songObject.id,
             blob: finalAudioBlob,
@@ -6151,7 +6155,6 @@ async function processAndCacheHlsTrack(songObject, m3u8Url) {
 
         console.log(`Successfully processed and cached HLS track "${songObject.name}"`);
         await manageCacheSize();
-
         return cacheEntry;
 
     } catch (error) {
