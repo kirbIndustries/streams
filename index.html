@@ -5581,25 +5581,20 @@ async function playSong(song, playContext = null) {
         song.hasBeenLogged = false;
         currentlyPlayingSong = song;
         
-        let fileUrl;
-        let isHlsStream = song.streamUrl && song.streamUrl.includes('.m3u8');
+        const isHlsStream = song.streamUrl && song.streamUrl.includes('.m3u8');
 
-        // Revoke old blob URL if it exists
-        if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
-            URL.revokeObjectURL(audioPlayer.src);
-        }
-        // Detach any previous HLS instance
+        // Detach any previous HLS instance to ensure a clean state for the audio element
         if (hls) {
             hls.destroy();
             hls = null;
         }
+        // Revoke any old object URL to prevent memory leaks
+        if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
+            URL.revokeObjectURL(audioPlayer.src);
+        }
 
-        if (song.blobUrl) { // Case 1: Playing a cached song
-            fileUrl = song.blobUrl;
-            audioPlayer.removeAttribute('crossorigin');
-            connectAudioGraph();
-            audioPlayer.src = fileUrl;
-        } else if (isHlsStream) { // Case 2: Streaming a new HLS SoundCloud song
+        if (isHlsStream) {
+            // HLS Streaming Path (SoundCloud)
             if (typeof Hls !== 'undefined' && Hls.isSupported()) {
                 hls = new Hls();
                 hls.loadSource(song.streamUrl);
@@ -5610,24 +5605,19 @@ async function playSong(song, playContext = null) {
             }
             audioPlayer.crossOrigin = "anonymous";
             connectAudioGraph();
-            fileUrl = song.streamUrl; // For reference, not for src
-        } else { // Case 3: Playing a local file
-            fileUrl = await getSongFileUrl(song);
+        } else {
+            // Standard File Path (Local files or Cached files)
+            const fileUrl = song.blobUrl || await getSongFileUrl(song);
+            if (!fileUrl) {
+                 throw new Error(`Could not get a playable URL for ${song.name}`);
+            }
             audioPlayer.removeAttribute('crossorigin');
             connectAudioGraph();
             audioPlayer.src = fileUrl;
         }
-
-        if (!fileUrl) {
-            Gurasuraisu.showPopup(`Could not find file for "${song.name}"`);
-            isPlayerLoading = false;
-            playNextSong();
-            return;
-        }
         
         currentSongId = song.id;
         currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
-
         // Revoke old blob URL if it exists
         if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
             URL.revokeObjectURL(audioPlayer.src);
@@ -6274,17 +6264,21 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
         if (!trackResponse.ok) throw new Error('Could not fetch SC track details.');
         const trackData = await trackResponse.json();
-
+        
         const uniqueKey = `${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`;
         if (localSongLookup.has(uniqueKey)) {
             playSong(localSongLookup.get(uniqueKey), playContext);
             return;
         }
 
-        const hlsStream = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'));
-        if (!hlsStream || !hlsStream.url) throw new Error('No HLS AAC streamable URL found.');
+        // Find the best available stream: Prioritize HLS AAC, but fall back to progressive MP3.
+        let streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'));
+        if (!streamToUse) {
+            streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+        }
+        if (!streamToUse || !streamToUse.url) throw new Error('No streamable URL found for this track.');
         
-        const streamResponse = await fetch(`${hlsStream.url}?client_id=${soundcloudClientId}`);
+        const streamResponse = await fetch(`${streamToUse.url}?client_id=${soundcloudClientId}`);
         const streamData = await streamResponse.json();
 
         const songToPlay = {
