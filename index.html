@@ -6266,7 +6266,6 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         const tx = db.transaction('soundcloudCache', 'readonly');
         const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
         
-        // --- PATH 1: SONG IS ALREADY CACHED AND PROCESSED ---
         if (cachedEntry) {
             const songToPlay = cachedEntry.metadata;
             songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
@@ -6277,26 +6276,46 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             return;
         }
 
-        // --- PATH 2: NEW SONG, STREAM AND PROCESS ---
         const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
         if (!trackResponse.ok) throw new Error('Could not fetch SC track details.');
         const trackData = await trackResponse.json();
-        
+
         const uniqueKey = `${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`;
         if (localSongLookup.has(uniqueKey)) {
             playSong(localSongLookup.get(uniqueKey), playContext);
             return;
         }
 
-        // THE FIX: Broaden the search. Prioritize HLS AAC, then any HLS, then progressive MP3.
-        let streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'))
-                       || trackData.media.transcodings.find(t => t.format.protocol === 'hls')
-                       || trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+        // --- THE FIX: Resiliently loop through all available streams to find a working one ---
+        const transcodings = trackData.media.transcodings;
+        let streamData = null;
+        let chosenStreamFormat = null;
 
-        if (!streamToUse || !streamToUse.url) throw new Error('No streamable URL found for this track.');
-        
-        const streamResponse = await fetch(`${streamToUse.url}?client_id=${soundcloudClientId}`);
-        const streamData = await streamResponse.json();
+        for (const stream of transcodings) {
+            try {
+                // Attempt to fetch the JSON object that contains the final stream URL
+                const streamResponse = await fetch(`${stream.url}?client_id=${soundcloudClientId}`);
+                if (!streamResponse.ok) {
+                    console.warn(`Stream endpoint ${stream.url} failed with status ${streamResponse.status}. Trying next...`);
+                    continue; // If it's a 404 or other error, just try the next available format.
+                }
+                
+                const data = await streamResponse.json();
+                if (data.url) {
+                    streamData = data;
+                    chosenStreamFormat = stream.format;
+                    break; // Success! We found a working stream, so exit the loop.
+                }
+            } catch (e) {
+                // Ignore fetch errors (e.g., network issues) and continue to the next transcoding
+                console.warn(`Could not fetch stream data from ${stream.url}`, e);
+            }
+        }
+
+        if (!streamData) {
+            throw new Error('No playable stream URL could be found after trying all available formats.');
+        }
+        // --- End of Fix ---
 
         const songToPlay = {
             id: trackData.id,
@@ -6305,40 +6324,31 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             album: trackData.title,
             albumArt: getHighResArtwork(trackData.artwork_url),
             storage: 'soundcloud',
-            streamUrl: streamData.url, // This will be a .m3u8 playlist URL
+            streamUrl: streamData.url, // This is now a guaranteed valid URL
             lyrics: null,
             lrcData: null
         };
 
-        // Start playback immediately with the untrimmed stream
         playSong(songToPlay, playContext);
 
-        // NOW, process in the background and wait for the result
-        const processedEntry = await processAndCacheSoundcloudTrack(songToPlay, streamData.url, streamToUse.format.protocol);
+        // Process in the background, passing the protocol of the stream we successfully chose
+        const processedEntry = await processAndCacheSoundcloudTrack(songToPlay, streamData.url, chosenStreamFormat.protocol);
 
-        // After processing, if we're still playing the same song, switch to the trimmed version
         if (processedEntry && currentSongId === numericTrackId) {
             const currentTime = audioPlayer.currentTime;
-            
-            // Update the currently playing song object with the new, accurate info
             currentlyPlayingSong.duration = processedEntry.metadata.trimmedDuration;
             currentlyPlayingSong.lyrics = processedEntry.metadata.lyrics;
             currentlyPlayingSong.lrcData = processedEntry.metadata.lrcData;
-
             const newBlobUrl = URL.createObjectURL(processedEntry.blob);
             
-            // Detach HLS if it's running
             if (hls) {
                 hls.destroy();
                 hls = null;
             }
-            
             audioPlayer.src = newBlobUrl;
-            // Seek to the correct time in the new source
             audioPlayer.addEventListener('loadedmetadata', () => {
                  audioPlayer.currentTime = currentTime;
                  audioPlayer.play();
-                 // Update the UI to reflect the new, shorter duration
                  updatePlayerUI(currentlyPlayingSong, currentTime);
             }, { once: true });
         }
