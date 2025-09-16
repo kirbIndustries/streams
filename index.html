@@ -5593,6 +5593,7 @@ async function playSong(song, playContext = null) {
         }
         // Reset src to ensure the element is clean before assigning a new source
         audioPlayer.src = ''; 
+        audioPlayer.load(); // Explicitly call load to stop current playback and reset state
 
         if (isHlsStream) {
             // HLS Streaming Path (for SoundCloud)
@@ -5619,15 +5620,6 @@ async function playSong(song, playContext = null) {
 
         currentSongId = song.id;
         currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
-        
-        // Revoke old blob URL if it exists
-        if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
-            URL.revokeObjectURL(audioPlayer.src);
-        }
-
-        // Now set the source, which triggers the browser to fetch it using the attributes we just set.
-        audioPlayer.src = fileUrl;
-        audioPlayer.load(); // Explicitly call load() to ensure the new source is processed.
         
         // Update both the main player and the miniplayer
         updatePlayerUI(song);
@@ -6100,7 +6092,10 @@ async function processAndCacheHlsTrack(songObject, m3u8Url) {
 
         // Find the initialization segment URI from the playlist (essential for decoding)
         const mapLine = playlistText.split('\n').find(line => line.startsWith('#EXT-X-MAP:URI'));
-        if (!mapLine) throw new Error('No initialization segment found in HLS playlist.');
+        if (!mapLine) {
+            console.warn(`No initialization segment (#EXT-X-MAP:URI) found in HLS playlist for "${songObject.name}". Caching is not possible for this track.`);
+            return null; // Gracefully abort caching for this track
+        }
         
         const uriMatch = mapLine.match(/URI="([^"]+)"/);
         if (!uriMatch || !uriMatch[1]) throw new Error('Could not parse initialization segment URI.');
