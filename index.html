@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,700,1,0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="/assets/gurapp/api/gurasuraisu-api.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -2484,6 +2485,7 @@
         let touchStartY = 0;
         let initialY = 0;
         let touchTarget = null;
+        let hls = null; // To hold the Hls.js instance
         let audioContext;
         let analyser;
         let isVisualizerInitialized = false;
@@ -5580,19 +5582,40 @@ async function playSong(song, playContext = null) {
         currentlyPlayingSong = song;
         
         let fileUrl;
-        // This logic now cleanly handles all cases
-        if (song.blobUrl) { // Case 1: Playing a cached SoundCloud song
+        let isHlsStream = song.streamUrl && song.streamUrl.includes('.m3u8');
+
+        // Revoke old blob URL if it exists
+        if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
+            URL.revokeObjectURL(audioPlayer.src);
+        }
+        // Detach any previous HLS instance
+        if (hls) {
+            hls.destroy();
+            hls = null;
+        }
+
+        if (song.blobUrl) { // Case 1: Playing a cached song
             fileUrl = song.blobUrl;
             audioPlayer.removeAttribute('crossorigin');
-            connectAudioGraph(); // Visualizer works!
-        } else if (song.streamUrl) { // Case 2: Streaming a new SoundCloud song
-            fileUrl = song.streamUrl;
+            connectAudioGraph();
+            audioPlayer.src = fileUrl;
+        } else if (isHlsStream) { // Case 2: Streaming a new HLS SoundCloud song
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                hls = new Hls();
+                hls.loadSource(song.streamUrl);
+                hls.attachMedia(audioPlayer);
+            } else if (audioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (e.g., Safari)
+                audioPlayer.src = song.streamUrl;
+            }
             audioPlayer.crossOrigin = "anonymous";
             connectAudioGraph();
+            fileUrl = song.streamUrl; // For reference, not for src
         } else { // Case 3: Playing a local file
             fileUrl = await getSongFileUrl(song);
             audioPlayer.removeAttribute('crossorigin');
             connectAudioGraph();
+            audioPlayer.src = fileUrl;
         }
 
         if (!fileUrl) {
@@ -5921,16 +5944,17 @@ async function proactivelyCacheNextInQueue() {
             const checkReq = store.get(nextSong.id);
             checkReq.onsuccess = () => {
                 if (!checkReq.result) {
-                    console.log(`Proactively caching next song: ${nextSong.name}`);
+                    console.log(`Proactively caching next HLS song: ${nextSong.name}`);
                     // Fetch stream URL and cache without awaiting, so it runs in the background
                     fetch(`https://api-v2.soundcloud.com/tracks/${nextSong.id}?client_id=${soundcloudClientId}`)
                         .then(res => res.json())
                         .then(trackData => {
-                            const stream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-                            return fetch(`${stream.url}?client_id=${soundcloudClientId}`);
+                            const hlsStream = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'));
+                            if (!hlsStream) throw new Error('No HLS stream for proactive cache.');
+                            return fetch(`${hlsStream.url}?client_id=${soundcloudClientId}`);
                         })
                         .then(res => res.json())
-                        .then(streamData => cacheSoundcloudTrack(nextSong, streamData.url))
+                        .then(streamData => processAndCacheHlsTrack(nextSong, streamData.url))
                         .catch(err => console.error(`Failed to proactively cache ${nextSong.name}:`, err));
                 }
             };
@@ -6076,37 +6100,49 @@ function trimAudioBuffer(audioBuffer, lrcData) {
     return { trimmedBuffer: newBuffer, newDuration: newDuration };
 }
 
-/**
- * Fetches, processes, trims, and caches a SoundCloud track in the background.
- * @param {object} songObject The initial song object.
- * @param {string} streamUrl The URL to fetch the audio from.
- */
-async function processAndCacheSoundcloudTrack(songObject, streamUrl) {
+async function processAndCacheHlsTrack(songObject, m3u8Url) {
     try {
-        // Step 1: Clean metadata and fetch audio/lyrics in parallel
-        const cleanedSong = cleanMetadataForLyricsSearch(songObject);
-        const [audioResponse, lrcDataResult] = await Promise.all([
-            fetch(streamUrl),
-            fetchLyricsFromLrclib(cleanedSong) // USE CLEANED METADATA FOR SEARCH
-        ]);
-        
-        if (!audioResponse.ok) throw new Error('Could not download audio for processing.');
-        
-        const arrayBuffer = await audioResponse.arrayBuffer();
+        // Step 1: Fetch the m3u8 playlist file
+        const playlistResponse = await fetch(m3u8Url);
+        if (!playlistResponse.ok) throw new Error('Failed to fetch HLS playlist.');
+        const playlistText = await playlistResponse.text();
+
+        // Step 2: Parse the playlist to get segment URLs
+        const segmentUrls = playlistText.split('\n')
+            .filter(line => line.trim().length > 0 && !line.startsWith('#'))
+            .map(line => new URL(line, m3u8Url).href);
+
+        if (segmentUrls.length === 0) throw new Error('No segments found in HLS playlist.');
+
+        // Step 3: Download all segments in parallel
+        const segmentBlobs = await Promise.all(
+            segmentUrls.map(url => fetch(url).then(res => {
+                if (!res.ok) throw new Error(`Failed to fetch segment: ${url}`);
+                return res.blob();
+            }))
+        );
+
+        // Step 4: Concatenate all segment blobs into one
+        const concatenatedBlob = new Blob(segmentBlobs, { type: 'audio/mp4' }); // AAC is in an MP4 container
+
+        // Step 5: Decode, trim, and re-encode the concatenated audio
         if (!audioContext) await initVisualizer();
-        
+        const arrayBuffer = await concatenatedBlob.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
+        const cleanedSong = cleanMetadataForLyricsSearch(songObject);
+        const lrcDataResult = await fetchLyricsFromLrclib(cleanedSong);
         const lrcData = lrcDataResult && lrcDataResult.type === 'lrc' ? parseLRC(lrcDataResult.content) : null;
-        const { trimmedBuffer, newDuration } = trimAudioBuffer(audioBuffer, lrcData);
-        
-        const audioBlob = audioBufferToWav(trimmedBuffer);
 
+        const { trimmedBuffer, newDuration } = trimAudioBuffer(audioBuffer, lrcData);
+        const finalAudioBlob = audioBufferToWav(trimmedBuffer); // The existing function saves as WAV
+
+        // Step 6: Save the final processed blob to the cache
         const cacheEntry = {
             id: songObject.id,
-            blob: audioBlob,
+            blob: finalAudioBlob,
             timestamp: Date.now(),
-            size: audioBlob.size,
+            size: finalAudioBlob.size,
             metadata: {
                 ...songObject,
                 trimmedDuration: newDuration,
@@ -6119,15 +6155,13 @@ async function processAndCacheSoundcloudTrack(songObject, streamUrl) {
         tx.objectStore('soundcloudCache').put(cacheEntry);
         await tx.done;
 
-        console.log(`Successfully processed and cached trimmed version of "${songObject.name}"`);
+        console.log(`Successfully processed and cached HLS track "${songObject.name}"`);
         await manageCacheSize();
 
-        // **MODIFICATION**: Return the entry so the player can use it immediately.
         return cacheEntry;
 
     } catch (error) {
-        console.error(`Failed to process and cache ${songObject.name}:`, error);
-        // **MODIFICATION**: Return null on failure.
+        console.error(`Failed to process and cache HLS track ${songObject.name}:`, error);
         return null;
     }
 }
@@ -6136,6 +6170,8 @@ async function processAndCacheSoundcloudTrack(songObject, streamUrl) {
 async function saveSoundcloudTrackToLibrary() {
     if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'soundcloud') return;
     const songToSave = currentlyPlayingSong;
+
+    Gurasuraisu.showPopup(`Saving "${songToSave.name}"... This may take a moment.`);
 
     try {
         let audioBlob;
@@ -6146,11 +6182,14 @@ async function saveSoundcloudTrackToLibrary() {
         if (cacheReq && cacheReq.blob) {
             audioBlob = cacheReq.blob;
         } else {
-            // If not cached, we must fetch the audio data first
-            if (!songToSave.streamUrl) throw new Error("Stream URL is missing.");
-            const audioResponse = await fetch(songToSave.streamUrl);
-            if (!audioResponse.ok) throw new Error("Could not download audio.");
-            audioBlob = await audioResponse.blob();
+            // If not cached, we must fetch, process, and cache it now before saving.
+            if (!songToSave.streamUrl) throw new Error("Stream URL is missing for saving.");
+            
+            const processedEntry = await processAndCacheHlsTrack(songToSave, songToSave.streamUrl);
+            if (!processedEntry || !processedEntry.blob) {
+                throw new Error("Failed to process HLS track for saving.");
+            }
+            audioBlob = processedEntry.blob;
         }
 
         const newLocalId = Date.now() + Math.random();
@@ -6242,10 +6281,10 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             return;
         }
 
-        const progressiveStream = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-        if (!progressiveStream || !progressiveStream.url) throw new Error('No streamable URL found.');
+        const hlsStream = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'));
+        if (!hlsStream || !hlsStream.url) throw new Error('No HLS AAC streamable URL found.');
         
-        const streamResponse = await fetch(`${progressiveStream.url}?client_id=${soundcloudClientId}`);
+        const streamResponse = await fetch(`${hlsStream.url}?client_id=${soundcloudClientId}`);
         const streamData = await streamResponse.json();
 
         const songToPlay = {
@@ -6255,7 +6294,7 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             album: trackData.title,
             albumArt: getHighResArtwork(trackData.artwork_url),
             storage: 'soundcloud',
-            streamUrl: streamData.url, // Temporary stream URL
+            streamUrl: streamData.url, // This will be a .m3u8 playlist URL
             lyrics: null,
             lrcData: null
         };
@@ -6264,7 +6303,7 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         playSong(songToPlay, playContext);
 
         // NOW, process in the background and wait for the result
-        const processedEntry = await processAndCacheSoundcloudTrack(songToPlay, streamData.url);
+        const processedEntry = await processAndCacheHlsTrack(songToPlay, streamData.url);
 
         // After processing, if we're still playing the same song, switch to the trimmed version
         if (processedEntry && currentSongId === numericTrackId) {
@@ -6277,8 +6316,10 @@ async function playSoundcloudTrack(trackId, playContext = null) {
 
             const newBlobUrl = URL.createObjectURL(processedEntry.blob);
             
-            if (audioPlayer.src.startsWith('blob:')) {
-                URL.revokeObjectURL(audioPlayer.src);
+            // Detach HLS if it's running
+            if (hls) {
+                hls.destroy();
+                hls = null;
             }
             
             audioPlayer.src = newBlobUrl;
