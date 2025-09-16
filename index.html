@@ -5928,17 +5928,22 @@ async function proactivelyCacheNextInQueue() {
             const checkReq = store.get(nextSong.id);
             checkReq.onsuccess = () => {
                 if (!checkReq.result) {
-                    console.log(`Proactively caching next HLS song: ${nextSong.name}`);
-                    // Fetch stream URL and cache without awaiting, so it runs in the background
+                    console.log(`Proactively caching next song: ${nextSong.name}`);
                     fetch(`https://api-v2.soundcloud.com/tracks/${nextSong.id}?client_id=${soundcloudClientId}`)
                         .then(res => res.json())
                         .then(trackData => {
-                            const hlsStream = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'));
-                            if (!hlsStream) throw new Error('No HLS stream for proactive cache.');
-                            return fetch(`${hlsStream.url}?client_id=${soundcloudClientId}`);
+                            let streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'))
+                                           || trackData.media.transcodings.find(t => t.format.protocol === 'hls')
+                                           || trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+                            if (!streamToUse) throw new Error('No stream found for proactive cache.');
+                            
+                            return fetch(`${streamToUse.url}?client_id=${soundcloudClientId}`)
+                                .then(res => res.json())
+                                .then(streamData => {
+                                    // Call the new unified function with the protocol type
+                                    processAndCacheSoundcloudTrack(nextSong, streamData.url, streamToUse.format.protocol);
+                                });
                         })
-                        .then(res => res.json())
-                        .then(streamData => processAndCacheHlsTrack(nextSong, streamData.url))
                         .catch(err => console.error(`Failed to proactively cache ${nextSong.name}:`, err));
                 }
             };
@@ -6084,42 +6089,45 @@ function trimAudioBuffer(audioBuffer, lrcData) {
     return { trimmedBuffer: newBuffer, newDuration: newDuration };
 }
 
-async function processAndCacheHlsTrack(songObject, m3u8Url) {
+async function processAndCacheSoundcloudTrack(songObject, streamUrl, protocol) {
     try {
-        const playlistResponse = await fetch(m3u8Url);
-        if (!playlistResponse.ok) throw new Error('Failed to fetch HLS playlist.');
-        const playlistText = await playlistResponse.text();
+        let concatenatedBlob;
 
-        // Find the initialization segment URI from the playlist (essential for decoding)
-        const mapLine = playlistText.split('\n').find(line => line.startsWith('#EXT-X-MAP:URI'));
-        if (!mapLine) {
-            console.warn(`No initialization segment (#EXT-X-MAP:URI) found in HLS playlist for "${songObject.name}". Caching is not possible for this track.`);
-            return null; // Gracefully abort caching for this track
+        if (protocol === 'hls') {
+            // HLS Path: Fetch playlist, find segments, and join them
+            const playlistResponse = await fetch(streamUrl);
+            if (!playlistResponse.ok) throw new Error('Failed to fetch HLS playlist.');
+            const playlistText = await playlistResponse.text();
+
+            const mapLine = playlistText.split('\n').find(line => line.startsWith('#EXT-X-MAP:URI'));
+            if (!mapLine) {
+                 console.warn(`No initialization segment found for "${songObject.name}". Caching aborted.`);
+                 return null;
+            }
+            const uriMatch = mapLine.match(/URI="([^"]+)"/);
+            if (!uriMatch || !uriMatch[1]) throw new Error('Could not parse init segment URI.');
+            
+            const initSegmentUrl = new URL(uriMatch[1], streamUrl).href;
+            const segmentUrls = playlistText.split('\n').filter(line => line.trim().length > 0 && !line.startsWith('#')).map(line => new URL(line, streamUrl).href);
+            if (segmentUrls.length === 0) throw new Error('No media segments found.');
+
+            const [initSegmentBlob, ...segmentBlobs] = await Promise.all(
+                [initSegmentUrl, ...segmentUrls].map(url => fetch(url).then(res => res.ok ? res.blob() : Promise.reject(`Failed segment fetch: ${url}`)))
+            );
+            concatenatedBlob = new Blob([initSegmentBlob, ...segmentBlobs], { type: 'audio/mp4' });
+
+        } else if (protocol === 'progressive') {
+            // Progressive MP3 Path: Just fetch the single file
+            const audioResponse = await fetch(streamUrl);
+            if (!audioResponse.ok) throw new Error('Could not download progressive audio file.');
+            concatenatedBlob = await audioResponse.blob();
+        } else {
+            throw new Error(`Unsupported protocol for caching: ${protocol}`);
         }
-        
-        const uriMatch = mapLine.match(/URI="([^"]+)"/);
-        if (!uriMatch || !uriMatch[1]) throw new Error('Could not parse initialization segment URI.');
-        
-        const initSegmentUrl = new URL(uriMatch[1], m3u8Url).href;
-        
-        // Find all the media segment URLs
-        const segmentUrls = playlistText.split('\n')
-            .filter(line => line.trim().length > 0 && !line.startsWith('#'))
-            .map(line => new URL(line, m3u8Url).href);
-        if (segmentUrls.length === 0) throw new Error('No media segments found in HLS playlist.');
-        
-        // Download the initialization and media segments in parallel
-        const [initSegmentBlob, ...segmentBlobs] = await Promise.all(
-            [initSegmentUrl, ...segmentUrls].map(url => fetch(url).then(res => {
-                if (!res.ok) throw new Error(`Failed to fetch segment: ${url}`);
-                return res.blob();
-            }))
-        );
 
-        // Concatenate them: initialization segment FIRST, then all data segments.
-        const concatenatedBlob = new Blob([initSegmentBlob, ...segmentBlobs], { type: 'audio/mp4' });
+        if (!concatenatedBlob) throw new Error('Failed to create a processable audio blob.');
 
-        // Now, decode the valid concatenated file
+        // --- Common Processing Pipeline ---
         if (!audioContext) await initVisualizer();
         const arrayBuffer = await concatenatedBlob.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -6132,15 +6140,10 @@ async function processAndCacheHlsTrack(songObject, m3u8Url) {
         const finalAudioBlob = audioBufferToWav(trimmedBuffer);
 
         const cacheEntry = {
-            id: songObject.id,
-            blob: finalAudioBlob,
-            timestamp: Date.now(),
-            size: finalAudioBlob.size,
+            id: songObject.id, blob: finalAudioBlob, timestamp: Date.now(), size: finalAudioBlob.size,
             metadata: {
-                ...songObject,
-                trimmedDuration: newDuration,
-                lyrics: lrcDataResult ? lrcDataResult.content : null,
-                lrcData: lrcData,
+                ...songObject, trimmedDuration: newDuration,
+                lyrics: lrcDataResult ? lrcDataResult.content : null, lrcData: lrcData,
             }
         };
 
@@ -6148,12 +6151,12 @@ async function processAndCacheHlsTrack(songObject, m3u8Url) {
         tx.objectStore('soundcloudCache').put(cacheEntry);
         await tx.done;
 
-        console.log(`Successfully processed and cached HLS track "${songObject.name}"`);
+        console.log(`Successfully processed and cached track "${songObject.name}"`);
         await manageCacheSize();
         return cacheEntry;
 
     } catch (error) {
-        console.error(`Failed to process and cache HLS track ${songObject.name}:`, error);
+        console.error(`Failed to process and cache track ${songObject.name}:`, error);
         return null;
     }
 }
@@ -6175,11 +6178,23 @@ async function saveSoundcloudTrackToLibrary() {
             audioBlob = cacheReq.blob;
         } else {
             // If not cached, we must fetch, process, and cache it now before saving.
-            if (!songToSave.streamUrl) throw new Error("Stream URL is missing for saving.");
+            if (!songToSave.id) throw new Error("Song ID is missing for saving.");
+
+            const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${songToSave.id}?client_id=${soundcloudClientId}`);
+            if (!trackResponse.ok) throw new Error('Could not re-fetch SC track details for saving.');
+            const trackData = await trackResponse.json();
+
+            let streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'))
+                           || trackData.media.transcodings.find(t => t.format.protocol === 'hls')
+                           || trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+            if (!streamToUse) throw new Error("No stream found for saving.");
+
+            const streamResponse = await fetch(`${streamToUse.url}?client_id=${soundcloudClientId}`);
+            const streamData = await streamResponse.json();
             
-            const processedEntry = await processAndCacheHlsTrack(songToSave, songToSave.streamUrl);
+            const processedEntry = await processAndCacheSoundcloudTrack(songToSave, streamData.url, streamToUse.format.protocol);
             if (!processedEntry || !processedEntry.blob) {
-                throw new Error("Failed to process HLS track for saving.");
+                throw new Error("Failed to process track for saving.");
             }
             audioBlob = processedEntry.blob;
         }
@@ -6299,7 +6314,7 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         playSong(songToPlay, playContext);
 
         // NOW, process in the background and wait for the result
-        const processedEntry = await processAndCacheHlsTrack(songToPlay, streamData.url);
+        const processedEntry = await processAndCacheSoundcloudTrack(songToPlay, streamData.url, streamToUse.format.protocol);
 
         // After processing, if we're still playing the same song, switch to the trimmed version
         if (processedEntry && currentSongId === numericTrackId) {
