@@ -5936,6 +5936,13 @@ async function proactivelyCacheNextInQueue() {
                                            || trackData.media.transcodings.find(t => t.format.protocol === 'hls')
                                            || trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
                             if (!streamToUse) throw new Error('No stream found for proactive cache.');
+
+                            // --- THE FIX: Check protocol before attempting to cache ---
+                            const protocol = streamToUse.format.protocol;
+                            if (protocol !== 'hls' && protocol !== 'progressive') {
+                                console.log(`Skipping proactive cache for unsupported protocol: ${protocol}`);
+                                return; // Abort caching for this track
+                            }
                             
                             return fetch(`${streamToUse.url}?client_id=${soundcloudClientId}`)
                                 .then(res => res.json())
@@ -6164,9 +6171,15 @@ async function processAndCacheSoundcloudTrack(songObject, streamUrl, protocol) {
 // This is a NEW function to save a SoundCloud track to the local library
 async function saveSoundcloudTrackToLibrary() {
     if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'soundcloud') return;
-    const songToSave = currentlyPlayingSong;
 
-    Gurasuraisu.showPopup(`Saving "${songToSave.name}"... This may take a moment.`);
+    // --- THE FIX: Check if the current song's protocol is encrypted ---
+    if (currentlyPlayingSong.protocol && currentlyPlayingSong.protocol.includes('encrypted')) {
+        Gurasuraisu.showPopup(`Cannot save "${songToSave.name}"`);
+        return;
+    }
+
+    const songToSave = currentlyPlayingSong;
+    Gurasuraisu.showPopup(`Saving "${songToSave.name}"`);
 
     try {
         let audioBlob;
@@ -6325,32 +6338,39 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             albumArt: getHighResArtwork(trackData.artwork_url),
             storage: 'soundcloud',
             streamUrl: streamData.url, // This is now a guaranteed valid URL
+            protocol: chosenStreamFormat.protocol, // Store the protocol for later checks
             lyrics: null,
             lrcData: null
         };
 
         playSong(songToPlay, playContext);
 
-        // Process in the background, passing the protocol of the stream we successfully chose
-        const processedEntry = await processAndCacheSoundcloudTrack(songToPlay, streamData.url, chosenStreamFormat.protocol);
-
-        if (processedEntry && currentSongId === numericTrackId) {
-            const currentTime = audioPlayer.currentTime;
-            currentlyPlayingSong.duration = processedEntry.metadata.trimmedDuration;
-            currentlyPlayingSong.lyrics = processedEntry.metadata.lyrics;
-            currentlyPlayingSong.lrcData = processedEntry.metadata.lrcData;
-            const newBlobUrl = URL.createObjectURL(processedEntry.blob);
+        // --- THE FIX: Only attempt to cache if the protocol is one we can handle ---
+        if (chosenStreamFormat.protocol === 'hls' || chosenStreamFormat.protocol === 'progressive') {
+            // Process in the background, passing the protocol of the stream we successfully chose
+            const processedEntry = await processAndCacheSoundcloudTrack(songToPlay, streamData.url, chosenStreamFormat.protocol);
             
-            if (hls) {
-                hls.destroy();
-                hls = null;
+            // This logic for swapping to the trimmed version remains the same.
+            if (processedEntry && currentSongId === numericTrackId) {
+                const currentTime = audioPlayer.currentTime;
+                currentlyPlayingSong.duration = processedEntry.metadata.trimmedDuration;
+                currentlyPlayingSong.lyrics = processedEntry.metadata.lyrics;
+                currentlyPlayingSong.lrcData = processedEntry.metadata.lrcData;
+                const newBlobUrl = URL.createObjectURL(processedEntry.blob);
+                
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
+                audioPlayer.src = newBlobUrl;
+                audioPlayer.addEventListener('loadedmetadata', () => {
+                     audioPlayer.currentTime = currentTime;
+                     audioPlayer.play();
+                     updatePlayerUI(currentlyPlayingSong, currentTime);
+                }, { once: true });
             }
-            audioPlayer.src = newBlobUrl;
-            audioPlayer.addEventListener('loadedmetadata', () => {
-                 audioPlayer.currentTime = currentTime;
-                 audioPlayer.play();
-                 updatePlayerUI(currentlyPlayingSong, currentTime);
-            }, { once: true });
+        } else {
+            console.log(`Skipping cache for unsupported protocol: ${chosenStreamFormat.protocol}`);
         }
 
     } catch (error) {
