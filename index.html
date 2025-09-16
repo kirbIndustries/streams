@@ -5577,47 +5577,49 @@ async function playSong(song, playContext = null) {
 
     try {
         audioPlayer.pause();
-        lastActiveTimestamp = -1; 
+        lastActiveTimestamp = -1;
         song.hasBeenLogged = false;
         currentlyPlayingSong = song;
-        
+
         const isHlsStream = song.streamUrl && song.streamUrl.includes('.m3u8');
 
-        // Detach any previous HLS instance to ensure a clean state for the audio element
+        // Detach any previous HLS instance and revoke old URLs for a clean start
         if (hls) {
             hls.destroy();
             hls = null;
         }
-        // Revoke any old object URL to prevent memory leaks
         if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
             URL.revokeObjectURL(audioPlayer.src);
         }
+        // Reset src to ensure the element is clean before assigning a new source
+        audioPlayer.src = ''; 
 
         if (isHlsStream) {
-            // HLS Streaming Path (SoundCloud)
+            // HLS Streaming Path (for SoundCloud)
             if (typeof Hls !== 'undefined' && Hls.isSupported()) {
                 hls = new Hls();
                 hls.loadSource(song.streamUrl);
                 hls.attachMedia(audioPlayer);
             } else if (audioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
-                // Native HLS support (e.g., Safari)
-                audioPlayer.src = song.streamUrl;
+                audioPlayer.src = song.streamUrl; // Native HLS support (e.g., Safari)
             }
             audioPlayer.crossOrigin = "anonymous";
             connectAudioGraph();
         } else {
-            // Standard File Path (Local files or Cached files)
+            // Standard File Path (for Local or Cached files)
             const fileUrl = song.blobUrl || await getSongFileUrl(song);
             if (!fileUrl) {
-                 throw new Error(`Could not get a playable URL for ${song.name}`);
+                // Throw an error if no URL could be found, which is caught below.
+                throw new Error(`Could not get a playable URL for ${song.name}`);
             }
             audioPlayer.removeAttribute('crossorigin');
             connectAudioGraph();
             audioPlayer.src = fileUrl;
         }
-        
+
         currentSongId = song.id;
         currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
+        
         // Revoke old blob URL if it exists
         if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
             URL.revokeObjectURL(audioPlayer.src);
@@ -6098,11 +6100,13 @@ async function processAndCacheHlsTrack(songObject, m3u8Url) {
         const playlistText = await playlistResponse.text();
 
         // Step 2: Parse the playlist to get segment URLs
+        // THIS IS THE FIX: Only select lines that contain the '.m4s' segment extension.
+        // This is much more reliable than just filtering out lines starting with '#'.
         const segmentUrls = playlistText.split('\n')
-            .filter(line => line.trim().length > 0 && !line.startsWith('#'))
+            .filter(line => line.includes('.m4s'))
             .map(line => new URL(line, m3u8Url).href);
 
-        if (segmentUrls.length === 0) throw new Error('No segments found in HLS playlist.');
+        if (segmentUrls.length === 0) throw new Error('No valid .m4s segments found in HLS playlist.');
 
         // Step 3: Download all segments in parallel
         const segmentBlobs = await Promise.all(
@@ -6271,11 +6275,11 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             return;
         }
 
-        // Find the best available stream: Prioritize HLS AAC, but fall back to progressive MP3.
-        let streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'));
-        if (!streamToUse) {
-            streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-        }
+        // THE FIX: Broaden the search. Prioritize HLS AAC, then any HLS, then progressive MP3.
+        let streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'))
+                       || trackData.media.transcodings.find(t => t.format.protocol === 'hls')
+                       || trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
+
         if (!streamToUse || !streamToUse.url) throw new Error('No streamable URL found for this track.');
         
         const streamResponse = await fetch(`${streamToUse.url}?client_id=${soundcloudClientId}`);
