@@ -1672,11 +1672,6 @@
             #lyrics-queue-panel {
                 width: 450px;
                 height: calc(100vh - 160px);
-                background-color: var(--search-background);
-                border: 1px solid var(--glass-border);
-                box-shadow: var(--sun-shadow), 0 0 50px rgba(0, 0, 0, 0.2);
-                border-radius: 25px;
-                backdrop-filter: blur(10px) saturate(2) var(--edge-refraction-filter);
                 flex-shrink: 0;
                 padding: 20px;
                 display: flex;
@@ -1701,7 +1696,7 @@
             }
 
             #now-playing-view.panel-is-open .now-playing-wrapper > *:not(.controls-container):not(#moreOptionsMenu) {
-                display: none;
+                opacity: 0;
             }
             
             #lyrics-queue-panel.visible {
