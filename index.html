@@ -1699,6 +1699,10 @@
                 align-items: center;
                 justify-content: start;
             }
+
+            #now-playing-view.panel-is-open .now-playing-wrapper > *:not(.controls-container):not(#moreOptionsMenu) {
+                display: none;
+            }
             
             #lyrics-queue-panel.visible {
                 opacity: 1;
@@ -7243,6 +7247,8 @@ function closePanel() {
     if (!isPanelVisible) return;
     isPanelVisible = false;
     
+    document.getElementById('now-playing-view').classList.remove('panel-is-open');
+
     // Remove the 'visible' class from the panel
     document.getElementById('lyrics-queue-panel').classList.remove('visible');
     
@@ -7655,6 +7661,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         panelContent = null; // 'lyrics' or 'queue'
 
         const togglePanel = (newContent) => {
+            const nowPlayingView = document.getElementById('now-playing-view');
             if (isPanelVisible && panelContent === newContent) {
                 closePanel();
             } else {
@@ -7662,6 +7669,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 isPanelVisible = true;
                 panelContent = newContent;
                 
+                nowPlayingView.classList.add('panel-is-open');
+
                 if (panelContent === 'lyrics') {
                     renderLyrics();
                 } else {
