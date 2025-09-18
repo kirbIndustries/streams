@@ -569,7 +569,7 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            transition: transform 0.5s ease, opacity 0.3s ease;
+            transition: transform 0.3s cubic-bezier(.3,1.2,.64,1), opacity 0.3s ease;
             max-width: 500px;
             max-height: 500px;
             aspect-ratio: 1 / 1;
@@ -577,6 +577,10 @@
             margin-top: 80px;
             outline: 1px solid var(--glass-border);
             transform: scale(1);
+        }
+
+        #now-playing-view.paused .album-art {
+            transform: scale(0.8);
         }
 
         .album-art.fade-out {
@@ -7216,23 +7220,9 @@ playPauseBtn.addEventListener('click', async () => {
                 );
             }
         }
-        
-        audioPlayer.play().then(() => {
-            playPauseIcon.textContent = 'pause';
-            playPauseBtn.classList.add('playing');
-            updateMiniplayerUI(currentlyPlayingSong, 'playing');
-            if (!document.body.classList.contains('reduce-animations')) {
-            }
-            updateMediaSessionPlaybackState('playing');
-            Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
-        }).catch(error => console.error("Play failed:", error));
+        audioPlayer.play().catch(error => console.error("Play failed:", error));
     } else {
         audioPlayer.pause();
-        playPauseIcon.textContent = 'play_arrow';
-        playPauseBtn.classList.remove('playing');
-        updateMiniplayerUI(currentlyPlayingSong, 'paused');
-        updateMediaSessionPlaybackState('paused');
-        Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
     }
 });
         
@@ -7285,7 +7275,27 @@ volumeSlider.addEventListener('input', (e) => {
     else volumeIcon.textContent = 'volume_up';
 });
 
+audioPlayer.addEventListener('pause', () => {
+    const nowPlayingView = document.getElementById('now-playing-view');
+    if(nowPlayingView) nowPlayingView.classList.add('paused');
+    
+    playPauseIcon.textContent = 'play_arrow';
+    playPauseBtn.classList.remove('playing');
+    updateMiniplayerUI(currentlyPlayingSong, 'paused');
+    updateMediaSessionPlaybackState('paused');
+    Gurasuraisu.updatePlaybackState({ playbackState: 'paused' });
+});
+
 audioPlayer.addEventListener('play', () => {
+    const nowPlayingView = document.getElementById('now-playing-view');
+    if(nowPlayingView) nowPlayingView.classList.remove('paused');
+
+    playPauseIcon.textContent = 'pause';
+    playPauseBtn.classList.add('playing');
+    updateMiniplayerUI(currentlyPlayingSong, 'playing');
+    updateMediaSessionPlaybackState('playing');
+    Gurasuraisu.updatePlaybackState({ playbackState: 'playing' });
+
     if (!document.body.classList.contains('reduce-animations')) {
     }
 });
