@@ -1261,6 +1261,28 @@
                 transform-origin: right bottom !important;
             }
         }
+
+        @media (max-width: 560px) {
+            .controls-container {
+                gap: 5px;
+                bottom: 40px;
+                width: 90%;
+                justify-content: space-evenly;
+                padding: 0 10px;
+                max-width: 500px;
+                width: 100%;
+                transform: translateX(-50%);
+                left: 50%;
+            }
+
+            .lyrics-button, .queue-button, .more-button {
+                background: none;
+                border: 1px solid transparent;
+                backdrop-filter: none;
+                box-shadow: none;
+            }
+        }
+
         
         @media (max-width: 800px) {
             .player-controls {
