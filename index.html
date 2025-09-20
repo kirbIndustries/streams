@@ -5782,9 +5782,9 @@ async function logSongPlay(songId) {
 }
 
 function proxyUrl(url) {
-    // THE FIX: Only proxy the main 'api-v2.soundcloud.com' endpoint.
-    // Media streaming URLs must be fetched directly to work correctly.
-    if (isCorsProxyEnabled && url.includes('api-v2.soundcloud.com')) {
+    if (isCorsProxyEnabled) {
+        // We now proxy all SoundCloud API and media resolution calls.
+        // The final media segments from other domains don't need this.
         return `https://corsproxy.io/?${encodeURIComponent(url)}`;
     }
     return url;
@@ -6151,15 +6151,14 @@ function trimAudioBuffer(audioBuffer, lrcData) {
 async function processAndCacheSoundcloudTrack(songObject) {
     try {
         // --- THE FIX: Fetch fresh, DIRECT stream URLs for caching ---
-        const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${songObject.id}?client_id=${soundcloudClientId}`);
+        const trackResponse = await fetch(proxyUrl(`https://api-v2.soundcloud.com/tracks/${songObject.id}?client_id=${soundcloudClientId}`));
         if (!trackResponse.ok) throw new Error('Could not fetch track details for caching.');
         const trackData = await trackResponse.json();
         
         let streamData = null, chosenProtocol = null;
         for (const stream of trackData.media.transcodings) {
             try {
-                // IMPORTANT: This fetch is NOT proxied, ensuring we get valid, short-lived media URLs.
-                const res = await fetch(`${stream.url}?client_id=${soundcloudClientId}`);
+                const res = await fetch(proxyUrl(`${stream.url}?client_id=${soundcloudClientId}`));
                 if (res.ok) {
                     const data = await res.json();
                     if (data.url) {
@@ -6330,9 +6329,9 @@ async function updateSoundcloudCacheWithLyrics(song) {
 
 async function playSoundcloudTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
+    let trackData = null; // Declare here to be accessible in the catch block
     
     try {
-        // --- Step 1: Check for a cached version first ---
         const tx = db.transaction('soundcloudCache', 'readonly');
         const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
         
@@ -6348,9 +6347,9 @@ async function playSoundcloudTrack(trackId, playContext = null) {
 
         // --- Step 2: If not cached, fetch metadata to find a live stream ---
         const trackDetailsUrl = `https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`;
-        const trackResponse = await fetch(proxyUrl(trackDetailsUrl));
+        const trackResponse = await fetch(proxyUrl(trackDetailsUrl)); // Apply proxy here
         if (!trackResponse.ok) throw new Error('Could not fetch SC track details.');
-        const trackData = await trackResponse.json();
+        trackData = await trackResponse.json();
 
         if (localSongLookup.has(`${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`)) {
             playSong(localSongLookup.get(`${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`), playContext);
@@ -6364,13 +6363,15 @@ async function playSoundcloudTrack(trackId, playContext = null) {
 
         for (const stream of transcodings) {
             try {
-                const streamResponse = await fetch(`${stream.url}?client_id=${soundcloudClientId}`);
+                const streamDataUrl = `${stream.url}?client_id=${soundcloudClientId}`;
+                // THE CRITICAL FIX: Apply proxy to the stream resolution URL
+                const streamResponse = await fetch(proxyUrl(streamDataUrl));
                 if (streamResponse.ok) {
                     const data = await streamResponse.json();
                     if (data.url) {
                         streamData = data;
                         chosenStreamFormat = stream.format;
-                        break; 
+                        break;
                     }
                 }
             } catch (e) { /* Ignore errors and try next format */ }
@@ -6395,12 +6396,13 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         }
 
     } catch (error) {
-        console.error('Error playing or processing SoundCloud track:', error);
-        Gurasuraisu.showPopup(`Could not play "${trackData ? trackData.title : 'track'}"`);
+        // THE FIX for ReferenceError: Use trackData if it exists, otherwise provide a generic message.
+        const trackTitle = trackData ? trackData.title : 'the selected track';
+        console.error(`Error playing or processing SoundCloud track: ${trackTitle}`, error);
+        Gurasuraisu.showPopup(`Could not play "${trackTitle}"`);
         
-        // --- THE FIX: Automatically skip to the next song on any failure ---
-        isPlayerLoading = false; // Unlock the player
-        playNextSong({ userInitiated: false }); // Move to the next item in the queue
+        isPlayerLoading = false;
+        playNextSong({ userInitiated: false });
     }
 }
         
