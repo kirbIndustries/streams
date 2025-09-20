@@ -5981,7 +5981,7 @@ async function proactivelyCacheNextInQueue() {
             checkReq.onsuccess = () => {
                 if (!checkReq.result) {
                     console.log(`Proactively caching next song: ${nextSong.name}`);
-                    fetch(`https://api-v2.soundcloud.com/tracks/${nextSong.id}?client_id=${soundcloudClientId}`)
+                    fetch(proxyUrl(`https://api-v2.soundcloud.com/tracks/${nextSong.id}?client_id=${soundcloudClientId}`))
                         .then(res => res.json())
                         .then(trackData => {
                             let streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'))
