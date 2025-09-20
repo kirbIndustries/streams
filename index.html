@@ -5978,32 +5978,19 @@ async function proactivelyCacheNextInQueue() {
             const tx = db.transaction('soundcloudCache', 'readonly');
             const store = tx.objectStore('soundcloudCache');
             const checkReq = store.get(nextSong.id);
-            checkReq.onsuccess = () => {
+
+            // Use an async function for the callback to handle the caching process
+            checkReq.onsuccess = async () => {
+                // If the song is not already in the cache, start the process
                 if (!checkReq.result) {
                     console.log(`Proactively caching next song: ${nextSong.name}`);
-                    fetch(proxyUrl(`https://api-v2.soundcloud.com/tracks/${nextSong.id}?client_id=${soundcloudClientId}`))
-                        .then(res => res.json())
-                        .then(trackData => {
-                            let streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'))
-                                           || trackData.media.transcodings.find(t => t.format.protocol === 'hls')
-                                           || trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-                            if (!streamToUse) throw new Error('No stream found for proactive cache.');
-
-                            // --- THE FIX: Check protocol before attempting to cache ---
-                            const protocol = streamToUse.format.protocol;
-                            if (protocol !== 'hls' && protocol !== 'progressive') {
-                                console.log(`Skipping proactive cache for unsupported protocol: ${protocol}`);
-                                return; // Abort caching for this track
-                            }
-                            
-                            return fetch(`${streamToUse.url}?client_id=${soundcloudClientId}`)
-                                .then(res => res.json())
-                                .then(streamData => {
-                                    // Call the new unified function with the protocol type
-                                    processAndCacheSoundcloudTrack(nextSong, streamData.url, streamToUse.format.protocol);
-                                });
-                        })
-                        .catch(err => console.error(`Failed to proactively cache ${nextSong.name}:`, err));
+                    try {
+                        // THE FIX: Call the main, self-sufficient caching function.
+                        // It already contains all the necessary logic for resilient, proxied fetching.
+                        await processAndCacheSoundcloudTrack(nextSong);
+                    } catch (err) {
+                        console.error(`Failed to proactively cache ${nextSong.name}:`, err);
+                    }
                 }
             };
         }
