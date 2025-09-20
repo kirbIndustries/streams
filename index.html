@@ -5782,8 +5782,9 @@ async function logSongPlay(songId) {
 }
 
 function proxyUrl(url) {
-    // Only proxy if the toggle is on and the URL is a soundcloud domain
-    if (isCorsProxyEnabled && (url.includes('soundcloud.com') || url.includes('sndcdn.com'))) {
+    // THE FIX: Only proxy the main 'api-v2.soundcloud.com' endpoint.
+    // Media streaming URLs must be fetched directly to work correctly.
+    if (isCorsProxyEnabled && url.includes('api-v2.soundcloud.com')) {
         return `https://corsproxy.io/?${encodeURIComponent(url)}`;
     }
     return url;
@@ -6147,53 +6148,63 @@ function trimAudioBuffer(audioBuffer, lrcData) {
     return { trimmedBuffer: newBuffer, newDuration: newDuration };
 }
 
-async function processAndCacheSoundcloudTrack(songObject, streamUrl, protocol) {
+async function processAndCacheSoundcloudTrack(songObject) {
     try {
-        let concatenatedBlob;
+        // --- THE FIX: Fetch fresh, DIRECT stream URLs for caching ---
+        const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${songObject.id}?client_id=${soundcloudClientId}`);
+        if (!trackResponse.ok) throw new Error('Could not fetch track details for caching.');
+        const trackData = await trackResponse.json();
+        
+        let streamData = null, chosenProtocol = null;
+        for (const stream of trackData.media.transcodings) {
+            try {
+                // IMPORTANT: This fetch is NOT proxied, ensuring we get valid, short-lived media URLs.
+                const res = await fetch(`${stream.url}?client_id=${soundcloudClientId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.url) {
+                        streamData = data;
+                        chosenProtocol = stream.format.protocol;
+                        break;
+                    }
+                }
+            } catch(e) {}
+        }
+        if (!streamData) throw new Error("Could not find a valid stream to download for caching.");
 
-        if (protocol === 'hls') {
-            // HLS Path: Fetch playlist, find segments, and join them
+        let concatenatedBlob;
+        const streamUrl = streamData.url; // Use the freshly fetched URL
+
+        if (chosenProtocol === 'hls') {
             const playlistResponse = await fetch(streamUrl);
             if (!playlistResponse.ok) throw new Error('Failed to fetch HLS playlist.');
             const playlistText = await playlistResponse.text();
-
+            
             const mapLine = playlistText.split('\n').find(line => line.startsWith('#EXT-X-MAP:URI'));
-            if (!mapLine) {
-                 console.warn(`No initialization segment found for "${songObject.name}". Caching aborted.`);
-                 return null;
-            }
+            if (!mapLine) { console.warn(`No init segment for "${songObject.name}". Caching aborted.`); return null; }
             const uriMatch = mapLine.match(/URI="([^"]+)"/);
             if (!uriMatch || !uriMatch[1]) throw new Error('Could not parse init segment URI.');
             
-            const initSegmentUrl = proxyUrl(new URL(uriMatch[1], streamUrl).href);
-            const segmentUrls = playlistText.split('\n').filter(line => line.trim().length > 0 && !line.startsWith('#')).map(line => proxyUrl(new URL(line, streamUrl).href));
+            const initSegmentUrl = new URL(uriMatch[1], streamUrl).href;
+            const segmentUrls = playlistText.split('\n').filter(line => line.trim().length > 0 && !line.startsWith('#')).map(line => new URL(line, streamUrl).href);
             if (segmentUrls.length === 0) throw new Error('No media segments found.');
 
             const [initSegmentBlob, ...segmentBlobs] = await Promise.all(
-                [initSegmentUrl, ...segmentUrls].map(url => fetch(url).then(res => res.ok ? res.blob() : Promise.reject(`Failed segment fetch: ${url}`)))
+                [initSegmentUrl, ...segmentUrls].map(url => fetch(url).then(res => res.blob()))
             );
             concatenatedBlob = new Blob([initSegmentBlob, ...segmentBlobs], { type: 'audio/mp4' });
-
-        } else if (protocol === 'progressive') {
-            // Progressive MP3 Path: Just fetch the single file
+        } else if (chosenProtocol === 'progressive') {
             const audioResponse = await fetch(streamUrl);
             if (!audioResponse.ok) throw new Error('Could not download progressive audio file.');
             concatenatedBlob = await audioResponse.blob();
-        } else {
-            throw new Error(`Unsupported protocol for caching: ${protocol}`);
-        }
+        } else { return null; } // Do not cache unsupported formats
 
-        if (!concatenatedBlob) throw new Error('Failed to create a processable audio blob.');
-
-        // --- Common Processing Pipeline ---
+        // --- Common Processing Pipeline (remains the same) ---
         if (!audioContext) await initVisualizer();
         const arrayBuffer = await concatenatedBlob.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        
-        const cleanedSong = cleanMetadataForLyricsSearch(songObject);
-        const lrcDataResult = await fetchLyricsFromLrclib(cleanedSong);
+        const lrcDataResult = await fetchLyricsFromLrclib(cleanMetadataForLyricsSearch(songObject));
         const lrcData = lrcDataResult && lrcDataResult.type === 'lrc' ? parseLRC(lrcDataResult.content) : null;
-
         const { trimmedBuffer, newDuration } = trimAudioBuffer(audioBuffer, lrcData);
         const finalAudioBlob = audioBufferToWav(trimmedBuffer);
 
@@ -6261,7 +6272,7 @@ async function saveSoundcloudTrackToLibrary() {
             }
             if (!streamData) throw new Error("Could not find a valid stream to download for saving.");
 
-            const processedEntry = await processAndCacheSoundcloudTrack(songToSave, streamData.url, chosenProtocol);
+            const processedEntry = await processAndCacheSoundcloudTrack(songToSave);
             if (!processedEntry || !processedEntry.blob) throw new Error("Failed to process track for saving.");
             audioBlob = processedEntry.blob;
         }
@@ -6378,17 +6389,18 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         // 1. START PLAYBACK IMMEDIATELY. This is non-blocking.
         playSong(songToPlay, playContext);
 
-        // 2. ATTEMPT TO CACHE IN THE BACKGROUND (FIRE-AND-FORGET).
-        // This will run in parallel to playback and will not block the UI or cause buffering.
-        // A .catch is added to prevent unhandled promise rejection errors in the console.
         if (chosenStreamFormat.protocol === 'hls' || chosenStreamFormat.protocol === 'progressive') {
-            processAndCacheSoundcloudTrack(songToPlay, streamData.url, chosenStreamFormat.protocol)
+            processAndCacheSoundcloudTrack(songToPlay)
                 .catch(err => console.error(`Background caching failed for "${songToPlay.name}":`, err));
         }
 
     } catch (error) {
         console.error('Error playing or processing SoundCloud track:', error);
-        Gurasuraisu.showPopup('Could not play the selected item');
+        Gurasuraisu.showPopup(`Could not play "${trackData ? trackData.title : 'track'}"`);
+        
+        // --- THE FIX: Automatically skip to the next song on any failure ---
+        isPlayerLoading = false; // Unlock the player
+        playNextSong({ userInitiated: false }); // Move to the next item in the queue
     }
 }
         
