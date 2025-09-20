@@ -1219,7 +1219,7 @@
           filter: brightness(1.5);
         }
 
-        #soundcloudToggle, #lrclibToggle {
+        #soundcloudToggle, #lrclibToggle, #corsProxyToggle {
             appearance: none;
             width: 50px;
             height: 32px;
@@ -1232,7 +1232,7 @@
             cursor: pointer;
         }
         
-        #soundcloudToggle::before, #lrclibToggle::before {
+        #soundcloudToggle::before, #lrclibToggle::before, #corsProxyToggle::before {
             content: '';
             position: absolute;
             width: 18px;
@@ -1246,11 +1246,11 @@
             border: 1px solid var(--glass-border);
         }
         
-        #soundcloudToggle:checked, #lrclibToggle:checked {
+        #soundcloudToggle:checked, #lrclibToggle:checked, #corsProxyToggle:checked {
             background-color: var(--secondary-text-color);
         }
         
-        #soundcloudToggle:checked::before, #lrclibToggle:checked::before {
+        #soundcloudToggle:checked::before, #lrclibToggle:checked::before, #corsProxyToggle:checked::before {
             width: 22px;
             height: 22px;
             background-color: var(--background-color);
@@ -2302,6 +2302,12 @@
                 <input type="text" id="soundcloudClientId" placeholder="SoundCloud Client ID" class="search-input" style="padding-left: 15px;">
                 <small>You will need to disable CORS to use SoundCloud streaming. A browser extension may be required.</small>
 
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label for="corsProxyToggle">Use corsproxy.io</label>
+                    <input type="checkbox" id="corsProxyToggle">
+                </div>
+                <small>Redirects SoundCloud requests through a proxy. May be slower.</small>
+                
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                     <label for="lrclibToggle">Search LRCLIB for missing lyrics</label>
                     <input type="checkbox" id="lrclibToggle">
@@ -5774,6 +5780,14 @@ async function logSongPlay(songId) {
         console.error("Failed to log song play:", error);
     }
 }
+
+function proxyUrl(url) {
+    // Only proxy if the toggle is on and the URL is a soundcloud domain
+    if (isCorsProxyEnabled && (url.includes('soundcloud.com') || url.includes('sndcdn.com'))) {
+        return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+    }
+    return url;
+}
         
 function initModalVariables() {
     editModal = document.getElementById('editModal');
@@ -5837,6 +5851,7 @@ function openManageFoldersModal() {
     // Populate settings
     document.getElementById('soundcloudClientId').value = soundcloudClientId;
     document.getElementById('soundcloudToggle').checked = isSoundcloudEnabled;
+    document.getElementById('corsProxyToggle').checked = isCorsProxyEnabled;
     document.getElementById('lrclibToggle').checked = isLrclibEnabled;
     openModal(manageFoldersModal);
 }
@@ -5844,12 +5859,14 @@ function openManageFoldersModal() {
 async function saveIntegrationSettings() {
     soundcloudClientId = document.getElementById('soundcloudClientId').value.trim();
     isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
+    isCorsProxyEnabled = document.getElementById('corsProxyToggle').checked; // Add this line
     isLrclibEnabled = document.getElementById('lrclibToggle').checked;
 
     const tx = db.transaction('config', 'readwrite');
     await Promise.all([
         tx.objectStore('config').put({ key: 'soundcloudClientId', value: soundcloudClientId }),
         tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled }),
+        tx.objectStore('config').put({ key: 'isCorsProxyEnabled', value: isCorsProxyEnabled }), // Save the new setting
         tx.objectStore('config').put({ key: 'isLrclibEnabled', value: isLrclibEnabled })
     ]);
     
@@ -5878,8 +5895,9 @@ async function searchSoundCloud() {
 
     resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
 
+    const searchUrl = `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=100`;
     try {
-        const response = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${soundcloudClientId}&limit=100`);
+        const response = await fetch(proxyUrl(searchUrl));
         if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
         
         const data = await response.json();
@@ -6147,8 +6165,8 @@ async function processAndCacheSoundcloudTrack(songObject, streamUrl, protocol) {
             const uriMatch = mapLine.match(/URI="([^"]+)"/);
             if (!uriMatch || !uriMatch[1]) throw new Error('Could not parse init segment URI.');
             
-            const initSegmentUrl = new URL(uriMatch[1], streamUrl).href;
-            const segmentUrls = playlistText.split('\n').filter(line => line.trim().length > 0 && !line.startsWith('#')).map(line => new URL(line, streamUrl).href);
+            const initSegmentUrl = proxyUrl(new URL(uriMatch[1], streamUrl).href);
+            const segmentUrls = playlistText.split('\n').filter(line => line.trim().length > 0 && !line.startsWith('#')).map(line => proxyUrl(new URL(line, streamUrl).href));
             if (segmentUrls.length === 0) throw new Error('No media segments found.');
 
             const [initSegmentBlob, ...segmentBlobs] = await Promise.all(
@@ -6318,7 +6336,8 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         }
 
         // --- Step 2: If not cached, fetch metadata to find a live stream ---
-        const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
+        const trackDetailsUrl = `https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`;
+        const trackResponse = await fetch(proxyUrl(trackDetailsUrl));
         if (!trackResponse.ok) throw new Error('Could not fetch SC track details.');
         const trackData = await trackResponse.json();
 
@@ -6986,14 +7005,17 @@ window.addEventListener("load", async () => {
         const configTx = db.transaction('config', 'readonly');
         const scIdReq = configTx.objectStore('config').get('soundcloudClientId');
         const scEnabledReq = configTx.objectStore('config').get('isSoundcloudEnabled');
+        const corsProxyReq = configTx.objectStore('config').get('isCorsProxyEnabled');
         const lrclibReq = configTx.objectStore('config').get('isLrclibEnabled'); 
         
         const scIdResult = await new Promise(r => { scIdReq.onsuccess = () => r(scIdReq.result) });
         const scEnabledResult = await new Promise(r => { scEnabledReq.onsuccess = () => r(scEnabledReq.result) });
+        const corsProxyResult = await new Promise(r => { corsProxyReq.onsuccess = () => r(corsProxyReq.result) });
         const lrclibEnabledResult = await new Promise(r => { lrclibReq.onsuccess = () => r(lrclibReq.result) }); 
         
         soundcloudClientId = scIdResult ? scIdResult.value : '';
         isSoundcloudEnabled = scEnabledResult ? scEnabledResult.value : false;
+        isCorsProxyEnabled = corsProxyResult ? corsProxyResult.value : false;
         isLrclibEnabled = lrclibEnabledResult ? lrclibEnabledResult.value : false;
         toggleSoundcloudTab();
 
