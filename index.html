@@ -6202,12 +6202,12 @@ async function processAndCacheSoundcloudTrack(songObject, streamUrl, protocol) {
 }
         
 // This is a NEW function to save a SoundCloud track to the local library
+// in function saveSoundcloudTrackToLibrary()
+
 async function saveSoundcloudTrackToLibrary() {
     if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'soundcloud') return;
-
-    // --- THE FIX: Check if the current song's protocol is encrypted ---
     if (currentlyPlayingSong.protocol && currentlyPlayingSong.protocol.includes('encrypted')) {
-        Gurasuraisu.showPopup(`Cannot save "${songToSave.name}"`);
+        Gurasuraisu.showPopup("Saving encrypted streams is not supported.");
         return;
     }
 
@@ -6216,64 +6216,56 @@ async function saveSoundcloudTrackToLibrary() {
 
     try {
         let audioBlob;
-        // Check if the song is already cached
         const tx = db.transaction('soundcloudCache', 'readonly');
         const cacheReq = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(songToSave.id));
         
         if (cacheReq && cacheReq.blob) {
             audioBlob = cacheReq.blob;
         } else {
-            // If not cached, we must fetch, process, and cache it now before saving.
-            if (!songToSave.id) throw new Error("Song ID is missing for saving.");
-
+            // THE FIX: If not cached, perform a resilient fetch-and-process operation now.
             const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${songToSave.id}?client_id=${soundcloudClientId}`);
-            if (!trackResponse.ok) throw new Error('Could not re-fetch SC track details for saving.');
+            if (!trackResponse.ok) throw new Error('Could not fetch track details for saving.');
             const trackData = await trackResponse.json();
-
-            let streamToUse = trackData.media.transcodings.find(t => t.format.protocol === 'hls' && t.format.mime_type.includes('aac'))
-                           || trackData.media.transcodings.find(t => t.format.protocol === 'hls')
-                           || trackData.media.transcodings.find(t => t.format.protocol === 'progressive');
-            if (!streamToUse) throw new Error("No stream found for saving.");
-
-            const streamResponse = await fetch(`${streamToUse.url}?client_id=${soundcloudClientId}`);
-            const streamData = await streamResponse.json();
             
-            const processedEntry = await processAndCacheSoundcloudTrack(songToSave, streamData.url, streamToUse.format.protocol);
-            if (!processedEntry || !processedEntry.blob) {
-                throw new Error("Failed to process track for saving.");
+            let streamData = null, chosenProtocol = null;
+            for (const stream of trackData.media.transcodings) {
+                try {
+                    const res = await fetch(`${stream.url}?client_id=${soundcloudClientId}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.url) {
+                            streamData = data;
+                            chosenProtocol = stream.format.protocol;
+                            break;
+                        }
+                    }
+                } catch(e) {}
             }
+            if (!streamData) throw new Error("Could not find a valid stream to download for saving.");
+
+            const processedEntry = await processAndCacheSoundcloudTrack(songToSave, streamData.url, chosenProtocol);
+            if (!processedEntry || !processedEntry.blob) throw new Error("Failed to process track for saving.");
             audioBlob = processedEntry.blob;
         }
 
         const newLocalId = Date.now() + Math.random();
         const newLocalSong = {
-            id: newLocalId,
-            name: songToSave.name,
-            artist: songToSave.artist,
-            album: songToSave.name,
-            albumArtist: songToSave.artist, // Assume artist is album artist for SC
-            storage: 'indexeddb',
-            handleName: `${songToSave.name}.mp3`,
-            dateAdded: Date.now(),
-            year: new Date().getFullYear().toString(),
-            albumArt: songToSave.albumArt,
-            trackNumber: null,
-            discNumber: null,
-            lyrics: null,
-            lrcData: null,
-            playCount: 0
+            id: newLocalId, name: songToSave.name, artist: songToSave.artist,
+            album: songToSave.name, albumArtist: songToSave.artist,
+            storage: 'indexeddb', handleName: `${songToSave.name}.mp3`,
+            dateAdded: Date.now(), year: new Date().getFullYear().toString(),
+            albumArt: songToSave.albumArt, trackNumber: null, discNumber: null,
+            lyrics: songToSave.lyrics, lrcData: songToSave.lrcData, playCount: 0
         };
 
-        // Save to the main 'songs' store and the 'musicFiles' store
         const songTx = db.transaction(['songs', 'musicFiles'], 'readwrite');
         songTx.objectStore('songs').put(newLocalSong);
         songTx.objectStore('musicFiles').put({ id: newLocalId, file: audioBlob });
         await songTx.done;
         
-        songs.push(newLocalSong); // Add to in-memory library
+        songs.push(newLocalSong);
         processAndSortSongs();
         updateLocalSongLookup([newLocalSong]); 
-        Gurasuraisu.showPopup(`Saved "${songToSave.name}" to Library`);
 
     } catch (error) {
         console.error("Failed to save SoundCloud track to library:", error);
@@ -6305,10 +6297,13 @@ async function updateSoundcloudCacheWithLyrics(song) {
     }
 }
 
+// Replace the entire playSoundcloudTrack function with this version
+
 async function playSoundcloudTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     
     try {
+        // --- Step 1: Check for a cached version first ---
         const tx = db.transaction('soundcloudCache', 'readonly');
         const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
         
@@ -6319,91 +6314,57 @@ async function playSoundcloudTrack(trackId, playContext = null) {
                 songToPlay.duration = cachedEntry.metadata.trimmedDuration;
             }
             playSong(songToPlay, playContext);
-            return;
+            return; // Play from cache and exit
         }
 
+        // --- Step 2: If not cached, fetch metadata to find a live stream ---
         const trackResponse = await fetch(`https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`);
         if (!trackResponse.ok) throw new Error('Could not fetch SC track details.');
         const trackData = await trackResponse.json();
 
-        const uniqueKey = `${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`;
-        if (localSongLookup.has(uniqueKey)) {
-            playSong(localSongLookup.get(uniqueKey), playContext);
+        if (localSongLookup.has(`${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`)) {
+            playSong(localSongLookup.get(`${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`), playContext);
             return;
         }
 
-        // --- THE FIX: Resiliently loop through all available streams to find a working one ---
+        // --- Step 3: Resiliently find a valid, playable stream URL ---
         const transcodings = trackData.media.transcodings;
         let streamData = null;
         let chosenStreamFormat = null;
 
         for (const stream of transcodings) {
             try {
-                // Attempt to fetch the JSON object that contains the final stream URL
                 const streamResponse = await fetch(`${stream.url}?client_id=${soundcloudClientId}`);
-                if (!streamResponse.ok) {
-                    console.warn(`Stream endpoint ${stream.url} failed with status ${streamResponse.status}. Trying next...`);
-                    continue; // If it's a 404 or other error, just try the next available format.
+                if (streamResponse.ok) {
+                    const data = await streamResponse.json();
+                    if (data.url) {
+                        streamData = data;
+                        chosenStreamFormat = stream.format;
+                        break; 
+                    }
                 }
-                
-                const data = await streamResponse.json();
-                if (data.url) {
-                    streamData = data;
-                    chosenStreamFormat = stream.format;
-                    break; // Success! We found a working stream, so exit the loop.
-                }
-            } catch (e) {
-                // Ignore fetch errors (e.g., network issues) and continue to the next transcoding
-                console.warn(`Could not fetch stream data from ${stream.url}`, e);
-            }
+            } catch (e) { /* Ignore errors and try next format */ }
         }
 
-        if (!streamData) {
-            throw new Error('No playable stream URL could be found after trying all available formats.');
-        }
-        // --- End of Fix ---
+        if (!streamData) throw new Error('No playable stream URL could be found.');
 
+        // --- Step 4: Play the song IMMEDIATELY and cache in the background ---
         const songToPlay = {
-            id: trackData.id,
-            name: trackData.title,
-            artist: trackData.user.username,
-            album: trackData.title,
-            albumArt: getHighResArtwork(trackData.artwork_url),
-            storage: 'soundcloud',
-            streamUrl: streamData.url, // This is now a guaranteed valid URL
-            protocol: chosenStreamFormat.protocol, // Store the protocol for later checks
-            lyrics: null,
-            lrcData: null
+            id: trackData.id, name: trackData.title, artist: trackData.user.username,
+            album: trackData.title, albumArt: getHighResArtwork(trackData.artwork_url),
+            storage: 'soundcloud', streamUrl: streamData.url,
+            protocol: chosenStreamFormat.protocol, lyrics: null, lrcData: null
         };
 
+        // 1. START PLAYBACK IMMEDIATELY. This is non-blocking.
         playSong(songToPlay, playContext);
 
-        // --- THE FIX: Only attempt to cache if the protocol is one we can handle ---
+        // 2. ATTEMPT TO CACHE IN THE BACKGROUND (FIRE-AND-FORGET).
+        // This will run in parallel to playback and will not block the UI or cause buffering.
+        // A .catch is added to prevent unhandled promise rejection errors in the console.
         if (chosenStreamFormat.protocol === 'hls' || chosenStreamFormat.protocol === 'progressive') {
-            // Process in the background, passing the protocol of the stream we successfully chose
-            const processedEntry = await processAndCacheSoundcloudTrack(songToPlay, streamData.url, chosenStreamFormat.protocol);
-            
-            // This logic for swapping to the trimmed version remains the same.
-            if (processedEntry && currentSongId === numericTrackId) {
-                const currentTime = audioPlayer.currentTime;
-                currentlyPlayingSong.duration = processedEntry.metadata.trimmedDuration;
-                currentlyPlayingSong.lyrics = processedEntry.metadata.lyrics;
-                currentlyPlayingSong.lrcData = processedEntry.metadata.lrcData;
-                const newBlobUrl = URL.createObjectURL(processedEntry.blob);
-                
-                if (hls) {
-                    hls.destroy();
-                    hls = null;
-                }
-                audioPlayer.src = newBlobUrl;
-                audioPlayer.addEventListener('loadedmetadata', () => {
-                     audioPlayer.currentTime = currentTime;
-                     audioPlayer.play();
-                     updatePlayerUI(currentlyPlayingSong, currentTime);
-                }, { once: true });
-            }
-        } else {
-            console.log(`Skipping cache for unsupported protocol: ${chosenStreamFormat.protocol}`);
+            processAndCacheSoundcloudTrack(songToPlay, streamData.url, chosenStreamFormat.protocol)
+                .catch(err => console.error(`Background caching failed for "${songToPlay.name}":`, err));
         }
 
     } catch (error) {
