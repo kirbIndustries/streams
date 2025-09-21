@@ -6992,12 +6992,27 @@ window.addEventListener("load", async () => {
             
             if (configResult && Array.isArray(configResult.value)) {
                 const verifiedHandles = [];
-                for (const handle of configResult.value) {
-                    if (await verifyPermission(handle, false)) { // Don't prompt on load
-                        verifiedHandles.push(handle);
+                // **THE FIX IS HERE:** Check if the handles are valid before trying to use them.
+                const storedHandles = configResult.value;
+                for (const handle of storedHandles) {
+                    // Plain objects from an import won't have the queryPermission method.
+                    if (typeof handle.queryPermission === 'function') {
+                        if (await verifyPermission(handle, false)) { // Don't prompt on load
+                            verifiedHandles.push(handle);
+                        }
+                    } else {
+                        console.warn(`Removed an invalid or restored folder handle: "${handle.name}". Please re-add the folder manually.`);
                     }
                 }
                 directoryHandles = verifiedHandles;
+
+                // If some handles were invalid, update the database with the cleaned list.
+                if (directoryHandles.length < storedHandles.length) {
+                    Gurasuraisu.showPopup("Some music folders need to be re-added after the system import.");
+                    const writeTx = db.transaction('config', 'readwrite');
+                    writeTx.objectStore('config').put({ key: 'directoryHandles', value: directoryHandles });
+                    await writeTx.done;
+                }
                 console.log(`Restored and verified ${directoryHandles.length} folder handles.`);
             }
         }
