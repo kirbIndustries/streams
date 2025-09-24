@@ -5622,7 +5622,10 @@ function openSongContextMenu(targetElement, songId) {
 }
 
 async function playSong(song, playContext = null) {
-    if (isPlayerLoading || !song) return;
+    if (isPlayerLoading) {
+        console.warn("Player is already loading, blocking new play request.");
+        return;
+    }
     
     // --- REVISED QUEUE LOGIC FOR PERSISTENT AUTOPLAY ---
     if (playContext && Array.isArray(playContext)) {
@@ -5669,21 +5672,24 @@ async function playSong(song, playContext = null) {
         
         if (isHlsStream) {
             if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                // THE FIX: Pass our custom loader to the Hls constructor.
-                hls = new Hls({ loader: ProxiedLoader });
-                hls.loadSource(song.streamUrl);
-                hls.attachMedia(audioPlayer);
-
-                // Add error handling directly to the HLS instance
+                hls = new Hls(); // No custom loader needed anymore
+                
+                // THE FIX for LOCK-UPS: Add a robust error handler directly to hls.js
                 hls.on(Hls.Events.ERROR, function (event, data) {
                     if (data.fatal) {
                         console.error('Fatal HLS Error:', data);
-                        // A fatal error means playback cannot continue. Skip to the next song.
+                        // This guarantees the player is unlocked before moving on.
+                        isPlayerLoading = false;
                         playNextSong({ userInitiated: false });
                     }
                 });
+                
+                // THE FIX for 403/404: Apply the proxy to the source URL here
+                hls.loadSource(proxyUrl(song.streamUrl));
+                hls.attachMedia(audioPlayer);
+
             } else if (audioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
-                audioPlayer.src = song.streamUrl;
+                audioPlayer.src = proxyUrl(song.streamUrl);
             }
             audioPlayer.crossOrigin = "anonymous";
             connectAudioGraph();
@@ -5825,9 +5831,11 @@ async function logSongPlay(songId) {
 
 function proxyUrl(url) {
     if (isCorsProxyEnabled) {
-        // We now proxy all SoundCloud API and media resolution calls.
-        // The final media segments from other domains don't need this.
-        return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        // This regex matches all relevant SoundCloud domains that need proxying.
+        const soundcloudDomains = /(soundcloud\.com|sndcdn\.com|soundcloud\.cloud)/;
+        if (soundcloudDomains.test(url)) {
+            return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        }
     }
     return url;
 }
