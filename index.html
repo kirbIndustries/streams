@@ -2554,6 +2554,39 @@
         let isLrclibEnabled = false;
         let lastLrclibSearchResults = [];
 
+class ProxiedLoader extends Hls.DefaultConfig.loader {
+    constructor(config) {
+        super(config);
+        this.fetchSetup = { method: 'GET' };
+    }
+
+    load(context, config, callbacks) {
+        // THE FIX: If the proxy is on, modify the URL that hls.js is about to request.
+        // This applies to both the main playlist and all subsequent audio segments.
+        if (isCorsProxyEnabled) {
+            context.url = proxyUrl(context.url);
+        }
+        
+        const { responseType, url } = context;
+        fetch(url, this.fetchSetup)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Fetch error: ${response.status} ${response.statusText}`);
+                }
+                return response.arrayBuffer();
+            })
+            .then(data => {
+                const response = { data, url };
+                // Call the hls.js success callback with the loaded data.
+                callbacks.onSuccess(response, {}, context);
+            })
+            .catch(error => {
+                // Call the hls.js error callback on failure.
+                callbacks.onError(error, context, null);
+            });
+    }
+}
+        
         function sanitize(str) {
             if (!str) return '';
             return str.toString().replace(/</g, "<").replace(/>/g, ">");
@@ -5431,7 +5464,7 @@ async function generateAutoplaySongs() {
         if (isSoundcloudEnabled && soundcloudClientId) {
             const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
             const promises = searchTerms.map(term => 
-                fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=20`)
+                fetch(proxyUrl(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=20`))
                     .then(res => res.ok ? res.json() : { collection: [] })
                     .catch(() => ({ collection: [] }))
             );
@@ -5494,7 +5527,7 @@ async function generateAiAutoplaySongs() {
         const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
         
         const promises = searchTerms.map(term =>
-            fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=10`)
+            fetch(proxyUrl(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=10`))
                 .then(res => res.ok ? res.json() : { collection: [] })
                 .catch(() => ({ collection: [] }))
         );
@@ -5633,15 +5666,24 @@ async function playSong(song, playContext = null) {
         // Reset src to ensure the element is clean before assigning a new source
         audioPlayer.src = ''; 
         audioPlayer.load(); // Explicitly call load to stop current playback and reset state
-
+        
         if (isHlsStream) {
-            // HLS Streaming Path (for SoundCloud)
             if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                hls = new Hls();
+                // THE FIX: Pass our custom loader to the Hls constructor.
+                hls = new Hls({ loader: ProxiedLoader });
                 hls.loadSource(song.streamUrl);
                 hls.attachMedia(audioPlayer);
+
+                // Add error handling directly to the HLS instance
+                hls.on(Hls.Events.ERROR, function (event, data) {
+                    if (data.fatal) {
+                        console.error('Fatal HLS Error:', data);
+                        // A fatal error means playback cannot continue. Skip to the next song.
+                        playNextSong({ userInitiated: false });
+                    }
+                });
             } else if (audioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
-                audioPlayer.src = song.streamUrl; // Native HLS support (e.g., Safari)
+                audioPlayer.src = song.streamUrl;
             }
             audioPlayer.crossOrigin = "anonymous";
             connectAudioGraph();
@@ -6317,79 +6359,85 @@ async function updateSoundcloudCacheWithLyrics(song) {
 async function playSoundcloudTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     let trackData = null; // Declare here to be accessible in the catch block
-    
-    try {
-        const tx = db.transaction('soundcloudCache', 'readonly');
-        const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
-        
-        if (cachedEntry) {
-            const songToPlay = cachedEntry.metadata;
-            songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
-            if (cachedEntry.metadata.trimmedDuration) {
-                songToPlay.duration = cachedEntry.metadata.trimmedDuration;
-            }
-            playSong(songToPlay, playContext);
-            return; // Play from cache and exit
-        }
 
-        // --- Step 2: If not cached, fetch metadata to find a live stream ---
-        const trackDetailsUrl = `https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`;
-        const trackResponse = await fetch(proxyUrl(trackDetailsUrl)); // Apply proxy here
-        if (!trackResponse.ok) throw new Error('Could not fetch SC track details.');
-        trackData = await trackResponse.json();
-
-        if (localSongLookup.has(`${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`)) {
-            playSong(localSongLookup.get(`${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`), playContext);
-            return;
-        }
-
-        // --- Step 3: Resiliently find a valid, playable stream URL ---
-        const transcodings = trackData.media.transcodings;
-        let streamData = null;
-        let chosenStreamFormat = null;
-
-        for (const stream of transcodings) {
-            try {
-                const streamDataUrl = `${stream.url}?client_id=${soundcloudClientId}`;
-                // THE CRITICAL FIX: Apply proxy to the stream resolution URL
-                const streamResponse = await fetch(proxyUrl(streamDataUrl));
-                if (streamResponse.ok) {
-                    const data = await streamResponse.json();
-                    if (data.url) {
-                        streamData = data;
-                        chosenStreamFormat = stream.format;
-                        break;
-                    }
+    for (let attempt = 1; attempt <= 2; attempt++) { // Retry loop
+        try {
+            const tx = db.transaction('soundcloudCache', 'readonly');
+            const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
+            
+            if (cachedEntry) {
+                const songToPlay = cachedEntry.metadata;
+                songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
+                if (cachedEntry.metadata.trimmedDuration) {
+                    songToPlay.duration = cachedEntry.metadata.trimmedDuration;
                 }
-            } catch (e) { /* Ignore errors and try next format */ }
+                playSong(songToPlay, playContext);
+                return; // Play from cache and exit
+            }
+    
+            // --- Step 2: If not cached, fetch metadata to find a live stream ---
+            const trackDetailsUrl = `https://api-v2.soundcloud.com/tracks/${numericTrackId}?client_id=${soundcloudClientId}`;
+            const trackResponse = await fetch(proxyUrl(trackDetailsUrl)); // Apply proxy here
+            if (!trackResponse.ok) throw new Error('Could not fetch SC track details.');
+            trackData = await trackResponse.json();
+    
+            if (localSongLookup.has(`${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`)) {
+                playSong(localSongLookup.get(`${(trackData.user.username || '').toLowerCase().trim()}::${(trackData.title || '').toLowerCase().trim()}`), playContext);
+                return;
+            }
+    
+            // --- Step 3: Resiliently find a valid, playable stream URL ---
+            const transcodings = trackData.media.transcodings;
+            let streamData = null;
+            let chosenStreamFormat = null;
+    
+            for (const stream of transcodings) {
+                try {
+                    const streamDataUrl = `${stream.url}?client_id=${soundcloudClientId}`;
+                    // THE CRITICAL FIX: Apply proxy to the stream resolution URL
+                    const streamResponse = await fetch(proxyUrl(streamDataUrl));
+                    if (streamResponse.ok) {
+                        const data = await streamResponse.json();
+                        if (data.url) {
+                            streamData = data;
+                            chosenStreamFormat = stream.format;
+                            break;
+                        }
+                    }
+                } catch (e) { /* Ignore errors and try next format */ }
+            }
+    
+            if (!streamData) throw new Error('No playable stream URL could be found.');
+    
+            // --- Step 4: Play the song IMMEDIATELY and cache in the background ---
+            const songToPlay = {
+                id: trackData.id, name: trackData.title, artist: trackData.user.username,
+                album: trackData.title, albumArt: getHighResArtwork(trackData.artwork_url),
+                storage: 'soundcloud', streamUrl: streamData.url,
+                protocol: chosenStreamFormat.protocol, lyrics: null, lrcData: null
+            };
+    
+            // 1. START PLAYBACK IMMEDIATELY. This is non-blocking.
+            playSong(songToPlay, playContext);
+    
+            if (chosenStreamFormat.protocol === 'hls' || chosenStreamFormat.protocol === 'progressive') {
+                processAndCacheSoundcloudTrack(songToPlay)
+                    .catch(err => console.error(`Background caching failed for "${songToPlay.name}":`, err));
+            }
+    
+        } catch (error) {
+            console.warn(`Attempt ${attempt} to play track ${numericTrackId} failed:`, error);
+            if (attempt === 2) {
+                // If the second attempt also fails, trigger the skip logic.
+                const trackTitle = trackData ? trackData.title : 'the selected track';
+                console.error(`All attempts to play "${trackTitle}" failed.`, error);
+                isPlayerLoading = false;
+                playNextSong({ userInitiated: false });
+            } else {
+                // Wait a moment before retrying
+                await new Promise(res => setTimeout(res, 500));
+            }
         }
-
-        if (!streamData) throw new Error('No playable stream URL could be found.');
-
-        // --- Step 4: Play the song IMMEDIATELY and cache in the background ---
-        const songToPlay = {
-            id: trackData.id, name: trackData.title, artist: trackData.user.username,
-            album: trackData.title, albumArt: getHighResArtwork(trackData.artwork_url),
-            storage: 'soundcloud', streamUrl: streamData.url,
-            protocol: chosenStreamFormat.protocol, lyrics: null, lrcData: null
-        };
-
-        // 1. START PLAYBACK IMMEDIATELY. This is non-blocking.
-        playSong(songToPlay, playContext);
-
-        if (chosenStreamFormat.protocol === 'hls' || chosenStreamFormat.protocol === 'progressive') {
-            processAndCacheSoundcloudTrack(songToPlay)
-                .catch(err => console.error(`Background caching failed for "${songToPlay.name}":`, err));
-        }
-
-    } catch (error) {
-        // THE FIX for ReferenceError: Use trackData if it exists, otherwise provide a generic message.
-        const trackTitle = trackData ? trackData.title : 'the selected track';
-        console.error(`Error playing or processing SoundCloud track: ${trackTitle}`, error);
-        Gurasuraisu.showPopup(`Could not play "${trackTitle}"`);
-        
-        isPlayerLoading = false;
-        playNextSong({ userInitiated: false });
     }
 }
         
