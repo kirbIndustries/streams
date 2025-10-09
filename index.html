@@ -362,7 +362,7 @@
         }
 
         @media (max-width: 340px) {
-            #soundcloud-controls {
+            #tidal-controls {
                 flex-wrap: wrap;
             }
         }
@@ -1232,7 +1232,7 @@
           filter: brightness(1.5);
         }
 
-        #soundcloudToggle, #lrclibToggle, #corsProxyToggle {
+        #tidalToggle, #lrclibToggle, #corsProxyToggle {
             appearance: none;
             width: 50px;
             height: 32px;
@@ -1245,7 +1245,7 @@
             cursor: pointer;
         }
         
-        #soundcloudToggle::before, #lrclibToggle::before, #corsProxyToggle::before {
+        #tidalToggle::before, #lrclibToggle::before, #corsProxyToggle::before {
             content: '';
             position: absolute;
             width: 18px;
@@ -1259,11 +1259,11 @@
             border: 1px solid var(--glass-border);
         }
         
-        #soundcloudToggle:checked, #lrclibToggle:checked, #corsProxyToggle:checked {
+        #tidalToggle:checked, #lrclibToggle:checked, #corsProxyToggle:checked {
             background-color: var(--secondary-text-color);
         }
         
-        #soundcloudToggle:checked::before, #lrclibToggle:checked::before, #corsProxyToggle:checked::before {
+        #tidalToggle:checked::before, #lrclibToggle:checked::before, #corsProxyToggle:checked::before {
             width: 22px;
             height: 22px;
             background-color: var(--background-color);
@@ -2113,7 +2113,7 @@
             <span class="material-symbols-rounded">backpack</span>
             Owned
         </button>
-        <button class="tab-btn" data-view="soundcloud" id="soundcloud-tab" style="display: none;">
+        <button class="tab-btn" data-view="tidal" id="tidal-tab" style="display: none;">
             <span class="material-symbols-rounded">explore</span>
             Discover
         </button>
@@ -2150,32 +2150,32 @@
              <input type="file" accept="audio/*" style="display: none" id="musicUpload" multiple webkitdirectory>
         </div>
     </div>
-    <div id="soundcloud-view" class="view-container" style="display: none;">
+    <div id="tidal-view" class="view-container" style="display: none;">
         <div class="page-content-wrapper">
-            <div class="library-controls" id="soundcloud-controls">
-                <div class="filter-container" id="soundcloud-filter-container">
+            <div class="library-controls" id="tidal-controls">
+                <div class="filter-container" id="tidal-filter-container">
                     <button class="filter-btn-sc" data-filter="albums" style="border-radius: 25px 10px 10px 25px;">Albums</button>
                     <button class="filter-btn-sc" data-filter="artists">Artists</button>
                     <button class="filter-btn-sc active" data-filter="tracks" style="border-radius: 10px 25px 25px 10px;">Songs</button>
                 </div>
-                <div class="search-container" id="soundcloud-offline-search-container" style="display: none; max-width: 246px; margin: 0px;">
+                <div class="search-container" id="tidal-offline-search-container" style="display: none; max-width: 246px; margin: 0px;">
                     <span class="material-symbols-rounded search-icon">search</span>
-                    <input type="text" id="soundcloudOfflineSearchInput" placeholder="Search your history" class="library-search-input">
+                    <input type="text" id="tidalOfflineSearchInput" placeholder="Search your history" class="library-search-input">
                 </div>
                 <div class="library-actions">
-                    <button class="library-action-btn" id="soundcloudOfflineToggle">
+                    <button class="library-action-btn" id="tidalOfflineToggle">
                         <span class="material-symbols-rounded">history</span>
                     </button>
                 </div>
             </div>
 
-            <div class="search-container" id="soundcloud-search-container" style="position: absolute; width: 90%; z-index: 1; left: 50%; transform: translateX(-50%);">
+            <div class="search-container" id="tidal-search-container" style="position: absolute; width: 90%; z-index: 1; left: 50%; transform: translateX(-50%);">
                 <span class="material-symbols-rounded search-icon" style="padding-left: 2px;">search</span>
-                <input type="text" id="soundcloudSearchInput" placeholder="Search" class="library-search-input" style="box-shadow: var(--sun-shadow), 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
+                <input type="text" id="tidalSearchInput" placeholder="Search" class="library-search-input" style="box-shadow: var(--sun-shadow), 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
             </div>
             
-            <div id="soundcloud-results-grid" class="item-grid" style="padding-top: 60px; padding-bottom: 240px;">
-                <!-- SoundCloud search/offline results will be rendered here -->
+            <div id="tidal-results-grid" class="item-grid" style="padding-top: 60px; padding-bottom: 240px;">
+                <!-- tidal search/offline results will be rendered here -->
             </div>
         </div>
     </div>
@@ -2318,8 +2318,8 @@
             If you enable a third-party service, you agree to the Terms of Service and other polices of that service.
             <div style="display: flex; flex-direction: column; gap: 15px; padding-top: 15px;">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="soundcloudToggle">Enable Streaming</label>
-                    <input type="checkbox" id="soundcloudToggle">
+                    <label for="tidalToggle">Enable Streaming</label>
+                    <input type="checkbox" id="tidalToggle">
                 </div>
                 
                 <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -2553,15 +2553,15 @@
         let currentSortMode = 'dateAdded'; // 'dateAdded', 'alpha'
         let activeAlbum = null; // Will store { artist, name } of the selected album
 
-        // --- SoundCloud variables ---
-        let soundcloudClientId = '';
-        let isSoundcloudEnabled = false;
-        let soundcloudSearchTimeout;
+        // --- tidal variables ---
+        let tidalClientId = '';
+        let istidalEnabled = false;
+        let tidalSearchTimeout;
         let currentlyPlayingSong = null;
-        let isSoundcloudOfflineMode = false;
-        let soundcloudFilter = 'tracks';
-        let lastSoundcloudSearchResults = []; // To store API results for filtering
-        const SOUNDCLOUD_CACHE_LIMIT = 200 * 1024 * 1024; // 200MB
+        let istidalOfflineMode = false;
+        let tidalFilter = 'tracks';
+        let lasttidalSearchResults = []; // To store API results for filtering
+        const tidal_CACHE_LIMIT = 200 * 1024 * 1024; // 200MB
         let localSongLookup = new Map();
 
         // --- LRCLIB variables ---
@@ -2761,18 +2761,18 @@ function renderSearchResults() {
     });
 }
 
-        function renderSoundcloudSearchResults() {
-            const resultsGrid = document.getElementById('soundcloud-results-grid');
-            if (lastSoundcloudSearchResults.length === 0) {
+        function rendertidalSearchResults() {
+            const resultsGrid = document.getElementById('tidal-results-grid');
+            if (lasttidalSearchResults.length === 0) {
                 resultsGrid.innerHTML = '<div class="no-results" style="grid-column: 1 / -1;"><p>No results found.</p></div>';
                 return;
             }
 
             let resultsHtml = '';
-            switch (soundcloudFilter) {
+            switch (tidalFilter) {
                 case 'artists':
                     resultsGrid.className = 'item-grid';
-                    const artists = lastSoundcloudSearchResults.reduce((acc, track) => {
+                    const artists = lasttidalSearchResults.reduce((acc, track) => {
                         const artistName = track.artist.name;
                         if (!acc[artistName]) {
                             acc[artistName] = getHighResArtwork(track.album.cover);
@@ -2787,7 +2787,7 @@ function renderSearchResults() {
                     break;
                 case 'albums':
                     resultsGrid.className = 'item-grid';
-                    const albums = lastSoundcloudSearchResults.reduce((acc, track) => {
+                    const albums = lasttidalSearchResults.reduce((acc, track) => {
                         const albumName = track.album.title;
                         if (!acc[albumName]) {
                             acc[albumName] = { art: getHighResArtwork(track.album.cover), artist: track.artist.name };
@@ -2803,7 +2803,7 @@ function renderSearchResults() {
                 case 'tracks':
                 default:
                     resultsGrid.className = 'item-grid';
-                    resultsHtml = lastSoundcloudSearchResults.map(track => `
+                    resultsHtml = lasttidalSearchResults.map(track => `
                         <div class="item-card" data-track-id="${track.id}">
                             <img src="${getHighResArtwork(track.album.cover)}" class="item-card-art">
                             <div class="item-card-info">
@@ -2912,8 +2912,8 @@ const initDB = () => {
             if (!db.objectStoreNames.contains('playHistory')) {
                 db.createObjectStore('playHistory', { keyPath: 'timestamp' });
             }
-            if (!db.objectStoreNames.contains('soundcloudCache')) {
-                const cacheStore = db.createObjectStore('soundcloudCache', { keyPath: 'id' });
+            if (!db.objectStoreNames.contains('tidalCache')) {
+                const cacheStore = db.createObjectStore('tidalCache', { keyPath: 'id' });
                 cacheStore.createIndex('timestamp', 'timestamp');
             }
         };
@@ -4965,8 +4965,8 @@ async function renderLyrics() {
         return;
     }
 
-    // Use isSoundcloudEnabled as the toggle for the new API
-    if (isSoundcloudEnabled || isLrclibEnabled) {
+    // Use istidalEnabled as the toggle for the new API
+    if (istidalEnabled || isLrclibEnabled) {
         lyricsContainer.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
         const fetchedLyrics = await fetchLyrics(song);
 
@@ -4976,7 +4976,7 @@ async function renderLyrics() {
             song.lyrics = fetchedLyrics.content;
             if (fetchedLyrics.type === 'lrc') song.lrcData = parseLRC(fetchedLyrics.content);
             
-            if (song.storage === 'soundcloud') await updateSoundcloudCacheWithLyrics(song);
+            if (song.storage === 'tidal') await updatetidalCacheWithLyrics(song);
             else await saveSongs();
             
             renderLyrics();
@@ -4984,7 +4984,7 @@ async function renderLyrics() {
              lyricsContainer.innerHTML = `
                 <div class="no-results">
                     <p>No lyrics found automatically.</p>
-                    ${song.storage !== 'soundcloud' ? '<button id="manual-search-trigger" class="goto-btn">Search Manually</button>' : ''}
+                    ${song.storage !== 'tidal' ? '<button id="manual-search-trigger" class="goto-btn">Search Manually</button>' : ''}
                 </div>`;
             if (document.getElementById('manual-search-trigger')) {
                 document.getElementById('manual-search-trigger').addEventListener('click', () => {
@@ -5013,9 +5013,9 @@ async function fetchLyricsFromLrclib(song) {
     let url = `https://lrclib.net/api/get?artist_name=${artist}&track_name=${track}`;
 
     // --- THE FIX ---
-    // Only add the album_name parameter if it's NOT a SoundCloud song
+    // Only add the album_name parameter if it's NOT a tidal song
     // and if an album name actually exists.
-    if (song.storage !== 'soundcloud' && cleanedSong.album) {
+    if (song.storage !== 'tidal' && cleanedSong.album) {
         const album = encodeURIComponent(cleanedSong.album);
         url += `&album_name=${album}`;
     }
@@ -5120,8 +5120,8 @@ async function searchLrclibForManualPick() {
                 }
 
                 // Save the newly found lyrics
-                if (song.storage === 'soundcloud') {
-                    await updateSoundcloudCacheWithLyrics(song);
+                if (song.storage === 'tidal') {
+                    await updatetidalCacheWithLyrics(song);
                 } else {
                     await saveSongs();
                 }
@@ -5138,14 +5138,14 @@ async function searchLrclibForManualPick() {
     }
 }
     
-async function renderOfflineSoundcloudView() {
-    const resultsGrid = document.getElementById('soundcloud-results-grid');
-    const query = document.getElementById('soundcloudOfflineSearchInput').value.toLowerCase();
+async function renderOfflinetidalView() {
+    const resultsGrid = document.getElementById('tidal-results-grid');
+    const query = document.getElementById('tidalOfflineSearchInput').value.toLowerCase();
     resultsGrid.innerHTML = '';
     
     try {
-        const tx = db.transaction('soundcloudCache', 'readonly');
-        const store = tx.objectStore('soundcloudCache');
+        const tx = db.transaction('tidalCache', 'readonly');
+        const store = tx.objectStore('tidalCache');
         const allCachedItems = await promiseIDBRequest(store.getAll());
 
         let filteredItems = allCachedItems;
@@ -5162,7 +5162,7 @@ async function renderOfflineSoundcloudView() {
                 resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No cached songs match "${sanitize(query)}"</p></div>`;
             } else {
                 // If there was no query, it means the cache is empty.
-                resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No SoundCloud songs are cached</p></div>`;
+                resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>No tidal songs are cached</p></div>`;
             }
             return;
         }
@@ -5193,24 +5193,24 @@ async function renderOfflineSoundcloudView() {
 }
 
 // This new function will control the view in the "New" tab
-function renderSoundcloudPage() {
-    const searchContainer = document.getElementById('soundcloud-search-container');
-    const offlineSearchContainer = document.getElementById('soundcloud-offline-search-container');
-    const filterContainer = document.getElementById('soundcloud-filter-container');
+function rendertidalPage() {
+    const searchContainer = document.getElementById('tidal-search-container');
+    const offlineSearchContainer = document.getElementById('tidal-offline-search-container');
+    const filterContainer = document.getElementById('tidal-filter-container');
     
-    if (isSoundcloudOfflineMode) {
+    if (istidalOfflineMode) {
         searchContainer.style.display = 'none';
         offlineSearchContainer.style.display = 'flex';
         filterContainer.style.display = 'none';
-        document.getElementById('soundcloudOfflineToggle').classList.add('active');
-        renderOfflineSoundcloudView();
+        document.getElementById('tidalOfflineToggle').classList.add('active');
+        renderOfflinetidalView();
     } else {
         searchContainer.style.display = 'block';
         offlineSearchContainer.style.display = 'none';
         filterContainer.style.display = 'flex';
-        document.getElementById('soundcloudOfflineToggle').classList.remove('active');
-        document.getElementById('soundcloudOfflineSearchInput').value = '';
-        renderSoundcloudSearchResults();
+        document.getElementById('tidalOfflineToggle').classList.remove('active');
+        document.getElementById('tidalOfflineSearchInput').value = '';
+        rendertidalSearchResults();
     }
 }
         
@@ -5349,16 +5349,16 @@ function addToQueue(songId, position = 'last') {
     
     // FIX: Find song from multiple possible sources
     let song = songs.find(s => s.id === songId);
-    if (!song && lastSoundcloudSearchResults.length > 0) { // If not in local library, check soundcloud results
-         const track = lastSoundcloudSearchResults.find(t => t.id === songId);
+    if (!song && lasttidalSearchResults.length > 0) { // If not in local library, check tidal results
+         const track = lasttidalSearchResults.find(t => t.id === songId);
          if (track) {
             song = {
                 id: track.id,
                 name: track.title,
                 artist: track.user.username,
-                album: 'SoundCloud',
+                album: 'tidal',
                 albumArt: getHighResArtwork(track.artwork_url),
-                storage: 'soundcloud'
+                storage: 'tidal'
             };
          }
     }
@@ -5474,29 +5474,29 @@ async function generateAutoplaySongs() {
         scoredRecommendations.sort((a, b) => b.score - a.score || Math.random() - 0.5);
         const localRecommendations = scoredRecommendations.map(item => item.song);
 
-        // 5. Fetch and filter SoundCloud recommendations if enabled.
-        let soundcloudRecommendations = [];
-        if (isSoundcloudEnabled && soundcloudClientId) {
+        // 5. Fetch and filter tidal recommendations if enabled.
+        let tidalRecommendations = [];
+        if (istidalEnabled && tidalClientId) {
             const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
             const promises = searchTerms.map(term => 
-                fetch(proxyUrl(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=20`))
+                fetch(proxyUrl(`https://api-v2.tidal.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${tidalClientId}&limit=20`))
                     .then(res => res.ok ? res.json() : { collection: [] })
                     .catch(() => ({ collection: [] }))
             );
             const results = await Promise.all(promises);
             const allTracks = results.flatMap(data => data.collection);
 
-            soundcloudRecommendations = allTracks
+            tidalRecommendations = allTracks
                 .map(track => ({
                     id: track.id, name: track.title, artist: track.user.username,
-                    album: 'SoundCloud Autoplay', albumArt: getHighResArtwork(track.artwork_url), storage: 'soundcloud',
+                    album: 'tidal Autoplay', albumArt: getHighResArtwork(track.artwork_url), storage: 'tidal',
                     uniqueKey: `${(track.user.username || '').toLowerCase().trim()}::${(track.title || '').toLowerCase().trim()}`
                 }))
                 .filter(song => !ownedSongKeys.has(song.uniqueKey));
         }
 
         // 6. Combine, deduplicate, and shuffle the final list.
-        const combinedPool = [...localRecommendations, ...soundcloudRecommendations];
+        const combinedPool = [...localRecommendations, ...tidalRecommendations];
         const finalMap = new Map();
         combinedPool.forEach(song => {
             const key = song.uniqueKey || `${(song.artist || '').toLowerCase().trim()}::${(song.name || '').toLowerCase().trim()}`;
@@ -5519,9 +5519,9 @@ async function generateAutoplaySongs() {
 
 function formatSongsForAiPrompt(songList) {
     if (!songList || songList.length === 0) return "No songs available.";
-    // Provide more context: Title, Artist, Genre, and Source (SoundCloud or Local)
+    // Provide more context: Title, Artist, Genre, and Source (tidal or Local)
     return songList.map(s => 
-        `Title: ${s.name}, Artist: ${s.artist}, Genre: ${s.genre || 'Unknown'}, Source: ${s.storage === 'soundcloud' ? 'SoundCloud' : 'Local'}`
+        `Title: ${s.name}, Artist: ${s.artist}, Genre: ${s.genre || 'Unknown'}, Source: ${s.storage === 'tidal' ? 'tidal' : 'Local'}`
     ).join('\n');
 }
 
@@ -5535,24 +5535,24 @@ async function generateAiAutoplaySongs() {
     let comprehensiveLibrary = [...songs];
     const userQueueSongIds = new Set(playQueue.map(s => s.id));
 
-    // 1. If SoundCloud is enabled, fetch potential recommendations to add to the AI's knowledge base.
-    if (isSoundcloudEnabled && soundcloudClientId) {
+    // 1. If tidal is enabled, fetch potential recommendations to add to the AI's knowledge base.
+    if (istidalEnabled && tidalClientId) {
         const contextArtists = new Set(contextQueue.map(s => s.artist).filter(Boolean));
         const contextGenres = new Set(contextQueue.map(s => s.genre).filter(Boolean));
         const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
         
         const promises = searchTerms.map(term =>
-            fetch(proxyUrl(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${soundcloudClientId}&limit=10`))
+            fetch(proxyUrl(`https://api-v2.tidal.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${tidalClientId}&limit=10`))
                 .then(res => res.ok ? res.json() : { collection: [] })
                 .catch(() => ({ collection: [] }))
         );
         const results = await Promise.all(promises);
         const scTracks = results.flatMap(data => data.collection).map(track => ({
             id: track.id, name: track.title, artist: track.user.username,
-            album: 'SoundCloud', albumArt: getHighResArtwork(track.artwork_url), storage: 'soundcloud', genre: track.genre
+            album: 'tidal', albumArt: getHighResArtwork(track.artwork_url), storage: 'tidal', genre: track.genre
         }));
 
-        // Add SoundCloud tracks to the library if they aren't duplicates of local songs
+        // Add tidal tracks to the library if they aren't duplicates of local songs
         scTracks.forEach(scSong => {
             const uniqueKey = `${scSong.artist.toLowerCase().trim()}::${scSong.name.toLowerCase().trim()}`;
             if (!localSongLookup.has(uniqueKey)) {
@@ -5563,7 +5563,7 @@ async function generateAiAutoplaySongs() {
     
     // 2. Create a precise prompt for the AI
     const queuePrompt = `The user's current queue contains:\n${formatSongsForAiPrompt(contextQueue)}`;
-    const libraryPrompt = `Here is the comprehensive library of available songs (Local and SoundCloud):\n${formatSongsForAiPrompt(comprehensiveLibrary)}`;
+    const libraryPrompt = `Here is the comprehensive library of available songs (Local and tidal):\n${formatSongsForAiPrompt(comprehensiveLibrary)}`;
     const instructionPrompt = `\nSelect up to 20 songs from the comprehensive library that are similar to the user's queue. CRITICAL: Do NOT include any songs that are already in the queue.`;
     
     const fullPrompt = `${queuePrompt}\n\n${libraryPrompt}\n\n${instructionPrompt}`;
@@ -5825,9 +5825,9 @@ async function logSongPlay(songId) {
 
 function proxyUrl(url) {
     if (isCorsProxyEnabled) {
-        // This regex matches all relevant SoundCloud domains that need proxying.
-        const soundcloudDomains = /(soundcloud\.com|sndcdn\.com|soundcloud\.cloud)/;
-        if (soundcloudDomains.test(url)) {
+        // This regex matches all relevant tidal domains that need proxying.
+        const tidalDomains = /(tidal\.com|sndcdn\.com|tidal\.cloud)/;
+        if (tidalDomains.test(url)) {
             return `https://corsproxy.io/?${encodeURIComponent(url)}`;
         }
     }
@@ -5894,54 +5894,54 @@ function initModalVariables() {
             }
             
             // Populate settings
-            document.getElementById('soundcloudToggle').checked = isSoundcloudEnabled;
+            document.getElementById('tidalToggle').checked = istidalEnabled;
             document.getElementById('lrclibToggle').checked = isLrclibEnabled;
             openModal(manageFoldersModal);
         }
 
         async function saveIntegrationSettings() {
-            isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
+            istidalEnabled = document.getElementById('tidalToggle').checked;
             isLrclibEnabled = document.getElementById('lrclibToggle').checked;
 
             const tx = db.transaction('config', 'readwrite');
             await Promise.all([
-                tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled }),
+                tx.objectStore('config').put({ key: 'istidalEnabled', value: istidalEnabled }),
                 tx.objectStore('config').put({ key: 'isLrclibEnabled', value: isLrclibEnabled })
             ]);
             
-            toggleSoundcloudTab();
+            toggletidalTab();
         }
 
 async function saveIntegrationSettings() {
-    soundcloudClientId = document.getElementById('soundcloudClientId').value.trim();
-    isSoundcloudEnabled = document.getElementById('soundcloudToggle').checked;
+    tidalClientId = document.getElementById('tidalClientId').value.trim();
+    istidalEnabled = document.getElementById('tidalToggle').checked;
     isCorsProxyEnabled = document.getElementById('corsProxyToggle').checked; // Add this line
     isLrclibEnabled = document.getElementById('lrclibToggle').checked;
 
     const tx = db.transaction('config', 'readwrite');
     await Promise.all([
-        tx.objectStore('config').put({ key: 'soundcloudClientId', value: soundcloudClientId }),
-        tx.objectStore('config').put({ key: 'isSoundcloudEnabled', value: isSoundcloudEnabled }),
+        tx.objectStore('config').put({ key: 'tidalClientId', value: tidalClientId }),
+        tx.objectStore('config').put({ key: 'istidalEnabled', value: istidalEnabled }),
         tx.objectStore('config').put({ key: 'isCorsProxyEnabled', value: isCorsProxyEnabled }), // Save the new setting
         tx.objectStore('config').put({ key: 'isLrclibEnabled', value: isLrclibEnabled })
     ]);
     
-    toggleSoundcloudTab();
+    toggletidalTab();
 }
 
-function toggleSoundcloudTab() {
-    const tab = document.getElementById('soundcloud-tab');
+function toggletidalTab() {
+    const tab = document.getElementById('tidal-tab');
     if (tab) {
-        tab.style.display = isSoundcloudEnabled ? 'flex' : 'none';
+        tab.style.display = istidalEnabled ? 'flex' : 'none';
     }
 }
 
-        async function searchSoundCloud() {
-            const query = document.getElementById('soundcloudSearchInput').value.trim();
-            const resultsGrid = document.getElementById('soundcloud-results-grid');
+        async function searchtidal() {
+            const query = document.getElementById('tidalSearchInput').value.trim();
+            const resultsGrid = document.getElementById('tidal-results-grid');
             if (!query) {
                 resultsGrid.innerHTML = '';
-                lastSoundcloudSearchResults = [];
+                lasttidalSearchResults = [];
                 return;
             }
 
@@ -5953,8 +5953,8 @@ function toggleSoundcloudTab() {
                 if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
                 
                 const data = await response.json();
-                lastSoundcloudSearchResults = data.items || [];
-                renderSoundcloudSearchResults();
+                lasttidalSearchResults = data.items || [];
+                rendertidalSearchResults();
 
             } catch (error) {
                 console.error('Hifi Search Error:', error);
@@ -5964,8 +5964,8 @@ function toggleSoundcloudTab() {
 
 // This is a new helper function to manage the cache size
 async function manageCacheSize() {
-    const tx = db.transaction('soundcloudCache', 'readwrite');
-    const store = tx.objectStore('soundcloudCache');
+    const tx = db.transaction('tidalCache', 'readwrite');
+    const store = tx.objectStore('tidalCache');
     const index = store.index('timestamp');
     const allEntriesReq = index.getAll();
 
@@ -5973,12 +5973,12 @@ async function manageCacheSize() {
         const entries = allEntriesReq.result;
         let totalSize = entries.reduce((acc, entry) => acc + entry.size, 0);
 
-        if (totalSize > SOUNDCLOUD_CACHE_LIMIT) {
+        if (totalSize > tidal_CACHE_LIMIT) {
             console.log(`Cache size (${(totalSize / 1024 / 1024).toFixed(2)}MB) exceeds limit. Pruning...`);
             entries.sort((a, b) => a.timestamp - b.timestamp); // Sort oldest first
 
             for (const entry of entries) {
-                if (totalSize <= SOUNDCLOUD_CACHE_LIMIT) break;
+                if (totalSize <= tidal_CACHE_LIMIT) break;
                 await store.delete(entry.id);
                 totalSize -= entry.size;
                 console.log(`Removed ${entry.metadata.name} from cache.`);
@@ -5989,7 +5989,7 @@ async function manageCacheSize() {
 }
 
 // This is a new function to handle background caching
-async function cacheSoundcloudTrack(songObject, streamUrl) {
+async function cachetidalTrack(songObject, streamUrl) {
     try {
         const audioResponse = await fetch(streamUrl);
         if (!audioResponse.ok) throw new Error('Could not download audio file for caching.');
@@ -6003,8 +6003,8 @@ async function cacheSoundcloudTrack(songObject, streamUrl) {
             size: audioBlob.size
         };
 
-        const tx = db.transaction('soundcloudCache', 'readwrite');
-        tx.objectStore('soundcloudCache').put(cacheEntry);
+        const tx = db.transaction('tidalCache', 'readwrite');
+        tx.objectStore('tidalCache').put(cacheEntry);
         await tx.done;
 
         console.log(`Successfully cached "${songObject.name}"`);
@@ -6025,9 +6025,9 @@ async function proactivelyCacheNextInQueue() {
         if (nextIndex >= playQueue.length) break;
 
         const nextSong = playQueue[nextIndex];
-        if (nextSong.storage === 'soundcloud') {
-            const tx = db.transaction('soundcloudCache', 'readonly');
-            const store = tx.objectStore('soundcloudCache');
+        if (nextSong.storage === 'tidal') {
+            const tx = db.transaction('tidalCache', 'readonly');
+            const store = tx.objectStore('tidalCache');
             const checkReq = store.get(nextSong.id);
 
             // Use an async function for the callback to handle the caching process
@@ -6038,7 +6038,7 @@ async function proactivelyCacheNextInQueue() {
                     try {
                         // THE FIX: Call the main, self-sufficient caching function.
                         // It already contains all the necessary logic for resilient, proxied fetching.
-                        await processAndCacheSoundcloudTrack(nextSong);
+                        await processAndCachetidalTrack(nextSong);
                     } catch (err) {
                         console.error(`Failed to proactively cache ${nextSong.name}:`, err);
                     }
@@ -6186,7 +6186,7 @@ function trimAudioBuffer(audioBuffer, lrcData) {
     return { trimmedBuffer: newBuffer, newDuration: newDuration };
 }
 
-async function processAndCacheSoundcloudTrack(songObject) {
+async function processAndCachetidalTrack(songObject) {
     try {
         const baseQualityLevels = ['LOSSLESS', 'HIGH', 'LOW'];
         let qualityLevelsToTry = [];
@@ -6270,8 +6270,8 @@ async function processAndCacheSoundcloudTrack(songObject) {
                 lyrics: lrcDataResult ? lrcDataResult.content : null, lrcData: lrcData,
             }
         };
-        const tx = db.transaction('soundcloudCache', 'readwrite');
-        tx.objectStore('soundcloudCache').put(cacheEntry);
+        const tx = db.transaction('tidalCache', 'readwrite');
+        tx.objectStore('tidalCache').put(cacheEntry);
         await tx.done;
         console.log(`Successfully processed and cached track "${songObject.name}"`);
         await manageCacheSize();
@@ -6282,21 +6282,21 @@ async function processAndCacheSoundcloudTrack(songObject) {
     }
 }
         
-// This is a NEW function to save a SoundCloud track to the local library
-// in function saveSoundcloudTrackToLibrary()
+// This is a NEW function to save a tidal track to the local library
+// in function savetidalTrackToLibrary()
 
-async function saveSoundcloudTrackToLibrary() {
-    if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'soundcloud') return;
+async function savetidalTrackToLibrary() {
+    if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'tidal') return;
 
     const songToSave = currentlyPlayingSong;
     try {
         let audioBlob;
-        const tx = db.transaction('soundcloudCache', 'readonly');
-        const cacheReq = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(songToSave.id));
+        const tx = db.transaction('tidalCache', 'readonly');
+        const cacheReq = await promiseIDBRequest(tx.objectStore('tidalCache').get(songToSave.id));
         if (cacheReq && cacheReq.blob) {
             audioBlob = cacheReq.blob;
         } else {
-            const processedEntry = await processAndCacheSoundcloudTrack(songToSave);
+            const processedEntry = await processAndCachetidalTrack(songToSave);
             if (!processedEntry || !processedEntry.blob) throw new Error("Failed to process track for saving.");
             audioBlob = processedEntry.blob;
         }
@@ -6323,12 +6323,12 @@ async function saveSoundcloudTrackToLibrary() {
     }
 }
 
-async function updateSoundcloudCacheWithLyrics(song) {
-    if (!song || song.storage !== 'soundcloud') return;
+async function updatetidalCacheWithLyrics(song) {
+    if (!song || song.storage !== 'tidal') return;
 
     try {
-        const tx = db.transaction('soundcloudCache', 'readwrite');
-        const store = tx.objectStore('soundcloudCache');
+        const tx = db.transaction('tidalCache', 'readwrite');
+        const store = tx.objectStore('tidalCache');
         const request = store.get(song.id);
 
         request.onsuccess = () => {
@@ -6343,7 +6343,7 @@ async function updateSoundcloudCacheWithLyrics(song) {
         await tx.done;
         console.log(`Saved lyrics for SC track "${song.name}" to cache.`);
     } catch (error) {
-        console.error("Failed to update SoundCloud cache with lyrics:", error);
+        console.error("Failed to update tidal cache with lyrics:", error);
     }
 }
 
@@ -6383,11 +6383,11 @@ async function updateSoundcloudCacheWithLyrics(song) {
             return null;
         }
 
-async function playSoundcloudTrack(trackId, playContext = null) {
+async function playtidalTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     try {
-        const tx = db.transaction('soundcloudCache', 'readonly');
-        const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
+        const tx = db.transaction('tidalCache', 'readonly');
+        const cachedEntry = await promiseIDBRequest(tx.objectStore('tidalCache').get(numericTrackId));
         
         if (cachedEntry) {
             console.log("Playing from cache.");
@@ -6400,13 +6400,13 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             return;
         }
 
-        const trackData = lastSoundcloudSearchResults.find(t => t.id === numericTrackId);
+        const trackData = lasttidalSearchResults.find(t => t.id === numericTrackId);
         if (!trackData) throw new Error("Track not found in search results");
         
         const songObject = {
             id: trackData.id, name: trackData.title, artist: trackData.artist.name,
             album: trackData.album.title, albumArt: getHighResArtwork(trackData.album.cover),
-            storage: 'soundcloud', duration: trackData.duration, audioQuality: trackData.audioQuality
+            storage: 'tidal', duration: trackData.duration, audioQuality: trackData.audioQuality
         };
         
         const streamUrl = await getStreamableUrl(songObject);
@@ -6415,12 +6415,12 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             console.log("Fast path: Streaming directly, caching in background.");
             songObject.streamUrl = streamUrl;
             playSong(songObject, playContext);
-            processAndCacheSoundcloudTrack(songObject).catch(err => {
+            processAndCachetidalTrack(songObject).catch(err => {
                 console.error("Background caching failed:", err);
             });
         } else {
             console.log("Slow path: No direct stream URL, processing before playback.");
-            const cachedSong = await processAndCacheSoundcloudTrack(songObject);
+            const cachedSong = await processAndCachetidalTrack(songObject);
             if (cachedSong) {
                 const songToPlay = cachedSong.metadata;
                 songToPlay.blobUrl = URL.createObjectURL(cachedSong.blob);
@@ -6602,7 +6602,7 @@ async function removeFolder(folderName) {
         }
     
         async function fetchLyrics(song) {
-            if (song.storage === 'soundcloud') { // 'soundcloud' now means 'hifi'
+            if (song.storage === 'tidal') { // 'tidal' now means 'hifi'
                 return await fetchLyricsFromHifi(song);
             } else if (isLrclibEnabled) { // For local files, use LRCLIB if enabled
                 return await fetchLyricsFromLrclib(song);
@@ -6648,8 +6648,8 @@ function addQueueItemEventListeners() {
                 // We now call the play functions with "null" as the context.
                 // This tells the player to find the song in the EXISTING queue
                 // instead of creating a new one.
-                if (song.storage === 'soundcloud') {
-                    playSoundcloudTrack(song.id, null);
+                if (song.storage === 'tidal') {
+                    playtidalTrack(song.id, null);
                 } else {
                     playSong(song, null);
                 }
@@ -6780,8 +6780,8 @@ async function playNextSong({ userInitiated = false, isTransition = false } = {}
     const nextSong = playQueue[currentQueueIndex];
     if (nextSong) {
         // **THE FIX:** Check song type and call the correct function
-        if (nextSong.storage === 'soundcloud') {
-            playSoundcloudTrack(nextSong.id);
+        if (nextSong.storage === 'tidal') {
+            playtidalTrack(nextSong.id);
         } else {
             playSong(nextSong, { isTransition });
         }
@@ -6805,8 +6805,8 @@ function playPreviousSong() {
     const prevSong = playQueue[currentQueueIndex];
     if (prevSong) {
         // **THE FIX:** Check song type and call the correct function
-        if (prevSong.storage === 'soundcloud') {
-            playSoundcloudTrack(prevSong.id);
+        if (prevSong.storage === 'tidal') {
+            playtidalTrack(prevSong.id);
         } else {
             playSong(prevSong, { isTransition: false });
         }
@@ -7093,10 +7093,10 @@ window.addEventListener("load", async () => {
             }
         }
 
-        // --- Load SoundCloud Settings ---
+        // --- Load tidal Settings ---
         const configTx = db.transaction('config', 'readonly');
-        const scIdReq = configTx.objectStore('config').get('soundcloudClientId');
-        const scEnabledReq = configTx.objectStore('config').get('isSoundcloudEnabled');
+        const scIdReq = configTx.objectStore('config').get('tidalClientId');
+        const scEnabledReq = configTx.objectStore('config').get('istidalEnabled');
         const corsProxyReq = configTx.objectStore('config').get('isCorsProxyEnabled');
         const lrclibReq = configTx.objectStore('config').get('isLrclibEnabled'); 
         
@@ -7105,11 +7105,11 @@ window.addEventListener("load", async () => {
         const corsProxyResult = await new Promise(r => { corsProxyReq.onsuccess = () => r(corsProxyReq.result) });
         const lrclibEnabledResult = await new Promise(r => { lrclibReq.onsuccess = () => r(lrclibReq.result) }); 
         
-        soundcloudClientId = scIdResult ? scIdResult.value : '';
-        isSoundcloudEnabled = scEnabledResult ? scEnabledResult.value : false;
+        tidalClientId = scIdResult ? scIdResult.value : '';
+        istidalEnabled = scEnabledResult ? scEnabledResult.value : false;
         isCorsProxyEnabled = corsProxyResult ? corsProxyResult.value : false;
         isLrclibEnabled = lrclibEnabledResult ? lrclibEnabledResult.value : false;
-        toggleSoundcloudTab();
+        toggletidalTab();
 
         await loadSongsAndPlaylists();
         await scanForNewSongs();
@@ -7192,7 +7192,7 @@ audioPlayer.addEventListener('timeupdate', async () => {
         updatePageTitle();
 
         // Only log plays for local songs
-        if (song && song.storage !== 'soundcloud' && !song.hasBeenLogged && audioPlayer.currentTime > 30) {
+        if (song && song.storage !== 'tidal' && !song.hasBeenLogged && audioPlayer.currentTime > 30) {
             song.hasBeenLogged = true;
             await logSongPlay(song.id);
         }
@@ -7506,7 +7506,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         drawerContent.addEventListener('click', (e) => {
             const localSongItem = e.target.closest('.music-item[data-id]');
-            const soundcloudSongItem = e.target.closest('.music-item[data-track-id]');
+            const tidalSongItem = e.target.closest('.music-item[data-track-id]');
             const songItem = e.target.closest('.music-item[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
             const backButton = e.target.closest('.drawer-back-btn'); // Correctly find the button
@@ -7536,18 +7536,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                     playSong(song, contextSongs.length > 0 ? contextSongs : [song]);
                     closeDrawer();
                 }
-            } else if (soundcloudSongItem) {
-                // Build the context from all SoundCloud songs currently in the drawer
-                const trackId = soundcloudSongItem.dataset.trackId;
+            } else if (tidalSongItem) {
+                // Build the context from all tidal songs currently in the drawer
+                const trackId = tidalSongItem.dataset.trackId;
                 const contextNodes = drawerContent.querySelectorAll('.music-item[data-track-id]');
                 const playContext = Array.from(contextNodes).map(node => ({
                     id: Number(node.dataset.trackId),
                     name: node.querySelector('.song-title').textContent,
                     artist: node.querySelector('.album-artist').textContent,
                     albumArt: node.querySelector('img').src,
-                    storage: 'soundcloud'
+                    storage: 'tidal'
                 }));
-                playSoundcloudTrack(trackId, playContext);
+                playtidalTrack(trackId, playContext);
                 closeDrawer();
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
@@ -7625,21 +7625,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // ADD listener for the new "Save to Library" button
         document.getElementById('menuSaveToLibrary').addEventListener('click', () => {
-            saveSoundcloudTrackToLibrary();
+            savetidalTrackToLibrary();
             moreOptionsMenu.classList.remove('visible');
         });
     
         // ADD listener for the offline search input
-        document.getElementById('soundcloudOfflineSearchInput').addEventListener('input', renderOfflineSoundcloudView);
+        document.getElementById('tidalOfflineSearchInput').addEventListener('input', renderOfflinetidalView);
     
         // ADD listeners for the new filter buttons
-        document.getElementById('soundcloud-filter-container').addEventListener('click', (e) => {
+        document.getElementById('tidal-filter-container').addEventListener('click', (e) => {
             const btn = e.target.closest('.filter-btn-sc');
             if (btn) {
-                document.querySelector('#soundcloud-filter-container .filter-btn-sc.active').classList.remove('active');
+                document.querySelector('#tidal-filter-container .filter-btn-sc.active').classList.remove('active');
                 btn.classList.add('active');
-                soundcloudFilter = btn.dataset.filter;
-                renderSoundcloudSearchResults();
+                tidalFilter = btn.dataset.filter;
+                rendertidalSearchResults();
             }
         });
 
@@ -7818,14 +7818,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             
-            const isLocal = currentlyPlayingSong.storage !== 'soundcloud';
+            const isLocal = currentlyPlayingSong.storage !== 'tidal';
         
             // Show/hide menu items based on song type
             document.getElementById('menuEditMetadata').style.display = isLocal ? 'flex' : 'none';
             document.getElementById('menuDeleteSong').style.display = isLocal ? 'flex' : 'none';
             document.getElementById('menuAddToPlaylist').style.display = isLocal ? 'flex' : 'none';
 
-            // Show "Save to Library" ONLY for SoundCloud songs.
+            // Show "Save to Library" ONLY for tidal songs.
             document.getElementById('menuSaveToLibrary').style.display = isLocal ? 'none' : 'flex';
                     
             moreOptionsMenu.classList.toggle('visible');
@@ -7877,44 +7877,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
         document.getElementById('saveIntegrations').addEventListener('click', saveIntegrationSettings);
 
-        const soundcloudSearchInput = document.getElementById('soundcloudSearchInput');
-        soundcloudSearchInput.addEventListener('input', () => {
-            clearTimeout(soundcloudSearchTimeout);
-            soundcloudSearchTimeout = setTimeout(searchSoundCloud, 300);
+        const tidalSearchInput = document.getElementById('tidalSearchInput');
+        tidalSearchInput.addEventListener('input', () => {
+            clearTimeout(tidalSearchTimeout);
+            tidalSearchTimeout = setTimeout(searchtidal, 300);
         });
         
-        document.getElementById('soundcloud-results-grid').addEventListener('click', e => {
+        document.getElementById('tidal-results-grid').addEventListener('click', e => {
             const trackCard = e.target.closest('.item-card[data-track-id]');
             const cachedCard = e.target.closest('.music-item[data-cached-id]');
             const artistCard = e.target.closest('.item-card[data-artist-name]');
             const albumCard = e.target.closest('.item-card[data-album-name]');
         
             if (trackCard) {
-                const playContext = lastSoundcloudSearchResults.map(track => ({
+                const playContext = lasttidalSearchResults.map(track => ({
                     id: track.id,
                     name: track.title,
                     artist: track.artist.name,
                     album: track.album.title,
                     albumArt: getHighResArtwork(track.album.cover),
-                    storage: 'soundcloud'
+                    storage: 'tidal'
                 }));
-                playSoundcloudTrack(trackCard.dataset.trackId, playContext);
+                playtidalTrack(trackCard.dataset.trackId, playContext);
             } else if (cachedCard) {
                 const trackId = parseFloat(cachedCard.dataset.cachedId);
-                const contextNodes = document.querySelectorAll('#soundcloud-results-grid .music-item[data-cached-id]');
+                const contextNodes = document.querySelectorAll('#tidal-results-grid .music-item[data-cached-id]');
                 const playContext = Array.from(contextNodes).map(node => {
                     return {
                         id: parseFloat(node.dataset.cachedId),
                         name: node.querySelector('.song-title').textContent,
                         artist: node.querySelector('.album-artist').textContent,
                         albumArt: node.querySelector('img').src,
-                        storage: 'soundcloud'
+                        storage: 'tidal'
                     };
                 });
-                playSoundcloudTrack(trackId, playContext);
+                playtidalTrack(trackId, playContext);
             } else if (artistCard) {
                 const artistName = artistCard.dataset.artistName;
-                const artistTracks = lastSoundcloudSearchResults.filter(t => t.artist.name === artistName);
+                const artistTracks = lasttidalSearchResults.filter(t => t.artist.name === artistName);
                 
                 const contentHtml = `<div class="item-list">${artistTracks.map(track => {
                     const artwork = getHighResArtwork(track.album.cover);
@@ -7933,7 +7933,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
             } else if (albumCard) {
                 const albumName = albumCard.dataset.albumName;
-                const albumTracks = lastSoundcloudSearchResults.filter(t => t.album.title === albumName);
+                const albumTracks = lasttidalSearchResults.filter(t => t.album.title === albumName);
                 const representativeArtist = albumTracks.length > 0 ? albumTracks[0].artist.name : '';
         
                 const contentHtml = `<div class="item-list">${albumTracks.map(track => {
@@ -7955,9 +7955,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     
         // Add the new listener for the offline toggle
-        document.getElementById('soundcloudOfflineToggle').addEventListener('click', () => {
-            isSoundcloudOfflineMode = !isSoundcloudOfflineMode;
-            renderSoundcloudPage();
+        document.getElementById('tidalOfflineToggle').addEventListener('click', () => {
+            istidalOfflineMode = !istidalOfflineMode;
+            rendertidalPage();
         });
 
         setupDrawerInteractions();
@@ -8105,12 +8105,12 @@ async function loadSongsAndPlaylists() {
                 playlist.songIds.push(songToAdd.id);
                 
                 // If it's a SC song, ensure it's cached so we have its metadata for later
-                if (songToAdd.storage === 'soundcloud') {
-                    const tx = db.transaction('soundcloudCache', 'readonly');
-                    const checkReq = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(songToAdd.id));
+                if (songToAdd.storage === 'tidal') {
+                    const tx = db.transaction('tidalCache', 'readonly');
+                    const checkReq = await promiseIDBRequest(tx.objectStore('tidalCache').get(songToAdd.id));
                     if (!checkReq) {
                         // If not cached, cache it now.
-                        await cacheSoundcloudTrack(songToAdd, songToAdd.streamUrl);
+                        await cachetidalTrack(songToAdd, songToAdd.streamUrl);
                     }
                 }
                 
