@@ -6216,7 +6216,7 @@ async function processAndCacheSoundcloudTrack(songObject) {
             }
         });
 
-        let manifestResponse = null;
+        let manifestText = null;
 
         for (const quality of qualityLevelsToTry) {
             const manifestUrl = `https://tidal.401658.xyz/dash/?id=${songObject.id}&quality=${quality}`;
@@ -6224,10 +6224,13 @@ async function processAndCacheSoundcloudTrack(songObject) {
                 const response = await fetch(manifestUrl);
                 if (response.ok) {
                     const text = await response.text();
-                    if (text.includes('<MPD')) {
-                        manifestResponse = new Response(text, response);
-                        console.log(`Found playable manifest for track ${songObject.id} at quality: ${quality}`);
+                    // Robust check: Ensure the response is a valid, non-empty XML manifest
+                    if (text && text.trim().startsWith('<?xml')) {
+                        manifestText = text;
+                        console.log(`Found playable XML manifest for track ${songObject.id} at quality: ${quality}`);
                         break; 
+                    } else {
+                        console.warn(`Received a non-XML 200 OK for quality ${quality}. Trying next.`);
                     }
                 }
             } catch (e) {
@@ -6235,11 +6238,10 @@ async function processAndCacheSoundcloudTrack(songObject) {
             }
         }
 
-        if (!manifestResponse) {
-            throw new Error('Failed to fetch DASH manifest for any quality level.');
+        if (!manifestText) {
+            throw new Error('Failed to fetch a valid XML DASH manifest for any quality level.');
         }
 
-        const manifestText = await manifestResponse.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(manifestText, "application/xml");
         const representation = xmlDoc.querySelector("Representation");
