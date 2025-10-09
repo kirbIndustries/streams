@@ -6205,16 +6205,26 @@ function trimAudioBuffer(audioBuffer, lrcData) {
 
 async function processAndCacheSoundcloudTrack(songObject) {
     try {
-        const qualityLevels = ['LOSSLESS', 'HIGH', 'LOW'];
+        const baseQualityLevels = ['LOSSLESS', 'HIGH', 'LOW'];
+        let qualityLevelsToTry = [];
+        if (songObject.audioQuality && baseQualityLevels.includes(songObject.audioQuality)) {
+            qualityLevelsToTry.push(songObject.audioQuality);
+        }
+        baseQualityLevels.forEach(q => {
+            if (!qualityLevelsToTry.includes(q)) {
+                qualityLevelsToTry.push(q);
+            }
+        });
+
         let manifestResponse = null;
 
-        for (const quality of qualityLevels) {
+        for (const quality of qualityLevelsToTry) {
             const manifestUrl = `https://tidal.401658.xyz/dash/?id=${songObject.id}&quality=${quality}`;
             try {
                 const response = await fetch(manifestUrl);
                 if (response.ok) {
                     const text = await response.text();
-                    if (text.includes('<MPD')) { // Ensure it's a valid DASH manifest
+                    if (text.includes('<MPD')) {
                         manifestResponse = new Response(text, response);
                         console.log(`Found playable manifest for track ${songObject.id} at quality: ${quality}`);
                         break; 
@@ -6347,6 +6357,7 @@ async function updateSoundcloudCacheWithLyrics(song) {
 
 async function playSoundcloudTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
+    Gurasuraisu.showPopup(`Loading...`);
     try {
         const tx = db.transaction('soundcloudCache', 'readonly');
         const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
@@ -6372,6 +6383,7 @@ async function playSoundcloudTrack(trackId, playContext = null) {
             albumArt: getHighResArtwork(trackData.album.cover),
             storage: 'soundcloud',
             duration: trackData.duration,
+            audioQuality: trackData.audioQuality
         };
         
         const cachedSong = await processAndCacheSoundcloudTrack(songObject);
