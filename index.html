@@ -2562,39 +2562,6 @@
         // --- LRCLIB variables ---
         let isLrclibEnabled = false;
         let lastLrclibSearchResults = [];
-
-class ProxiedLoader extends Hls.DefaultConfig.loader {
-    constructor(config) {
-        super(config);
-        this.fetchSetup = { method: 'GET' };
-    }
-
-    load(context, config, callbacks) {
-        // THE FIX: If the proxy is on, modify the URL that hls.js is about to request.
-        // This applies to both the main playlist and all subsequent audio segments.
-        if (isCorsProxyEnabled) {
-            context.url = proxyUrl(context.url);
-        }
-        
-        const { responseType, url } = context;
-        fetch(url, this.fetchSetup)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Fetch error: ${response.status} ${response.statusText}`);
-                }
-                return response.arrayBuffer();
-            })
-            .then(data => {
-                const response = { data, url };
-                // Call the hls.js success callback with the loaded data.
-                callbacks.onSuccess(response, {}, context);
-            })
-            .catch(error => {
-                // Call the hls.js error callback on failure.
-                callbacks.onError(error, context, null);
-            });
-    }
-}
         
         function sanitize(str) {
             if (!str) return '';
@@ -5674,6 +5641,20 @@ async function playSong(song, playContext = null) {
         audioPlayer.src = ''; 
         audioPlayer.load();
         
+        const fileUrl = song.blobUrl || song.streamUrl || await getSongFileUrl(song);
+        if (!fileUrl) {
+            throw new Error(`Could not get a playable URL for ${song.name}`);
+        }
+
+        const isCrossOriginStream = song.storage === 'tidal' && !song.blobUrl;
+        if (isCrossOriginStream) {
+            audioPlayer.crossOrigin = "anonymous";
+            disconnectAudioGraph();
+        } else {
+            audioPlayer.removeAttribute('crossorigin');
+            connectAudioGraph();
+        }
+
         if (isHlsStream) {
             if (typeof Hls !== 'undefined' && Hls.isSupported()) {
                 hls = new Hls();
@@ -5684,20 +5665,12 @@ async function playSong(song, playContext = null) {
                         playNextSong({ userInitiated: false });
                     }
                 });
-                hls.loadSource(song.streamUrl);
+                hls.loadSource(fileUrl);
                 hls.attachMedia(audioPlayer);
             } else if (audioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
-                audioPlayer.src = song.streamUrl;
+                audioPlayer.src = fileUrl;
             }
-            audioPlayer.crossOrigin = "anonymous";
-            connectAudioGraph();
         } else {
-            const fileUrl = song.blobUrl || song.streamUrl || await getSongFileUrl(song);
-            if (!fileUrl) {
-                throw new Error(`Could not get a playable URL for ${song.name}`);
-            }
-            audioPlayer.removeAttribute('crossorigin');
-            connectAudioGraph();
             audioPlayer.src = fileUrl;
         }
 
