@@ -6452,7 +6452,7 @@ async function playtidalTrack(trackId, playContext = null) {
             if (cachedEntry.metadata.trimmedDuration) {
                 songToPlay.duration = cachedEntry.metadata.trimmedDuration;
             }
-            playSong(songToPlay, playContext);
+            await playSong(songToPlay, playContext);
             return;
         }
 
@@ -6470,7 +6470,7 @@ async function playtidalTrack(trackId, playContext = null) {
         if (streamUrl) {
             console.log("Fast path: Streaming directly, caching in background.");
             songObject.streamUrl = streamUrl;
-            playSong(songObject, playContext);
+            await playSong(songObject, playContext);
             processAndCachetidalTrack(songObject).catch(err => {
                 console.error("Background caching failed:", err);
             });
@@ -6483,7 +6483,7 @@ async function playtidalTrack(trackId, playContext = null) {
                 if (cachedSong.metadata.trimmedDuration) {
                     songToPlay.duration = cachedSong.metadata.trimmedDuration;
                 }
-                playSong(songToPlay, playContext);
+                await playSong(songToPlay, playContext);
             } else {
                 throw new Error("Caching and processing failed.");
             }
