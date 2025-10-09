@@ -5970,7 +5970,7 @@ function toggleSoundcloudTab() {
                 if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
                 
                 const data = await response.json();
-                lastSoundcloudSearchResults = data.items;
+                lastSoundcloudSearchResults = data.items || [];
                 renderSoundcloudSearchResults();
 
             } catch (error) {
@@ -7822,19 +7822,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             const albumCard = e.target.closest('.item-card[data-album-name]');
         
             if (trackCard) {
-                // Build the context from the current search results
                 const playContext = lastSoundcloudSearchResults.map(track => ({
                     id: track.id,
                     name: track.title,
-                    artist: track.user.username,
-                    album: 'SoundCloud',
-                    albumArt: getHighResArtwork(track.artwork_url),
+                    artist: track.artist.name,
+                    album: track.album.title,
+                    albumArt: getHighResArtwork(track.album.cover),
                     storage: 'soundcloud'
                 }));
                 playSoundcloudTrack(trackCard.dataset.trackId, playContext);
             } else if (cachedCard) {
                 const trackId = parseFloat(cachedCard.dataset.cachedId);
-                // When playing from offline view, the context is all other visible offline songs
                 const contextNodes = document.querySelectorAll('#soundcloud-results-grid .music-item[data-cached-id]');
                 const playContext = Array.from(contextNodes).map(node => {
                     return {
@@ -7847,20 +7845,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
                 playSoundcloudTrack(trackId, playContext);
             } else if (artistCard) {
-                // An artist was clicked in the online search view
                 const artistName = artistCard.dataset.artistName;
-                const artistTracks = lastSoundcloudSearchResults.filter(t => t.user.username === artistName);
+                const artistTracks = lastSoundcloudSearchResults.filter(t => t.artist.name === artistName);
                 
-                const contentHtml = `<div class="item-list">${artistTracks.map(track => { // <-- track is defined here
-                    // **THE FIX:** Use the 'track' object from the map, not 'songObject'.
-                    const artwork = getHighResArtwork(track.artwork_url);
+                const contentHtml = `<div class="item-list">${artistTracks.map(track => {
+                    const artwork = getHighResArtwork(track.album.cover);
                     return `
                     <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
                          <div class="song-info">
                             <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
                                 <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.artist.name)}</div>
                             </div>
                         </div>
                     </div>
@@ -7868,21 +7864,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
             } else if (albumCard) {
-                // An album was clicked in the online search view
                 const albumName = albumCard.dataset.albumName;
-                const albumTracks = lastSoundcloudSearchResults.filter(t => t.title.split('-')[0].trim() === albumName);
-                const representativeArtist = albumTracks.length > 0 ? albumTracks[0].user.username : '';
+                const albumTracks = lastSoundcloudSearchResults.filter(t => t.album.title === albumName);
+                const representativeArtist = albumTracks.length > 0 ? albumTracks[0].artist.name : '';
         
-                const contentHtml = `<div class="item-list">${albumTracks.map(track => { // <-- track is defined here
-                    // **THE FIX:** Use the 'track' object from the map, not 'songObject'.
-                    const artwork = getHighResArtwork(track.artwork_url);
+                const contentHtml = `<div class="item-list">${albumTracks.map(track => {
+                    const artwork = getHighResArtwork(track.album.cover);
                     return `
                     <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
                          <div class="song-info">
                             <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
                             <div>
                                 <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.user.username)}</div>
+                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.artist.name)}</div>
                             </div>
                         </div>
                     </div>
