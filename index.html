@@ -2554,6 +2554,7 @@
         let istidalOfflineMode = false;
         let tidalFilter = 'tracks';
         let lasttidalSearchResults = []; // To store API results for filtering
+        let currentDrawerContext = []; // To store full objects for drawer context
         const tidal_CACHE_LIMIT = 200 * 1024 * 1024; // 200MB
         let localSongLookup = new Map();
 
@@ -2766,31 +2767,36 @@ function renderSearchResults() {
                 case 'artists':
                     resultsGrid.className = 'item-grid';
                     const artists = lasttidalSearchResults.reduce((acc, track) => {
-                        const artistName = track.artist.name;
-                        if (!acc[artistName]) {
-                            acc[artistName] = getHighResArtwork(track.album.cover);
+                        if (track.artist && track.artist.id && !acc.has(track.artist.id)) {
+                            acc.set(track.artist.id, {
+                                name: track.artist.name,
+                                art: getHighResArtwork(track.album.cover)
+                            });
                         }
                         return acc;
-                    }, {});
-                    resultsHtml = Object.entries(artists).map(([name, art]) => `
-                        <div class="item-card" data-artist-name="${sanitize(name)}">
-                            <img src="${art}" class="item-card-art" style="border-radius: 50%;">
-                            <div class="item-card-info" style="text-align: center;"><div class="item-card-title">${sanitize(name)}</div></div>
+                    }, new Map());
+                    resultsHtml = Array.from(artists.entries()).map(([id, data]) => `
+                        <div class="item-card" data-artist-id="${id}" data-artist-name="${sanitize(data.name)}">
+                            <img src="${data.art}" class="item-card-art" style="border-radius: 50%;">
+                            <div class="item-card-info" style="text-align: center;"><div class="item-card-title">${sanitize(data.name)}</div></div>
                         </div>`).join('');
                     break;
                 case 'albums':
                     resultsGrid.className = 'item-grid';
                     const albums = lasttidalSearchResults.reduce((acc, track) => {
-                        const albumName = track.album.title;
-                        if (!acc[albumName]) {
-                            acc[albumName] = { art: getHighResArtwork(track.album.cover), artist: track.artist.name };
+                        if (track.album && track.album.id && !acc.has(track.album.id)) {
+                            acc.set(track.album.id, {
+                                name: track.album.title,
+                                art: getHighResArtwork(track.album.cover),
+                                artist: track.artist.name
+                            });
                         }
                         return acc;
-                    }, {});
-                     resultsHtml = Object.entries(albums).map(([name, data]) => `
-                        <div class="item-card" data-album-name="${sanitize(name)}">
+                    }, new Map());
+                     resultsHtml = Array.from(albums.entries()).map(([id, data]) => `
+                        <div class="item-card" data-album-id="${id}" data-album-name="${sanitize(data.name)}" data-album-artist-name="${sanitize(data.artist)}">
                             <img src="${data.art}" class="item-card-art">
-                            <div class="item-card-info"><div class="item-card-title">${sanitize(name)}</div><div class="item-card-subtitle">${sanitize(data.artist)}</div></div>
+                            <div class="item-card-info"><div class="item-card-title">${sanitize(data.name)}</div><div class="item-card-subtitle">${sanitize(data.artist)}</div></div>
                         </div>`).join('');
                     break;
                 case 'tracks':
@@ -6253,6 +6259,78 @@ async function processAndCachetidalTrack(songObject) {
         return null;
     }
 }
+
+async function openArtistView(artistId, artistName) {
+    currentDrawerContext = [];
+    openDrawer(artistName, "Loading albums...", `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
+
+    try {
+        const response = await fetch(`https://tidal.401658.xyz/artists/${artistId}/albums`);
+        if (!response.ok) throw new Error('Failed to fetch artist albums');
+        const albums = await response.json();
+        
+        if (!albums || albums.items.length === 0) {
+            drawerContent.innerHTML = `<div class="no-results"><p>No albums found for this artist.</p></div>`;
+            return;
+        }
+
+        const contentHtml = `<div class="item-grid">${albums.items.map(album => `
+            <div class="item-card" data-album-id="${album.id}" data-album-name="${sanitize(album.title)}" data-album-artist-name="${sanitize(artistName)}">
+                <img src="${getHighResArtwork(album.cover, 320)}" class="item-card-art">
+                <div class="item-card-info">
+                    <div class="item-card-title">${sanitize(album.title)}</div>
+                </div>
+            </div>`).join('')}</div>`;
+
+        document.getElementById('drawer-subtitle').textContent = `${albums.items.length} albums`;
+        drawerContent.innerHTML = contentHtml;
+    } catch (error) {
+        console.error("Error fetching artist albums:", error);
+        drawerContent.innerHTML = `<div class="no-results"><p>Could not load albums.</p></div>`;
+    }
+}
+
+async function openAlbumView(albumId, albumName, artistName) {
+    openDrawer(albumName, artistName, `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
+
+    try {
+        const response = await fetch(`https://tidal.401658.xyz/albums/${albumId}/tracks`);
+        if (!response.ok) throw new Error('Failed to fetch album tracks');
+        const tracksData = await response.json();
+        const tracks = tracksData.items;
+
+        if (!tracks || tracks.length === 0) {
+            drawerContent.innerHTML = `<div class="no-results"><p>No tracks found for this album.</p></div>`;
+            return;
+        }
+        
+        currentDrawerContext = tracks;
+        const albumArt = getHighResArtwork(tracks[0].album.cover);
+        
+        const contentHtml = `
+            <div class="album-header-list" style="margin-bottom: 15px;">
+                <img src="${albumArt}" style="width: 100px; height: 100px; border-radius: 12px; box-shadow: 0 0 0 1px var(--glass-border);">
+                <div>
+                    <h2>${sanitize(albumName)}</h2>
+                    <p>${sanitize(artistName)}</p>
+                </div>
+            </div>
+            <div class="item-list">${tracks.map(track => `
+                <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
+                    <div class="song-info">
+                        <span class="track-number">${track.trackNumber}.</span>
+                        <div class="song-title">${sanitize(track.title)}</div>
+                    </div>
+                </div>`).join('')}
+            </div>`;
+
+        drawerContent.innerHTML = contentHtml;
+
+    } catch (error) {
+        console.error("Error fetching album tracks:", error);
+        drawerContent.innerHTML = `<div class="no-results"><p>Could not load album tracks.</p></div>`;
+    }
+}
         
 // This is a NEW function to save a tidal track to the local library
 // in function savetidalTrackToLibrary()
@@ -7476,10 +7554,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
 
-        drawerContent.addEventListener('click', (e) => {
+drawerContent.addEventListener('click', (e) => {
             const localSongItem = e.target.closest('.music-item[data-id]');
             const tidalSongItem = e.target.closest('.music-item[data-track-id]');
-            const songItem = e.target.closest('.music-item[data-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
             const backButton = e.target.closest('.drawer-back-btn'); // Correctly find the button
 
@@ -7508,40 +7585,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                     playSong(song, contextSongs.length > 0 ? contextSongs : [song]);
                     closeDrawer();
                 }
+            } else if (albumCard) {
+                const albumId = albumCard.dataset.albumId;
+                const albumName = albumCard.dataset.albumName;
+                const artistName = albumCard.dataset.albumArtistName;
+                openAlbumView(albumId, albumName, artistName);
             } else if (tidalSongItem) {
-                // Build the context from all tidal songs currently in the drawer
                 const trackId = tidalSongItem.dataset.trackId;
-                const contextNodes = drawerContent.querySelectorAll('.music-item[data-track-id]');
-                const playContext = Array.from(contextNodes).map(node => ({
-                    id: Number(node.dataset.trackId),
-                    name: node.querySelector('.song-title').textContent,
-                    artist: node.querySelector('.album-artist').textContent,
-                    albumArt: node.querySelector('img').src,
-                    storage: 'tidal'
+                const playContext = currentDrawerContext.map(track => ({
+                    id: track.id,
+                    name: track.title,
+                    artist: track.artist.name,
+                    album: track.album.title,
+                    albumArt: getHighResArtwork(track.album.cover),
+                    storage: 'tidal',
+                    duration: track.duration,
+                    audioQuality: track.audioQuality
                 }));
                 playtidalTrack(trackId, playContext);
                 closeDrawer();
-            } else if (albumCard) {
-                const albumId = albumCard.dataset.albumId;
-                const [artist, albumName] = albumId.split('::');
-                const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName).sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
-                
-                // This now includes the back button in the generated HTML
-                const contentHtml = `
-                    <button class="action-btn drawer-back-btn" data-artist-name="${sanitize(artist)}"><span class="material-symbols-rounded">arrow_back</span> Back</button>
-                    <div class="item-list" style="margin-top: 15px;">
-                        ${albumSongs.map(song => `
-                        <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
-                            <div class="song-info">
-                                <span class="track-number">${song.trackNumber || '•'}</span>
-                                <div class="song-title">${sanitize(song.name)}</div>
-                            </div>
-                        </div>`).join('')}
-                    </div>`;
-                
-                document.getElementById('drawer-title').textContent = sanitize(albumName);
-                document.getElementById('drawer-subtitle').textContent = sanitize(artist);
-                drawerContent.innerHTML = contentHtml;
             }
         });
 
@@ -7855,11 +7917,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             tidalSearchTimeout = setTimeout(searchtidal, 300);
         });
         
-        document.getElementById('tidal-results-grid').addEventListener('click', e => {
+document.getElementById('tidal-results-grid').addEventListener('click', e => {
             const trackCard = e.target.closest('.item-card[data-track-id]');
             const cachedCard = e.target.closest('.music-item[data-cached-id]');
-            const artistCard = e.target.closest('.item-card[data-artist-name]');
-            const albumCard = e.target.closest('.item-card[data-album-name]');
+            const artistCard = e.target.closest('.item-card[data-artist-id]');
+            const albumCard = e.target.closest('.item-card[data-album-id]');
         
             if (trackCard) {
                 const playContext = lasttidalSearchResults.map(track => ({
@@ -7885,44 +7947,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
                 playtidalTrack(trackId, playContext);
             } else if (artistCard) {
+                const artistId = artistCard.dataset.artistId;
                 const artistName = artistCard.dataset.artistName;
-                const artistTracks = lasttidalSearchResults.filter(t => t.artist.name === artistName);
-                
-                const contentHtml = `<div class="item-list">${artistTracks.map(track => {
-                    const artwork = getHighResArtwork(track.album.cover);
-                    return `
-                    <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
-                         <div class="song-info">
-                            <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
-                            <div>
-                                <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.artist.name)}</div>
-                            </div>
-                        </div>
-                    </div>
-                    `}).join('')}</div>`;
-                
-                openDrawer(artistName, `${artistTracks.length} tracks found`, contentHtml);
+                openArtistView(artistId, artistName);
             } else if (albumCard) {
+                const albumId = albumCard.dataset.albumId;
                 const albumName = albumCard.dataset.albumName;
-                const albumTracks = lasttidalSearchResults.filter(t => t.album.title === albumName);
-                const representativeArtist = albumTracks.length > 0 ? albumTracks[0].artist.name : '';
-        
-                const contentHtml = `<div class="item-list">${albumTracks.map(track => {
-                    const artwork = getHighResArtwork(track.album.cover);
-                    return `
-                    <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
-                         <div class="song-info">
-                            <img src="${artwork}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 6px;">
-                            <div>
-                                <div class="song-title">${sanitize(track.title)}</div>
-                                <div class="album-artist" style="font-size: 0.8em;">${sanitize(track.artist.name)}</div>
-                            </div>
-                        </div>
-                    </div>
-                    `}).join('')}</div>`;
-        
-                openDrawer(albumName, representativeArtist, contentHtml);
+                const artistName = albumCard.dataset.albumArtistName;
+                openAlbumView(albumId, albumName, artistName);
             }
         });
     
