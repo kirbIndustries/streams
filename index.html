@@ -2151,7 +2151,7 @@
                 </div>
                 <div class="search-container" id="soundcloud-offline-search-container" style="display: none; max-width: 246px; margin: 0px;">
                     <span class="material-symbols-rounded search-icon">search</span>
-                    <input type="text" id="soundcloudOfflineSearchInput" placeholder="Search your cached songs" class="library-search-input">
+                    <input type="text" id="soundcloudOfflineSearchInput" placeholder="Search your history" class="library-search-input">
                 </div>
                 <div class="library-actions">
                     <button class="library-action-btn" id="soundcloudOfflineToggle">
@@ -2174,7 +2174,7 @@
         <div class="page-content-wrapper">
             <div class="search-container" style="position: absolute; width: 90%; z-index: 1; left: 50%; transform: translateX(-50%);">
                 <span class="material-symbols-rounded search-icon" style="padding-left: 2px;">search</span>
-                <input type="text" id="searchInput" placeholder="Search your Library" class="library-search-input" style="box-shadow: var(--sun-shadow), 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
+                <input type="text" id="searchInput" placeholder="Search your owned items" class="library-search-input" style="box-shadow: var(--sun-shadow), 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
             </div>
             <div id="search-results-grid" class="item-grid" style="padding-top: 60px;">
                 <!-- Search results will be rendered here -->
@@ -2210,13 +2210,13 @@
                     <span class="material-symbols-rounded">shuffle</span>
                 </button>
                 <button class="control-btn" id="prevBtn">
-                    <span class="material-symbols-rounded">skip_previous</span>
+                    <span class="material-symbols-rounded">fast_rewind</span>
                 </button>
                 <button class="control-btn play-pause" id="playPauseBtn">
                     <span class="material-symbols-rounded" id="playPauseIcon" style="font-size: 36px;">play_arrow</span>
                 </button>
                 <button class="control-btn" id="nextBtn">
-                    <span class="material-symbols-rounded">skip_next</span>
+                    <span class="material-symbols-rounded">fast_forward</span>
                 </button>
                 <button class="control-btn" id="repeatBtn">
                     <span class="material-symbols-rounded">repeat</span>
@@ -2289,9 +2289,9 @@
             <div id="miniplayer-artist"></div>
         </div>
         <div class="miniplayer-controls">
-            <button id="miniplayer-prev-btn" class="mini-control-btn"><span class="material-symbols-rounded">skip_previous</span></button>
+            <button id="miniplayer-prev-btn" class="mini-control-btn"><span class="material-symbols-rounded">fast_rewind</span></button>
             <button id="miniplayer-play-btn" class="mini-control-btn"><span class="material-symbols-rounded">play_arrow</span></button>
-            <button id="miniplayer-next-btn" class="mini-control-btn"><span class="material-symbols-rounded">skip_next</span></button>
+            <button id="miniplayer-next-btn" class="mini-control-btn"><span class="material-symbols-rounded">fast_forward</span></button>
         </div>
     </div>
 
