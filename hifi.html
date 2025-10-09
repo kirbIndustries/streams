@@ -2716,7 +2716,8 @@ function setupDrawerInteractions() {
                 return generateRandomGradient();
             }
             const formattedUuid = coverUuid.replace(/-/g, '/');
-            return `https://resources.tidal.com/images/${formattedUuid}/${size}x${size}.jpg`;
+            const imageUrl = `https://resources.tidal.com/images/${formattedUuid}/${size}x${size}.jpg`;
+            return `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
         }
             
 function renderSearchResults() {
@@ -5638,24 +5639,15 @@ async function playSong(song, playContext = null) {
         return;
     }
     
-    // --- REVISED QUEUE LOGIC FOR PERSISTENT AUTOPLAY ---
     if (playContext && Array.isArray(playContext)) {
-        // This block runs ONLY when a user starts a new playback context (new song, album, etc).
-        const wasAutoplayEnabled = isAutoplayEnabled; // Remember the current autoplay state.
-
-        // 1. Always replace the queue with the new context.
+        const wasAutoplayEnabled = isAutoplayEnabled;
         playQueue = [...playContext];
         isQueueUserModified = false;
-        
-        // 2. Clear any old autoplay songs from the tracking set.
         autoplaySongIds.clear();
-
-        // 3. If autoplay was on before, immediately generate new songs for the new queue.
         if (wasAutoplayEnabled) {
             await generateAutoplaySongs();
         }
     } else if (playQueue.length === 0) {
-        // Fallback for an empty queue remains the same.
         rebuildQueueFromCurrentView();
     }
     
@@ -5669,7 +5661,6 @@ async function playSong(song, playContext = null) {
 
         const isHlsStream = song.streamUrl && song.streamUrl.includes('.m3u8');
 
-        // Detach any previous HLS instance and revoke old URLs for a clean start
         if (hls) {
             hls.destroy();
             hls = null;
@@ -5677,38 +5668,29 @@ async function playSong(song, playContext = null) {
         if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
             URL.revokeObjectURL(audioPlayer.src);
         }
-        // Reset src to ensure the element is clean before assigning a new source
         audioPlayer.src = ''; 
-        audioPlayer.load(); // Explicitly call load to stop current playback and reset state
+        audioPlayer.load();
         
         if (isHlsStream) {
             if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                hls = new Hls(); // No custom loader needed anymore
-                
-                // THE FIX for LOCK-UPS: Add a robust error handler directly to hls.js
+                hls = new Hls();
                 hls.on(Hls.Events.ERROR, function (event, data) {
                     if (data.fatal) {
                         console.error('Fatal HLS Error:', data);
-                        // This guarantees the player is unlocked before moving on.
                         isPlayerLoading = false;
                         playNextSong({ userInitiated: false });
                     }
                 });
-                
-                // THE FIX for 403/404: Apply the proxy to the source URL here
-                hls.loadSource(proxyUrl(song.streamUrl));
+                hls.loadSource(song.streamUrl);
                 hls.attachMedia(audioPlayer);
-
             } else if (audioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
-                audioPlayer.src = proxyUrl(song.streamUrl);
+                audioPlayer.src = song.streamUrl;
             }
             audioPlayer.crossOrigin = "anonymous";
             connectAudioGraph();
         } else {
-            // Standard File Path (for Local or Cached files)
-            const fileUrl = song.blobUrl || await getSongFileUrl(song);
+            const fileUrl = song.blobUrl || song.streamUrl || await getSongFileUrl(song);
             if (!fileUrl) {
-                // Throw an error if no URL could be found, which is caught below.
                 throw new Error(`Could not get a playable URL for ${song.name}`);
             }
             audioPlayer.removeAttribute('crossorigin');
@@ -5719,12 +5701,10 @@ async function playSong(song, playContext = null) {
         currentSongId = song.id;
         currentQueueIndex = playQueue.findIndex(s => s.id === currentSongId);
         
-        // Update both the main player and the miniplayer
         updatePlayerUI(song);
-        updateMiniplayerUI(song, 'paused'); // Initially show as paused
+        updateMiniplayerUI(song, 'paused');
         await updateMediaSessionMetadata(song);
 
-        // Register media session
         Gurasuraisu.registerMediaSession(
             { title: song.name, artist: song.artist, artwork: [{ src: song.albumArt }] },
             ['playPause', 'next', 'prev']
@@ -5734,8 +5714,8 @@ async function playSong(song, playContext = null) {
             if (panelContent === 'lyrics') {
                 renderLyrics();
             } else if (panelContent === 'queue') {
-                renderQueue(); // Re-render queue to update the '.active' highlight
-                scrollToCurrentSongInQueue(); // Scroll to new song
+                renderQueue();
+                scrollToCurrentSongInQueue();
             }
         }
 
@@ -6365,6 +6345,42 @@ async function updateSoundcloudCacheWithLyrics(song) {
     }
 }
 
+        async function getStreamableUrl(songObject) {
+            const baseQualityLevels = ['LOSSLESS', 'HIGH', 'LOW'];
+            let qualityLevelsToTry = [];
+            if (songObject.audioQuality && baseQualityLevels.includes(songObject.audioQuality)) {
+                qualityLevelsToTry.push(songObject.audioQuality);
+            }
+            baseQualityLevels.forEach(q => {
+                if (!qualityLevelsToTry.includes(q)) {
+                    qualityLevelsToTry.push(q);
+                }
+            });
+
+            for (const quality of qualityLevelsToTry) {
+                const manifestUrl = `https://tidal.401658.xyz/dash/?id=${songObject.id}&quality=${quality}`;
+                try {
+                    const response = await fetch(manifestUrl);
+                    if (response.ok) {
+                        const text = await response.text();
+                        try {
+                            const directUrlData = JSON.parse(text);
+                            if (directUrlData && directUrlData.urls && directUrlData.urls.length > 0) {
+                                console.log(`Found fast, direct stream URL at quality: ${quality}`);
+                                return directUrlData.urls[0];
+                            }
+                        } catch (e) {
+                            // Not JSON, continue to next quality
+                        }
+                    }
+                } catch (e) {
+                    // Ignore errors, try next quality
+                }
+            }
+            console.log("No fast, direct stream URL found. Must use slow path.");
+            return null;
+        }
+
 async function playSoundcloudTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     try {
@@ -6372,6 +6388,7 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
         
         if (cachedEntry) {
+            console.log("Playing from cache.");
             const songToPlay = cachedEntry.metadata;
             songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
             if (cachedEntry.metadata.trimmedDuration) {
@@ -6385,26 +6402,33 @@ async function playSoundcloudTrack(trackId, playContext = null) {
         if (!trackData) throw new Error("Track not found in search results");
         
         const songObject = {
-            id: trackData.id,
-            name: trackData.title,
-            artist: trackData.artist.name,
-            album: trackData.album.title,
-            albumArt: getHighResArtwork(trackData.album.cover),
-            storage: 'soundcloud',
-            duration: trackData.duration,
-            audioQuality: trackData.audioQuality
+            id: trackData.id, name: trackData.title, artist: trackData.artist.name,
+            album: trackData.album.title, albumArt: getHighResArtwork(trackData.album.cover),
+            storage: 'soundcloud', duration: trackData.duration, audioQuality: trackData.audioQuality
         };
         
-        const cachedSong = await processAndCacheSoundcloudTrack(songObject);
-        if (cachedSong) {
-            const songToPlay = cachedSong.metadata;
-            songToPlay.blobUrl = URL.createObjectURL(cachedSong.blob);
-            if (cachedSong.metadata.trimmedDuration) {
-                songToPlay.duration = cachedSong.metadata.trimmedDuration;
-            }
-            playSong(songToPlay, playContext);
+        const streamUrl = await getStreamableUrl(songObject);
+
+        if (streamUrl) {
+            console.log("Fast path: Streaming directly, caching in background.");
+            songObject.streamUrl = streamUrl;
+            playSong(songObject, playContext);
+            processAndCacheSoundcloudTrack(songObject).catch(err => {
+                console.error("Background caching failed:", err);
+            });
         } else {
-            throw new Error("Caching and processing failed.");
+            console.log("Slow path: No direct stream URL, processing before playback.");
+            const cachedSong = await processAndCacheSoundcloudTrack(songObject);
+            if (cachedSong) {
+                const songToPlay = cachedSong.metadata;
+                songToPlay.blobUrl = URL.createObjectURL(cachedSong.blob);
+                if (cachedSong.metadata.trimmedDuration) {
+                    songToPlay.duration = cachedSong.metadata.trimmedDuration;
+                }
+                playSong(songToPlay, playContext);
+            } else {
+                throw new Error("Caching and processing failed.");
+            }
         }
     } catch (error) {
         console.error(`Failed to play Hi-Fi track ${numericTrackId}:`, error);
