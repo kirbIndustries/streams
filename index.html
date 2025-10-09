@@ -2550,6 +2550,7 @@
         let tidalClientId = '';
         let istidalEnabled = false;
         let tidalSearchTimeout;
+        let tidalSearchAbortController = null;
         let currentlyPlayingSong = null;
         let istidalOfflineMode = false;
         let tidalFilter = 'tracks';
@@ -5913,6 +5914,12 @@ function toggletidalTab() {
 }
 
         async function searchtidal() {
+            if (tidalSearchAbortController) {
+                tidalSearchAbortController.abort();
+            }
+            tidalSearchAbortController = new AbortController();
+            const signal = tidalSearchAbortController.signal;
+
             const query = document.getElementById('tidalSearchInput').value.trim();
             const resultsGrid = document.getElementById('tidal-results-grid');
             if (!query) {
@@ -5925,7 +5932,7 @@ function toggletidalTab() {
 
             const searchUrl = `https://tidal.401658.xyz/search/?s=${encodeURIComponent(query)}&limit=100`;
             try {
-                const response = await fetch(searchUrl);
+                const response = await fetch(searchUrl, { signal });
                 if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
                 
                 const data = await response.json();
@@ -5933,6 +5940,10 @@ function toggletidalTab() {
                 rendertidalSearchResults();
 
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Search request was aborted.');
+                    return;
+                }
                 console.error('Hifi Search Error:', error);
                 resultsGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><p>Error searching the catalogue</p></div>`;
             }
