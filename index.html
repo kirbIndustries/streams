@@ -2162,7 +2162,7 @@
 
             <div class="search-container" id="soundcloud-search-container" style="position: absolute; width: 90%; z-index: 1; left: 50%; transform: translateX(-50%);">
                 <span class="material-symbols-rounded search-icon" style="padding-left: 2px;">search</span>
-                <input type="text" id="soundcloudSearchInput" placeholder="Search SoundCloud" class="library-search-input" style="box-shadow: var(--sun-shadow), 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
+                <input type="text" id="soundcloudSearchInput" placeholder="Search" class="library-search-input" style="box-shadow: var(--sun-shadow), 0 0 15px rgba(0, 0, 0, 0.05); padding: 12px 17px 12px 42px;">
             </div>
             
             <div id="soundcloud-results-grid" class="item-grid" style="padding-top: 60px; padding-bottom: 240px;">
@@ -2309,17 +2309,9 @@
             If you enable a third-party service, you agree to the Terms of Service and other polices of that service.
             <div style="display: flex; flex-direction: column; gap: 15px; padding-top: 15px;">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="soundcloudToggle">Enable SoundCloud Streaming</label>
+                    <label for="soundcloudToggle">Enable Streaming</label>
                     <input type="checkbox" id="soundcloudToggle">
                 </div>
-                <input type="text" id="soundcloudClientId" placeholder="SoundCloud Client ID" class="search-input" style="padding-left: 15px;">
-                <small>You will need to disable CORS to use SoundCloud streaming. A browser extension may be required.</small>
-
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="corsProxyToggle">Use corsproxy.io</label>
-                    <input type="checkbox" id="corsProxyToggle">
-                </div>
-                <small>Redirects SoundCloud requests through a proxy. May be slower.</small>
                 
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                     <label for="lrclibToggle">Search LRCLIB for missing lyrics</label>
