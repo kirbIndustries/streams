@@ -2674,6 +2674,13 @@ function setupDrawerInteractions() {
     document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
 }
 
+        function getLowResArtUrl(highResUrl) {
+            if (!highResUrl || !highResUrl.includes('resources.tidal.com')) {
+                return highResUrl;
+            }
+            return highResUrl.replace(/\/\d+x\d+\.jpg$/, '/80x80.jpg');
+        }
+
         function getHighResArtwork(coverUuid, size = 640) {
             if (!coverUuid) {
                 return generateRandomGradient();
@@ -3264,7 +3271,7 @@ function updateFavicon(albumArt) {
   img.onerror = function() {
     console.error('Error loading album art for favicon');
   };
-  img.src = albumArt;
+  img.src = getLowResArtUrl(albumArt);
 }
 
 async function loadSong(song) {
@@ -3879,7 +3886,8 @@ const availableMusicFunctions = {
                     oldResizedArt = currentResizedArt;
                 }
 
-                const newResized = await createResizedImage(imageUrl, 64);
+                const smallImageUrl = getLowResArtUrl(imageUrl);
+                const newResized = await createResizedImage(smallImageUrl, 64);
                 newResized.dataset.originalUrl = imageUrl;
                 currentResizedArt = newResized;
 
@@ -4360,7 +4368,7 @@ async function getArtColors(imageUrl) {
     return new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous';
-        img.src = imageUrl;
+        img.src = getLowResArtUrl(imageUrl);
         img.onload = () => {
             const canvas = document.createElement('canvas');
             canvas.width = img.width;
