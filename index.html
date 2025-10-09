@@ -5894,13 +5894,11 @@ function initModalVariables() {
 
 async function saveIntegrationSettings() {
     istidalEnabled = document.getElementById('tidalToggle').checked;
-    isCorsProxyEnabled = document.getElementById('corsProxyToggle').checked; // Add this line
     isLrclibEnabled = document.getElementById('lrclibToggle').checked;
 
     const tx = db.transaction('config', 'readwrite');
     await Promise.all([
         tx.objectStore('config').put({ key: 'istidalEnabled', value: istidalEnabled }),
-        tx.objectStore('config').put({ key: 'isCorsProxyEnabled', value: isCorsProxyEnabled }), // Save the new setting
         tx.objectStore('config').put({ key: 'isLrclibEnabled', value: isLrclibEnabled })
     ]);
     
