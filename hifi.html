@@ -6357,7 +6357,6 @@ async function updateSoundcloudCacheWithLyrics(song) {
 
 async function playSoundcloudTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
-    Gurasuraisu.showPopup(`Loading...`);
     try {
         const tx = db.transaction('soundcloudCache', 'readonly');
         const cachedEntry = await promiseIDBRequest(tx.objectStore('soundcloudCache').get(numericTrackId));
