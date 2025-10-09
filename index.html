@@ -6286,42 +6286,6 @@ async function updatetidalCacheWithLyrics(song) {
     }
 }
 
-        async function getStreamableUrl(songObject) {
-            const baseQualityLevels = ['LOSSLESS', 'HIGH', 'LOW'];
-            let qualityLevelsToTry = [];
-            if (songObject.audioQuality && baseQualityLevels.includes(songObject.audioQuality)) {
-                qualityLevelsToTry.push(songObject.audioQuality);
-            }
-            baseQualityLevels.forEach(q => {
-                if (!qualityLevelsToTry.includes(q)) {
-                    qualityLevelsToTry.push(q);
-                }
-            });
-
-            for (const quality of qualityLevelsToTry) {
-                const manifestUrl = `https://tidal.401658.xyz/dash/?id=${songObject.id}&quality=${quality}`;
-                try {
-                    const response = await fetch(manifestUrl);
-                    if (response.ok) {
-                        const text = await response.text();
-                        try {
-                            const directUrlData = JSON.parse(text);
-                            if (directUrlData && directUrlData.urls && directUrlData.urls.length > 0) {
-                                console.log(`Found fast, direct stream URL at quality: ${quality}`);
-                                return directUrlData.urls[0];
-                            }
-                        } catch (e) {
-                            // Not JSON, continue to next quality
-                        }
-                    }
-                } catch (e) {
-                    // Ignore errors, try next quality
-                }
-            }
-            console.log("No fast, direct stream URL found. Must use slow path.");
-            return null;
-        }
-
 async function playtidalTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     try {
@@ -6345,25 +6309,14 @@ async function playtidalTrack(trackId, playContext = null) {
             storage: 'tidal', duration: trackData.duration, audioQuality: trackData.audioQuality
         };
         
-        const streamUrl = await getStreamableUrl(songObject);
-
-        if (streamUrl) {
-            console.log("Fast path: Streaming directly, caching in background.");
-            songObject.streamUrl = streamUrl;
-            await playSong(songObject, playContext);
-            processAndCachetidalTrack(songObject).catch(err => {
-                console.error("Background caching failed:", err);
-            });
+        console.log("Track not cached. Processing before playback.");
+        const cachedSong = await processAndCachetidalTrack(songObject);
+        if (cachedSong) {
+            const songToPlay = cachedSong.metadata;
+            songToPlay.blobUrl = URL.createObjectURL(cachedSong.blob);
+            await playSong(songToPlay, playContext);
         } else {
-            console.log("Slow path: No direct stream URL, processing before playback.");
-            const cachedSong = await processAndCachetidalTrack(songObject);
-            if (cachedSong) {
-                const songToPlay = cachedSong.metadata;
-                songToPlay.blobUrl = URL.createObjectURL(cachedSong.blob);
-                await playSong(songToPlay, playContext);
-            } else {
-                throw new Error("Caching and processing failed.");
-            }
+            throw new Error("Caching and processing failed.");
         }
     } catch (error) {
         console.error(`Failed to play Hi-Fi track ${numericTrackId}:`, error);
