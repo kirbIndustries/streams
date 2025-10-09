@@ -5703,7 +5703,31 @@ async function playSong(song, playContext = null) {
             }
         }
 
-        await audioPlayer.play();
+        await new Promise((resolve, reject) => {
+            const playAudio = () => {
+                audioPlayer.play().then(resolve).catch(e => {
+                    if (e.name === 'AbortError') {
+                        resolve();
+                    } else {
+                        reject(e);
+                    }
+                });
+            };
+            if (audioPlayer.readyState >= 3) {
+                playAudio();
+            } else {
+                audioPlayer.oncanplay = () => {
+                    audioPlayer.oncanplay = null;
+                    audioPlayer.onerror = null;
+                    playAudio();
+                };
+                audioPlayer.onerror = (e) => {
+                    audioPlayer.oncanplay = null;
+                    audioPlayer.onerror = null;
+                    reject(e.target.error || new Error("Unknown audio player error"));
+                };
+            }
+        });
 
         proactivelyCacheNextInQueue();
 
@@ -6016,144 +6040,6 @@ async function proactivelyCacheNextInQueue() {
     }
 }
 
-/**
- * Converts a Web Audio API AudioBuffer into a WAV file (Blob).
- * This is necessary to save our trimmed audio data back to the cache.
- * @param {AudioBuffer} audioBuffer The buffer to convert.
- * @returns {Blob} A Blob representing the WAV file.
- */
-function audioBufferToWav(audioBuffer) {
-    const numChannels = audioBuffer.numberOfChannels;
-    const sampleRate = audioBuffer.sampleRate;
-    const format = 1; // PCM
-    const bitDepth = 16;
-
-    let result;
-    const channels = [];
-    for (let i = 0; i < numChannels; i++) {
-        channels.push(audioBuffer.getChannelData(i));
-    }
-    
-    // Interleave channels
-    let offset = 0;
-    const interleaved = new Int16Array(channels[0].length * numChannels);
-    for (let i = 0; i < channels[0].length; i++) {
-        for (let channel = 0; channel < numChannels; channel++) {
-            let sample = Math.max(-1, Math.min(1, channels[channel][i]));
-            sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-            interleaved[offset++] = sample;
-        }
-    }
-
-    // Create WAV header
-    const buffer = new ArrayBuffer(44 + interleaved.length * 2);
-    const view = new DataView(buffer);
-    
-    // RIFF chunk descriptor
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + interleaved.length * 2, true);
-    writeString(view, 8, 'WAVE');
-    // fmt sub-chunk
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, format, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true);
-    view.setUint16(32, numChannels * (bitDepth / 8), true);
-    view.setUint16(34, bitDepth, true);
-    // data sub-chunk
-    writeString(view, 36, 'data');
-    view.setUint32(40, interleaved.length * 2, true);
-    
-    // Write the PCM samples
-    for (let i = 0; i < interleaved.length; i++) {
-        view.setInt16(44 + i * 2, interleaved[i], true);
-    }
-    
-    return new Blob([view], { type: 'audio/wav' });
-
-    function writeString(view, offset, string) {
-        for (let i = 0; i < string.length; i++) {
-            view.setUint8(offset + i, string.charCodeAt(i));
-        }
-    }
-}
-
-/**
- * Analyzes an AudioBuffer to find the start and end of the actual music,
- * trimming leading/trailing silence and potential loops using LRCLIB data.
- * @param {AudioBuffer} audioBuffer The full audio buffer.
- * @param {Array|null} lrcData Synced lyrics data from LRCLIB.
- * @returns {object} An object containing the trimmed buffer and its new duration.
- */
-function trimAudioBuffer(audioBuffer, lrcData) {
-    const SILENCE_THRESHOLD = 0.005; // Amplitude threshold to be considered silence
-    const MIN_NON_SILENCE_DURATION_S = 0.1; // Chunks of sound must be this long to count
-    const sampleRate = audioBuffer.sampleRate;
-    const data = audioBuffer.getChannelData(0); // Analyze the first channel
-
-    let startTime = 0;
-    let endTime = audioBuffer.duration;
-
-    // Find the real start time
-    for (let i = 0; i < data.length; i++) {
-        if (Math.abs(data[i]) > SILENCE_THRESHOLD) {
-            startTime = i / sampleRate;
-            break;
-        }
-    }
-
-    // Find the real end time (the complex part)
-    let lastLyricTime = 0;
-    if (lrcData && lrcData.length > 0) {
-        lastLyricTime = lrcData[lrcData.length - 1].time;
-    }
-
-    let searchStartSample = data.length - 1;
-    // If we have lyrics, we can confidently search for silence *after* the last lyric.
-    if (lastLyricTime > 0) {
-        // Start searching 2 seconds after the last lyric, to allow for musical fade-outs.
-        searchStartSample = Math.min(data.length - 1, (lastLyricTime + 2) * sampleRate);
-    }
-    
-    // Scan backwards from our starting point to find the last meaningful sound
-    for (let i = data.length - 1; i >= searchStartSample; i--) {
-        if (Math.abs(data[i]) > SILENCE_THRESHOLD) {
-            // Add a small buffer to avoid cutting off the sound's decay
-            endTime = (i / sampleRate) + 0.5;
-            break;
-        }
-    }
-    // If we used lyrics to search and found only silence, the song likely ends with the lyrics.
-    if (lastLyricTime > 0 && endTime > (lastLyricTime + 5)) {
-         endTime = lastLyricTime + 2; // End 2 seconds after the last lyric.
-    }
-    
-    // Ensure we don't trim everything
-    if (endTime <= startTime) {
-        return { trimmedBuffer: audioBuffer, newDuration: audioBuffer.duration };
-    }
-
-    const newDuration = endTime - startTime;
-    const startOffset = Math.floor(startTime * sampleRate);
-    const endOffset = Math.floor(endTime * sampleRate);
-    const newLength = endOffset - startOffset;
-
-    const newBuffer = audioContext.createBuffer(
-        audioBuffer.numberOfChannels,
-        newLength,
-        sampleRate
-    );
-
-    for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
-        newBuffer.copyToChannel(audioBuffer.getChannelData(i).slice(startOffset, endOffset), i);
-    }
-    
-    console.log(`Audio trimmed. Original: ${audioBuffer.duration.toFixed(2)}s, New: ${newDuration.toFixed(2)}s`);
-    return { trimmedBuffer: newBuffer, newDuration: newDuration };
-}
-
 async function processAndCachetidalTrack(songObject) {
     try {
         const baseQualityLevels = ['LOSSLESS', 'HIGH', 'LOW'];
@@ -6223,21 +6109,18 @@ async function processAndCachetidalTrack(songObject) {
         if (!concatenatedBlob) {
             throw new Error('Failed to fetch a valid manifest or direct URL for any quality level.');
         }
-
-        if (!audioContext) await initVisualizer();
-        const arrayBuffer = await concatenatedBlob.arrayBuffer();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
         const lrcDataResult = await fetchLyrics(songObject);
         const lrcData = lrcDataResult && lrcDataResult.type === 'lrc' ? parseLRC(lrcDataResult.content) : null;
-        const { trimmedBuffer, newDuration } = trimAudioBuffer(audioBuffer, lrcData);
-        const finalAudioBlob = audioBufferToWav(trimmedBuffer);
+        
         const cacheEntry = {
-            id: songObject.id, blob: finalAudioBlob, timestamp: Date.now(), size: finalAudioBlob.size,
+            id: songObject.id, blob: concatenatedBlob, timestamp: Date.now(), size: concatenatedBlob.size,
             metadata: {
-                ...songObject, trimmedDuration: newDuration,
+                ...songObject,
                 lyrics: lrcDataResult ? lrcDataResult.content : null, lrcData: lrcData,
             }
         };
+
         const tx = db.transaction('tidalCache', 'readwrite');
         tx.objectStore('tidalCache').put(cacheEntry);
         await tx.done;
@@ -6449,9 +6332,6 @@ async function playtidalTrack(trackId, playContext = null) {
             console.log("Playing from cache.");
             const songToPlay = cachedEntry.metadata;
             songToPlay.blobUrl = URL.createObjectURL(cachedEntry.blob);
-            if (cachedEntry.metadata.trimmedDuration) {
-                songToPlay.duration = cachedEntry.metadata.trimmedDuration;
-            }
             await playSong(songToPlay, playContext);
             return;
         }
@@ -6480,9 +6360,6 @@ async function playtidalTrack(trackId, playContext = null) {
             if (cachedSong) {
                 const songToPlay = cachedSong.metadata;
                 songToPlay.blobUrl = URL.createObjectURL(cachedSong.blob);
-                if (cachedSong.metadata.trimmedDuration) {
-                    songToPlay.duration = cachedSong.metadata.trimmedDuration;
-                }
                 await playSong(songToPlay, playContext);
             } else {
                 throw new Error("Caching and processing failed.");
