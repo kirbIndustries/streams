@@ -6205,7 +6205,7 @@ function trimAudioBuffer(audioBuffer, lrcData) {
 
 async function processAndCacheSoundcloudTrack(songObject) {
     try {
-        const qualityLevels = ['HI_RES_LOSSLESS', 'HI_RES', 'LOSSLESS', 'HIGH', 'LOW'];
+        const qualityLevels = ['LOSSLESS', 'HIGH', 'LOW'];
         let manifestResponse = null;
 
         for (const quality of qualityLevels) {
@@ -6213,9 +6213,12 @@ async function processAndCacheSoundcloudTrack(songObject) {
             try {
                 const response = await fetch(manifestUrl);
                 if (response.ok) {
-                    manifestResponse = response;
-                    console.log(`Found playable manifest for track ${songObject.id} at quality: ${quality}`);
-                    break; 
+                    const text = await response.text();
+                    if (text.includes('<MPD')) { // Ensure it's a valid DASH manifest
+                        manifestResponse = new Response(text, response);
+                        console.log(`Found playable manifest for track ${songObject.id} at quality: ${quality}`);
+                        break; 
+                    }
                 }
             } catch (e) {
                 console.warn(`Failed to fetch manifest at quality ${quality} for track ${songObject.id}. Trying next quality.`);
