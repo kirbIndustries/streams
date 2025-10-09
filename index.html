@@ -745,7 +745,7 @@
         }
                 
         .control-btn {
-            background: var(--search-background);
+            background: transparent;
             border: none;
             color: var(--text-color);
             width: 50px;
@@ -758,15 +758,10 @@
             justify-content: center;
             align-items: center;
             line-height: 0;
-            backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px);
-            box-shadow: var(--sun-shadow);
-            border: 1px solid var(--glass-border);
         }
         
         .control-btn.play-pause {
-            background-color: var(--search-background);
-            width: 70px;
-            height: 70px;
+            background-color: transparent;
             font-size: 1.5rem;
             transition: all 0.3s ease;
             border-radius: 35px;
@@ -2224,13 +2219,13 @@
                     <span class="material-symbols-rounded">shuffle</span>
                 </button>
                 <button class="control-btn" id="prevBtn">
-                    <span class="material-symbols-rounded">fast_rewind</span>
+                    <span class="material-symbols-rounded" style="font-size: 36px;">fast_rewind</span>
                 </button>
                 <button class="control-btn play-pause" id="playPauseBtn">
-                    <span class="material-symbols-rounded" id="playPauseIcon" style="font-size: 36px;">play_arrow</span>
+                    <span class="material-symbols-rounded" id="playPauseIcon" style="font-size: 50px;">play_arrow</span>
                 </button>
                 <button class="control-btn" id="nextBtn">
-                    <span class="material-symbols-rounded">fast_forward</span>
+                    <span class="material-symbols-rounded" style="font-size: 36px;">fast_forward</span>
                 </button>
                 <button class="control-btn" id="repeatBtn">
                     <span class="material-symbols-rounded">repeat</span>
@@ -2304,7 +2299,7 @@
         </div>
         <div class="miniplayer-controls">
             <button id="miniplayer-prev-btn" class="mini-control-btn"><span class="material-symbols-rounded">fast_rewind</span></button>
-            <button id="miniplayer-play-btn" class="mini-control-btn"><span class="material-symbols-rounded">play_arrow</span></button>
+            <button id="miniplayer-play-btn" class="mini-control-btn"><span class="material-symbols-rounded" style="font-size: 28px;">play_arrow</span></button>
             <button id="miniplayer-next-btn" class="mini-control-btn"><span class="material-symbols-rounded">fast_forward</span></button>
         </div>
     </div>
@@ -5761,7 +5756,7 @@ function updateMiniplayerUI(song, state) {
     miniplayerArt.src = song.albumArt;
     miniplayerTitle.textContent = sanitize(song.name);
     miniplayerArtist.textContent = sanitize(song.artist);
-    miniplayerPlayBtn.innerHTML = `<span class="material-symbols-rounded">${state === 'playing' ? 'pause' : 'play_arrow'}</span>`;
+    miniplayerPlayBtn.innerHTML = `<span class="material-symbols-rounded" style="font-size: 28px;">${state === 'playing' ? 'pause' : 'play_arrow'}</span>`;
 }
         
 async function getSongFileUrl(song) {
