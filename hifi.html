@@ -6205,9 +6205,27 @@ function trimAudioBuffer(audioBuffer, lrcData) {
 
 async function processAndCacheSoundcloudTrack(songObject) {
     try {
-        const manifestUrl = `https://tidal.401658.xyz/dash/?id=${songObject.id}&quality=LOSSLESS`;
-        const manifestResponse = await fetch(manifestUrl);
-        if (!manifestResponse.ok) throw new Error('Failed to fetch DASH manifest.');
+        const qualityLevels = ['HI_RES_LOSSLESS', 'HI_RES', 'LOSSLESS', 'HIGH', 'LOW'];
+        let manifestResponse = null;
+
+        for (const quality of qualityLevels) {
+            const manifestUrl = `https://tidal.401658.xyz/dash/?id=${songObject.id}&quality=${quality}`;
+            try {
+                const response = await fetch(manifestUrl);
+                if (response.ok) {
+                    manifestResponse = response;
+                    console.log(`Found playable manifest for track ${songObject.id} at quality: ${quality}`);
+                    break; 
+                }
+            } catch (e) {
+                console.warn(`Failed to fetch manifest at quality ${quality} for track ${songObject.id}. Trying next quality.`);
+            }
+        }
+
+        if (!manifestResponse) {
+            throw new Error('Failed to fetch DASH manifest for any quality level.');
+        }
+
         const manifestText = await manifestResponse.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(manifestText, "application/xml");
