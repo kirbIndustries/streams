@@ -2307,13 +2307,6 @@
     <!-- Manage Folders Modal -->
     <div id="manageFoldersModal" class="modal-overlay">
         <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 450px; backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(5px); border: 1px solid var(--glass-border);">
-            <h2 style="margin-bottom: 20px;">Connected Folders</h2>
-            <div id="folderList" style="max-height: 250px; overflow-y: auto; margin-bottom: 15px;">
-                <!-- Folder list will be populated here -->
-            </div>
-            
-            <div class="menu-separator"></div>
-            
             <h2 style="margin-top: 20px; margin-bottom: 15px;">Settings</h2>
             If you enable a third-party service, you agree to the Terms of Service and other polices of that service.
             <div style="display: flex; flex-direction: column; gap: 15px; padding-top: 15px;">
@@ -5874,25 +5867,6 @@ function initModalVariables() {
 }
 
         function openManageFoldersModal() {
-            const folderList = document.getElementById('folderList');
-            folderList.innerHTML = '';
-
-            if (directoryHandles.length === 0) {
-                folderList.innerHTML = '<p style="color: var(--secondary-text-color); text-align: center;">No folders have been added yet.</p>';
-            } else {
-                directoryHandles.forEach(handle => {
-                    const item = document.createElement('div');
-                    item.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px; border-radius:8px; margin-bottom:5px; background-color:var(--search-background)';
-                    item.innerHTML = `<span><span class="material-symbols-rounded" style="vertical-align: middle; margin-right: 8px;">folder</span>${handle.name}</span>
-                                      <button class="remove-folder-btn" data-name="${handle.name}" style="background: none; border: none; color: #ff6b6b; cursor: pointer;"><span class="material-symbols-rounded">delete</span></button>`;
-                    folderList.appendChild(item);
-                });
-                
-                document.querySelectorAll('.remove-folder-btn').forEach(btn => {
-                    btn.onclick = (e) => removeFolder(e.currentTarget.dataset.name);
-                });
-            }
-            
             // Populate settings
             document.getElementById('tidalToggle').checked = istidalEnabled;
             document.getElementById('lrclibToggle').checked = isLrclibEnabled;
