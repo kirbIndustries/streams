@@ -4620,7 +4620,7 @@ function renderLibraryPage() {
     const searchFilteredSongs = songs; // No search bar here anymore
 
     if (searchFilteredSongs.length === 0) {
-        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">library_music</span><p>Your library is empty.</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Click "Add Music" to get started.</p></div>`;
+        libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">library_music</span><p>You have nothing owned.</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Enable Streaming, then open Discover to start saving songs.</p></div>`;
         return;
     }
     
