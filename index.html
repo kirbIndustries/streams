@@ -2101,7 +2101,7 @@
             For You
         </button>
         <button class="tab-btn" data-view="library">
-            <span class="material-symbols-rounded">newsstand</span>
+            <span class="material-symbols-rounded">backpack</span>
             Owned
         </button>
         <button class="tab-btn" data-view="soundcloud" id="soundcloud-tab" style="display: none;">
@@ -2132,7 +2132,7 @@
                 </div>
                  <div class="library-actions">
                     <button class="library-action-btn" id="uploadBtn" style="display: none"><span class="material-symbols-rounded">add</span></button>
-                    <button class="library-action-btn" id="manageFoldersBtn"><span class="material-symbols-rounded">folder_managed</span></button>
+                    <button class="library-action-btn" id="manageFoldersBtn"><span class="material-symbols-rounded">settings</span></button>
                 </div>
             </div>
             <div id="library-grid" class="item-grid" style="padding-bottom: 240px;">
@@ -2249,7 +2249,7 @@
                 </div>
                 <div class="menu-item" id="menuSaveToLibrary">
                     <span class="material-symbols-rounded">save</span>
-                    <span>Save to Library</span>
+                    <span>Own</span>
                 </div>
                 <div class="menu-item" id="menuAddToPlaylist">
                     <span class="material-symbols-rounded">playlist_add</span>
@@ -2305,7 +2305,7 @@
             
             <div class="menu-separator"></div>
             
-            <h2 style="margin-top: 20px; margin-bottom: 15px;">Integrations</h2>
+            <h2 style="margin-top: 20px; margin-bottom: 15px;">Settings</h2>
             If you enable a third-party service, you agree to the Terms of Service and other polices of that service.
             <div style="display: flex; flex-direction: column; gap: 15px; padding-top: 15px;">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -6278,7 +6278,6 @@ async function saveSoundcloudTrackToLibrary() {
     if (!currentlyPlayingSong || currentlyPlayingSong.storage !== 'soundcloud') return;
 
     const songToSave = currentlyPlayingSong;
-    Gurasuraisu.showPopup(`Saving "${songToSave.name}"`);
     try {
         let audioBlob;
         const tx = db.transaction('soundcloudCache', 'readonly');
@@ -6306,10 +6305,10 @@ async function saveSoundcloudTrackToLibrary() {
         songs.push(newLocalSong);
         processAndSortSongs();
         updateLocalSongLookup([newLocalSong]);
-        Gurasuraisu.showPopup(`Saved "${songToSave.name}"`);
+        Gurasuraisu.showPopup(`Added "${songToSave.name}"`);
     } catch (error) {
         console.error("Failed to save track to library:", error);
-        Gurasuraisu.showPopup("Cannot save song");
+        Gurasuraisu.showPopup("Cannot add song");
     }
 }
 
