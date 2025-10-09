@@ -2713,7 +2713,7 @@ function setupDrawerInteractions() {
             }
             const formattedUuid = coverUuid.replace(/-/g, '/');
             const imageUrl = `https://resources.tidal.com/images/${formattedUuid}/${size}x${size}.jpg`;
-            return `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
+            return imageUrl;
         }
             
 function renderSearchResults() {
