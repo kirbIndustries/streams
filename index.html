@@ -281,6 +281,20 @@
             flex-direction: column;
             height: 0;
         }
+        .section-title-fy {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .section-subtitle {
+            font-size: 14px;
+            padding: 8px 12px;
+            background: var(--search-background);
+            border: 1px solid var(--glass-border);
+            width: fit-content;
+            border-radius: 24px;
+            margin-bottom: 20px;
+        }
         .item-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -4525,6 +4539,8 @@ async function renderHomePage() {
 
     homeView.innerHTML = `
     <div class="page-content-wrapper">
+        <h2 class="section-title-fy">Streams</h2>
+        <h2 class="section-subtitle">TIDAL</h2><div class="highlight-grid">
         ${aiPromptAreaHtml}
         <div class="highlight-grid">${highlightsHtml}</div>
         <div>
