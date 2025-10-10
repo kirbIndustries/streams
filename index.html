@@ -6444,7 +6444,9 @@ async function playtidalTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     let songObject;
     try {
-        const trackData = lasttidalSearchResults.find(t => t.id === numericTrackId);
+        const trackData = lasttidalSearchResults.find(t => t.id === numericTrackId) ||
+                          currentDrawerContext.find(t => t.id === numericTrackId);
+
         if (!trackData) throw new Error("Track not found in search results");
 
         if (trackData.isrc && isrcToLocalSongMap.has(trackData.isrc)) {
