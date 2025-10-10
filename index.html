@@ -2558,6 +2558,7 @@
         let currentDrawerContext = []; // To store full objects for drawer context
         const tidal_CACHE_LIMIT = 200 * 1024 * 1024; // 200MB
         let localSongLookup = new Map();
+        let isrcToLocalSongMap = new Map();
 
         // --- LRCLIB variables ---
         let isLrclibEnabled = false;
@@ -5686,6 +5687,21 @@ async function playSong(song, playContext = null) {
     }
 }
 
+function getLocalVersionIfExists(track) {
+    if (!track) return track;
+    const artistName = (track.artist && track.artist.name) ? track.artist.name : track.artist;
+    const trackName = track.title || track.name;
+
+    if (!artistName || !trackName) return track;
+
+    const uniqueKey = `${artistName.toLowerCase().trim()}::${trackName.toLowerCase().trim()}`;
+    if (localSongLookup.has(uniqueKey)) {
+        console.log(`Found local version for "${trackName}", switching to owned track.`);
+        return localSongLookup.get(uniqueKey);
+    }
+    return track;
+}
+
 function updateMiniplayerUI(song, state) {
     // If we are on the Now Playing screen, the miniplayer should ALWAYS be hidden.
     if (activeView === 'now-playing') {
@@ -6262,6 +6278,28 @@ async function updatetidalCacheWithLyrics(song) {
 async function playtidalTrack(trackId, playContext = null) {
     const numericTrackId = Number(trackId);
     try {
+        const trackData = lasttidalSearchResults.find(t => t.id === numericTrackId);
+        if (!trackData) throw new Error("Track not found in search results");
+
+        if (trackData.isrc && isrcToLocalSongMap.has(trackData.isrc)) {
+            const localSong = isrcToLocalSongMap.get(trackData.isrc);
+            console.log(`Found local version for "${trackData.title}". Playing from library.`);
+            await playSong(localSong, null);
+            return;
+        }
+
+        const songObject = {
+            id: trackData.id, name: trackData.title, artist: trackData.artist.name,
+            album: trackData.album.title, albumArt: getHighResArtwork(trackData.album.cover),
+            storage: 'tidal', duration: trackData.duration, audioQuality: trackData.audioQuality,
+            trackNumber: trackData.trackNumber, volumeNumber: trackData.volumeNumber,
+            isrc: trackData.isrc, copyright: trackData.copyright, vibrantColor: trackData.album.vibrantColor
+        };
+        
+        currentlyPlayingSong = songObject;
+        currentSongId = songObject.id;
+        setPlayerLoadingState(true, songObject);
+
         const tx = db.transaction('tidalCache', 'readonly');
         const cachedEntry = await promiseIDBRequest(tx.objectStore('tidalCache').get(numericTrackId));
         
@@ -6272,19 +6310,7 @@ async function playtidalTrack(trackId, playContext = null) {
             await playSong(songToPlay, playContext);
             return;
         }
-
-        const trackData = lasttidalSearchResults.find(t => t.id === numericTrackId);
-        if (!trackData) throw new Error("Track not found in search results");
         
-        const songObject = {
-            id: trackData.id, name: trackData.title, artist: trackData.artist.name,
-            album: trackData.album.title, albumArt: getHighResArtwork(trackData.album.cover),
-            storage: 'tidal', duration: trackData.duration, audioQuality: trackData.audioQuality,
-            trackNumber: trackData.trackNumber, volumeNumber: trackData.volumeNumber,
-            isrc: trackData.isrc, copyright: trackData.copyright, vibrantColor: trackData.album.vibrantColor
-        };
-        
-        setPlayerLoadingState(true, songObject);
         console.log("Track not cached. Processing before playback.");
         const cachedSong = await processAndCachetidalTrack(songObject);
         if (cachedSong) {
@@ -6405,6 +6431,10 @@ async function removeFolder(folderName) {
                 const tx = db.transaction('musicFiles', 'readwrite');
                 tx.objectStore('musicFiles').delete(songIdToDelete);
                 await tx.done;
+            }
+            
+            if (songToDelete.isrc) {
+                isrcToLocalSongMap.delete(songToDelete.isrc);
             }
         
             songs.splice(songIndex, 1);
@@ -7870,6 +7900,13 @@ async function loadSongsAndPlaylists() {
         processAndSortSongs();
         updateLocalSongLookup(songs, { clear: true });
 
+        isrcToLocalSongMap.clear();
+        songs.forEach(song => {
+            if (song.isrc) {
+                isrcToLocalSongMap.set(song.isrc, song);
+            }
+        });
+
         const playlistTx = db.transaction('playlists', 'readonly');
         const playlistRequest = playlistTx.objectStore('playlists').getAll();
         const loadedPlaylists = await new Promise((resolve, reject) => {
@@ -7922,13 +7959,11 @@ async function loadSongsAndPlaylists() {
             if (!playlist.songIds.includes(songToAdd.id)) {
                 playlist.songIds.push(songToAdd.id);
                 
-                // If it's a SC song, ensure it's cached so we have its metadata for later
                 if (songToAdd.storage === 'tidal') {
                     const tx = db.transaction('tidalCache', 'readonly');
                     const checkReq = await promiseIDBRequest(tx.objectStore('tidalCache').get(songToAdd.id));
                     if (!checkReq) {
-                        // If not cached, cache it now.
-                        await cachetidalTrack(songToAdd, songToAdd.streamUrl);
+                        await processAndCachetidalTrack(songToAdd);
                     }
                 }
                 
