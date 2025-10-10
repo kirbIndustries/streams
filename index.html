@@ -5931,20 +5931,37 @@ function toggletidalTab() {
                 const data = await response.json();
                 let newItems = [];
                 let totalItems = 0;
+                const rawItems = data.items || [];
 
                 switch (tidalFilter) {
                     case 'artists':
-                        newItems = data.artists?.items || [];
-                        totalItems = data.artists?.totalNumberOfItems || 0;
+                        const artistsMap = new Map();
+                        rawItems.forEach(track => {
+                            if (track.artists) {
+                                track.artists.forEach(artist => {
+                                    if (artist && artist.id && !artistsMap.has(artist.id)) {
+                                        artistsMap.set(artist.id, artist);
+                                    }
+                                });
+                            }
+                        });
+                        newItems = Array.from(artistsMap.values());
+                        totalItems = newItems.length;
                         break;
                     case 'albums':
-                        newItems = data.albums?.items || [];
-                        totalItems = data.albums?.totalNumberOfItems || 0;
+                        const albumsMap = new Map();
+                        rawItems.forEach(track => {
+                            if (track.album && track.album.id && !albumsMap.has(track.album.id)) {
+                                albumsMap.set(track.album.id, { ...track.album, artists: track.artists });
+                            }
+                        });
+                        newItems = Array.from(albumsMap.values());
+                        totalItems = newItems.length;
                         break;
                     case 'tracks':
                     default:
-                        newItems = data.tracks?.items || [];
-                        totalItems = data.tracks?.totalNumberOfItems || 0;
+                        newItems = rawItems;
+                        totalItems = data.totalNumberOfItems || 0;
                         break;
                 }
 
