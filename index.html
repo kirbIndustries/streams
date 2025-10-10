@@ -6166,7 +6166,7 @@ async function openArtistView(artistId, artistName) {
         if (!response.ok) throw new Error('Failed to fetch artist tracks for album list');
         const searchData = await response.json();
         
-        const tracks = searchData.items.filter(track => track.artist.id === artistId);
+        const tracks = searchData.items.filter(track => track.artists.some(a => a.id === artistId));
         
         if (!tracks || tracks.length === 0) {
             drawerContent.innerHTML = `<div class="no-results"><p>No albums found for this artist.</p></div>`;
