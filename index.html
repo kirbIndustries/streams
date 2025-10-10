@@ -2551,6 +2551,7 @@
         let istidalEnabled = false;
         let tidalSearchTimeout;
         let tidalSearchAbortController = null;
+        let tidalSearchOffset = 0;
         let currentlyPlayingSong = null;
         let istidalOfflineMode = false;
         let tidalFilter = 'tracks';
@@ -2731,7 +2732,7 @@ function renderSearchResults() {
     });
 }
 
-        function rendertidalSearchResults() {
+        function rendertidalSearchResults(totalItems = 0) {
             const resultsGrid = document.getElementById('tidal-results-grid');
             if (lasttidalSearchResults.length === 0) {
                 resultsGrid.innerHTML = '<div class="no-results" style="grid-column: 1 / -1;"><p>No results found.</p></div>';
@@ -2751,9 +2752,9 @@ function renderSearchResults() {
                 case 'albums':
                     resultsGrid.className = 'item-grid';
                      resultsHtml = lasttidalSearchResults.map(album => `
-                        <div class="item-card" data-album-id="${album.id}" data-album-name="${sanitize(album.title)}" data-album-artist-name="${sanitize(album.artist.name)}">
+                        <div class="item-card" data-album-id="${album.id}" data-album-name="${sanitize(album.title)}" data-album-artist-name="${sanitize(album.artists[0].name)}">
                             <img src="${getHighResArtwork(album.cover)}" class="item-card-art">
-                            <div class="item-card-info"><div class="item-card-title">${sanitize(album.title)}</div><div class="item-card-subtitle">${sanitize(album.artist.name)}</div></div>
+                            <div class="item-card-info"><div class="item-card-title">${sanitize(album.title)}</div><div class="item-card-subtitle">${sanitize(album.artists[0].name)}</div></div>
                         </div>`).join('');
                     break;
                 case 'tracks':
@@ -2770,6 +2771,12 @@ function renderSearchResults() {
                     break;
             }
             resultsGrid.innerHTML = resultsHtml;
+            
+            if (lasttidalSearchResults.length > 0 && lasttidalSearchResults.length < totalItems) {
+                resultsGrid.insertAdjacentHTML('beforeend', `<div style="grid-column: 1 / -1; text-align: center; padding: 20px;">
+                                              <button id="loadMoreBtn" class="action-btn">Load More</button>
+                                          </div>`);
+            }
         }
 
 function setView(viewName) {
@@ -5892,8 +5899,8 @@ function toggletidalTab() {
     }
 }
 
-        async function searchtidal() {
-            if (tidalSearchAbortController) {
+        async function searchtidal({ loadMore = false } = {}) {
+            if (tidalSearchAbortController && !loadMore) {
                 tidalSearchAbortController.abort();
             }
             tidalSearchAbortController = new AbortController();
@@ -5907,30 +5914,42 @@ function toggletidalTab() {
                 return;
             }
 
-            resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
-
-            let searchUrl;
-            const encodedQuery = encodeURIComponent(query);
-            switch (tidalFilter) {
-                case 'artists':
-                    searchUrl = `https://tidal.401658.xyz/search/?a=${encodedQuery}&limit=50`;
-                    break;
-                case 'albums':
-                    searchUrl = `https://tidal.401658.xyz/search/?al=${encodedQuery}&limit=50`;
-                    break;
-                case 'tracks':
-                default:
-                    searchUrl = `https://tidal.401658.xyz/search/?s=${encodedQuery}&limit=50`;
-                    break;
+            if (!loadMore) {
+                resultsGrid.innerHTML = `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`;
+                tidalSearchOffset = 0;
+                lasttidalSearchResults = [];
+            } else {
+                tidalSearchOffset += 50;
             }
+
+            const searchUrl = `https://tidal.401658.xyz/search/?s=${encodeURIComponent(query)}&limit=50&offset=${tidalSearchOffset}`;
 
             try {
                 const response = await fetch(searchUrl, { signal });
                 if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
                 
                 const data = await response.json();
-                lasttidalSearchResults = data.items || [];
-                rendertidalSearchResults();
+                let newItems = [];
+                let totalItems = 0;
+
+                switch (tidalFilter) {
+                    case 'artists':
+                        newItems = data.artists?.items || [];
+                        totalItems = data.artists?.totalNumberOfItems || 0;
+                        break;
+                    case 'albums':
+                        newItems = data.albums?.items || [];
+                        totalItems = data.albums?.totalNumberOfItems || 0;
+                        break;
+                    case 'tracks':
+                    default:
+                        newItems = data.tracks?.items || [];
+                        totalItems = data.tracks?.totalNumberOfItems || 0;
+                        break;
+                }
+
+                lasttidalSearchResults = lasttidalSearchResults.concat(newItems);
+                rendertidalSearchResults(totalItems);
 
             } catch (error) {
                 if (error.name === 'AbortError') {
@@ -7893,7 +7912,14 @@ drawerContent.addEventListener('click', (e) => {
             tidalSearchTimeout = setTimeout(searchtidal, 300);
         });
         
-document.getElementById('tidal-results-grid').addEventListener('click', e => {
+        document.getElementById('tidal-results-grid').addEventListener('click', e => {
+            if (e.target && e.target.id === 'loadMoreBtn') {
+                e.target.innerHTML = 'Loading...';
+                e.target.disabled = true;
+                searchtidal({ loadMore: true });
+                return;
+            }
+
             const trackCard = e.target.closest('.item-card[data-track-id]');
             const cachedCard = e.target.closest('.music-item[data-cached-id]');
             const artistCard = e.target.closest('.item-card[data-artist-id]');
