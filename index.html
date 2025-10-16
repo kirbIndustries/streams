@@ -6162,30 +6162,27 @@ async function openArtistView(artistId, artistName) {
     openDrawer(artistName, "Loading albums...", `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
 
     try {
-        const response = await fetch(`https://tidal.401658.xyz/search/?s=${encodeURIComponent(artistName)}&limit=100`);
-        if (!response.ok) throw new Error('Failed to fetch artist tracks for album list');
+        const response = await fetch(`https://tidal.401658.xyz/artist/?f=${artistId}`);
+        if (!response.ok) throw new Error('Failed to fetch artist albums');
         const searchData = await response.json();
         
         const tracks = searchData.items.filter(track => track.artists.some(a => a.id === artistId));
         
-        if (!tracks || tracks.length === 0) {
+        const data = await response.json();
+        
+        // The full artist response includes separate arrays for content types.
+        // We'll look for the albums, which are typically the third element.
+        const albums = data[2] || [];
+
+        if (!albums || albums.length === 0) {
             drawerContent.innerHTML = `<div class="no-results"><p>No albums found for this artist.</p></div>`;
             return;
         }
+        
+        // Store albums in context in case we need them later
+        currentDrawerContext = albums;
 
-        const uniqueAlbums = new Map();
-        tracks.forEach(track => {
-            if (track.album && track.album.id && !uniqueAlbums.has(track.album.id)) {
-                uniqueAlbums.set(track.album.id, {
-                    id: track.album.id,
-                    title: track.album.title,
-                    cover: track.album.cover
-                });
-            }
-        });
-        const albums = { items: Array.from(uniqueAlbums.values()) };
-
-        const contentHtml = `<div class="item-grid">${albums.items.map(album => `
+        const contentHtml = `<div class="item-grid">${albums.map(album => `
             <div class="item-card" data-album-id="${album.id}" data-album-name="${sanitize(album.title)}" data-album-artist-name="${sanitize(artistName)}">
                 <img src="${getHighResArtwork(album.cover, 320)}" class="item-card-art">
                 <div class="item-card-info">
@@ -6193,23 +6190,25 @@ async function openArtistView(artistId, artistName) {
                 </div>
             </div>`).join('')}</div>`;
 
-        document.getElementById('drawer-subtitle').textContent = `${albums.items.length} albums found`;
+        document.getElementById('drawer-subtitle').textContent = `${albums.length} albums found`;
         drawerContent.innerHTML = contentHtml;
     } catch (error) {
         console.error("Error fetching artist albums:", error);
         drawerContent.innerHTML = `<div class="no-results"><p>Could not load albums.</p></div>`;
     }
 }
-
+        
 async function openAlbumView(albumId, albumName, artistName) {
     openDrawer(albumName, artistName, `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
 
     try {
-        const response = await fetch(`https://tidal.401658.xyz/search/?s=${encodeURIComponent(albumName + " " + artistName)}&limit=100`);
+        // FIX: Use the direct album endpoint to get its tracks.
+        const response = await fetch(`https://tidal.401658.xyz/album/?id=${albumId}`);
         if (!response.ok) throw new Error('Failed to fetch album tracks');
-        const tracksData = await response.json();
         
-        const tracks = tracksData.items.filter(track => track.album.id == albumId);
+        // This API returns a 2-element array: [album_metadata, { items: [tracks] }]
+        const data = await response.json();
+        const tracks = data[1].items.map(t => t.item);
 
         if (!tracks || tracks.length === 0) {
             drawerContent.innerHTML = `<div class="no-results"><p>No tracks found for this album.</p></div>`;
