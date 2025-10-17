@@ -6256,6 +6256,42 @@ async function openAlbumView(albumId, albumName, artistName) {
     }
 }
 
+function openLocalAlbumView(artistName, albumName) {
+    // Filter local songs based on artist and album
+    const albumSongs = songs.filter(s => s.albumArtist === artistName && s.album === albumName)
+                           .sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+
+    if (albumSongs.length === 0) {
+        openDrawer(albumName, artistName, `<div class="no-results"><p>No songs found for this local album.</p></div>`);
+        return;
+    }
+    
+    // Use the first song's art for the header
+    const albumArt = albumSongs[0].albumArt;
+
+    // Build the content HTML
+    const contentHtml = `
+        <div class="album-header-list" style="margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <img src="${albumArt}" style="width: 100px; height: 100px; border-radius: 12px; box-shadow: 0 0 0 1px var(--glass-border);">
+                <div>
+                    <h2>${sanitize(albumName)}</h2>
+                    <p>${sanitize(artistName)}</p>
+                </div>
+            </div>
+        </div>
+        <div class="item-list">${albumSongs.map(song => `
+            <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
+                <div class="song-info">
+                    <span class="track-number">${song.trackNumber || '•'}.</span>
+                    <div class="song-title">${sanitize(song.name)}</div>
+                </div>
+            </div>`).join('')}
+        </div>`;
+
+    openDrawer(albumName, artistName, contentHtml);
+}
+
 async function fetchAndUpdateLyrics(song) {
     if (song.lyrics) {
         if (isPanelVisible && panelContent === 'lyrics') {
@@ -7691,15 +7727,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
                 const [artist, albumName] = albumId.split('::');
-                const albumSongs = songs.filter(s => s.albumArtist === artist && s.album === albumName).sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
-                const contentHtml = `<div class="item-list">${albumSongs.map(song => `
-                    <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
-                        <div class="song-info">
-                            <span class="track-number">${song.trackNumber || '•'}</span>
-                            <div class="song-title">${sanitize(song.name)}</div>
-                        </div>
-                    </div>`).join('')}</div>`;
-                openDrawer(albumName, artist, contentHtml);
+                // When an album is clicked from the main library view, show its tracks.
+                openLocalAlbumView(artist, albumName);
             } else if (artistCard) {
                 const artistName = artistCard.dataset.artistName;
                 const artistAlbums = groupSongsByAlbum(songs.filter(s => s.artist === artistName));
@@ -7729,7 +7758,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
 
-drawerContent.addEventListener('click', (e) => {
+        drawerContent.addEventListener('click', (e) => {
             const localSongItem = e.target.closest('.music-item[data-id]');
             const tidalSongItem = e.target.closest('.music-item[data-track-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
@@ -7764,7 +7793,16 @@ drawerContent.addEventListener('click', (e) => {
                 const albumId = albumCard.dataset.albumId;
                 const albumName = albumCard.dataset.albumName;
                 const artistName = albumCard.dataset.albumArtistName;
-                openAlbumView(albumId, albumName, artistName);
+
+                // Check if the albumId is a number (TIDAL) or a string (Local)
+                if (!isNaN(parseFloat(albumId)) && isFinite(albumId)) {
+                    // It's a numerical ID, so it's a TIDAL album.
+                    openAlbumView(albumId, albumName, artistName);
+                } else {
+                    // It's a string like "Artist::Album", so it's a LOCAL album.
+                    const [localArtist, localAlbum] = albumId.split('::');
+                    openLocalAlbumView(localArtist, localAlbum);
+                }
             } else if (tidalSongItem) {
                 const trackId = tidalSongItem.dataset.trackId;
                 const playContext = currentDrawerContext.map(track => ({
