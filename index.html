@@ -5408,7 +5408,7 @@ async function generateAutoplaySongs() {
     if (!lastSong || !lastSong.artist) return;
 
     try {
-        const response = await fetch(`https://tidal.401658.xyz/search/?s=${encodeURIComponent(lastSong.artist)}&limit=20`);
+        const response = await fetch(`https://hifi.401658.xyz/search/?s=${encodeURIComponent(lastSong.artist)}&limit=20`);
         if (!response.ok) throw new Error("Autoplay search failed");
         
         const data = await response.json();
@@ -5922,7 +5922,7 @@ function toggletidalTab() {
                 tidalSearchOffset += 50;
             }
 
-            const searchUrl = `https://tidal.401658.xyz/search/?s=${encodeURIComponent(query)}&limit=50&offset=${tidalSearchOffset}`;
+            const searchUrl = `https://hifi.401658.xyz/search/?s=${encodeURIComponent(query)}&limit=50&offset=${tidalSearchOffset}`;
 
             try {
                 const response = await fetch(searchUrl, { signal });
@@ -6080,7 +6080,7 @@ async function processAndCachetidalTrack(songObject) {
         let concatenatedBlob = null;
 
         for (const quality of qualityLevelsToTry) {
-            const manifestUrl = `https://tidal.401658.xyz/dash/?id=${songObject.id}&quality=${quality}`;
+            const manifestUrl = `https://hifi.401658.xyz/dash/?id=${songObject.id}&quality=${quality}`;
             try {
                 const response = await fetch(manifestUrl);
                 if (response.ok) {
@@ -6162,7 +6162,7 @@ async function openArtistView(artistId, artistName) {
     openDrawer(artistName, "Loading albums...", `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
 
     try {
-        const response = await fetch(`https://tidal.401658.xyz/artist/?f=${artistId}`);
+        const response = await fetch(`https://hifi.401658.xyz/artist/?f=${artistId}`);
         if (!response.ok) throw new Error('Failed to fetch artist albums');
         
         const data = await response.json();
@@ -6208,7 +6208,7 @@ async function openAlbumView(albumId, albumName, artistName) {
 
     try {
         // FIX: Use the direct album endpoint to get its tracks.
-        const response = await fetch(`https://tidal.401658.xyz/album/?id=${albumId}`);
+        const response = await fetch(`https://hifi.401658.xyz/album/?id=${albumId}`);
         if (!response.ok) throw new Error('Failed to fetch album tracks');
         
         // This API returns a 2-element array: [album_metadata, { items: [tracks] }]
@@ -6482,7 +6482,7 @@ async function saveArtistContent(albums, artistName) {
     Gurasuraisu.showPopup(`Saving all albums by: ${artistName}...`);
     for (const album of albums) {
         try {
-            const response = await fetch(`https://tidal.401658.xyz/album/?id=${album.id}`);
+            const response = await fetch(`https://hifi.401658.xyz/album/?id=${album.id}`);
             if (response.ok) {
                 const data = await response.json();
                 const tracks = data[1].items.map(t => t.item);
@@ -6538,7 +6538,7 @@ async function processAndCacheAudio(songObject) {
         let concatenatedBlob = null;
 
         for (const quality of qualityLevelsToTry) {
-            const manifestUrl = `https://tidal.401658.xyz/dash/?id=${songObject.id}&quality=${quality}`;
+            const manifestUrl = `https://hifi.401658.xyz/dash/?id=${songObject.id}&quality=${quality}`;
             try {
                 const response = await fetch(manifestUrl);
                 if (response.ok) {
@@ -6874,7 +6874,7 @@ async function removeFolder(folderName) {
         async function fetchLyricsFromHifi(song) {
             if (!song || !song.id) return null;
             try {
-                const url = `https://tidal.401658.xyz/lyrics/?id=${song.id}`;
+                const url = `https://hifi.401658.xyz/lyrics/?id=${song.id}`;
                 const response = await fetch(url);
                 if (!response.ok) {
                     console.warn(`Hifi Lyrics request failed with status: ${response.status}`);
