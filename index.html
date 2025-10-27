@@ -11,6 +11,19 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="https://polygol.github.io/assets/gurapp/api/gurasuraisu-api.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/streams/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registered:', registration);
+                    })
+                    .catch(error => {
+                        console.log('ServiceWorker registration failed:', error);
+                    });
+            });
+        }
+    </script>
     <style>
         :root {
             --edge-refraction-filter: url('#edge-refraction-only');
