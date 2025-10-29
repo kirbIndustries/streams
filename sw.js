@@ -1,7 +1,7 @@
 const CACHE_NAME = 'streams-cache-v1.0';
 
 const ASSETS_TO_CACHE = [
-  '/streams/index.html'
+  '/streams/index.html',
   '/streams/favicon.png'
 ];
 
