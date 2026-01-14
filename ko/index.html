@@ -3640,6 +3640,71 @@ function setupDrawerInteractions() {
     document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
 }
 
+function setupPlayerGestures() {
+    const albumArt = document.querySelector('.album-art');
+    const playerView = document.getElementById('now-playing-view');
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let artLongPressTimer;
+    const SWIPE_THRESHOLD = 50;
+
+    // Long Press on Album Art to Play/Pause
+    if (albumArt) {
+        albumArt.addEventListener('touchstart', (e) => {
+            artLongPressTimer = setTimeout(() => {
+                if (navigator.vibrate) navigator.vibrate(50);
+                
+                // Visual feedback
+                albumArt.style.transform = 'scale(0.90)';
+                
+                // Toggle Playback
+                playPauseBtn.click();
+                
+                setTimeout(() => { albumArt.style.transform = ''; }, 200);
+            }, 500); // 500ms threshold for long press
+        }, { passive: true });
+
+        const cancelLongPress = () => { clearTimeout(artLongPressTimer); };
+
+        albumArt.addEventListener('touchend', cancelLongPress);
+        albumArt.addEventListener('touchmove', cancelLongPress);
+        albumArt.addEventListener('touchcancel', cancelLongPress);
+    }
+
+    // Swipe Left/Right on Player Area
+    if (playerView) {
+        playerView.addEventListener('touchstart', (e) => {
+            // Ignore if interacting with sliders or scrollable panels
+            if (e.target.closest('input[type="range"]') || e.target.closest('#lyrics-queue-panel')) {
+                touchStartX = null;
+                return;
+            }
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        playerView.addEventListener('touchend', (e) => {
+            if (touchStartX === null) return;
+            const touchEndX = e.changedTouches[0].screenX;
+            const touchEndY = e.changedTouches[0].screenY;
+            
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+
+            // Ensure horizontal swipe dominates vertical movement
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD) {
+                if (deltaX < 0) {
+                    // Swipe Left -> Next Track
+                    nextBtn.click();
+                } else {
+                    // Swipe Right -> Previous Track
+                    prevBtn.click();
+                }
+            }
+        }, { passive: true });
+    }
+}
+
 function setupSwipeGestures() {
     // 1. Swipe Up on Miniplayer to Open
     const miniplayer = document.getElementById('bottom-miniplayer');
@@ -11048,6 +11113,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         setupDrawerInteractions();
         setupSwipeGestures();
+        setupPlayerGestures();
 
         // Player Handle Mouse Click Support
         const playerHandle = document.querySelector('.hitpoint-drawer-handle-player');
