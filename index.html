@@ -3033,16 +3033,16 @@
 
             switch(type) {
                 case 'selection':
-                    navigator.vibrate(5); // Very crisp tick
+                    navigator.vibrate(1); // Very crisp tick
                     break;
                 case 'light':
-                    navigator.vibrate(10); // Standard tap
+                    navigator.vibrate(5); // Standard tap
                     break;
                 case 'medium':
-                    navigator.vibrate(25); // Buttons / Controls
+                    navigator.vibrate(5); // Buttons / Controls
                     break;
                 case 'heavy':
-                    navigator.vibrate(50); // Long press / Drag
+                    navigator.vibrate(10); // Long press / Drag
                     break;
                 case 'success':
                     navigator.vibrate([10, 30, 10]);
