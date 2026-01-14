@@ -10722,20 +10722,35 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (currentSongId && await showConfirmDialog('Delete this song? This is permanent.')) await deleteSong(currentSongId);
             moreOptionsMenu.classList.remove('visible');
         });
-        
+
         document.getElementById('menuFullscreenBtn').addEventListener('click', () => {
             isFullscreen = !isFullscreen; // Toggle the state
         
             // Toggle additional styles based on fullscreen state
             const playerControls = document.querySelector('.player-controls');
             const controlsContainer = document.querySelector('.controls-container');
+            const timeInfo = document.querySelector('.time-info');
+            const progressContainer = document.querySelector('.progress-container');
+            const drawerHandlePlayer = document.querySelector('.drawer-handle-player');
             
             if (playerControls) {
                 playerControls.style.display = isFullscreen ? 'none' : '';
             }
-
+        
             if (controlsContainer) {
                 controlsContainer.style.display = isFullscreen ? 'none' : '';
+            }
+        
+            if (timeInfo) {
+                timeInfo.style.display = isFullscreen ? 'none' : '';
+            }
+        
+            if (progressContainer) {
+                progressContainer.style.marginBottom = isFullscreen ? 'calc(20px + env(safe-area-inset-bottom))' : '';
+            }
+        
+            if (drawerHandlePlayer) {
+                drawerHandlePlayer.style.backgroundColor = isFullscreen ? 'transparent' : ''; 
             }
         });
         
