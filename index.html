@@ -10725,22 +10725,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         document.getElementById('menuFullscreenBtn').addEventListener('click', () => {
             isFullscreen = !isFullscreen; // Toggle the state
-            toolbar.classList.toggle('hidden', isFullscreen); // Update toolbar based on new state
         
             // Toggle additional styles based on fullscreen state
-            const albumArt = document.querySelector('.album-art');
             const playerControls = document.querySelector('.player-controls');
-            
-            if (albumArt) {
-                albumArt.style.setProperty('margin-top', isFullscreen ? '0px' : '', 'important');
-            }
+            const controlsContainer = document.querySelector('.controls-container');
             
             if (playerControls) {
                 playerControls.style.display = isFullscreen ? 'none' : '';
             }
-        
-            if (volumeControl) {
-                volumeControl.style.display = isFullscreen ? 'none' : '';
+
+            if (controlsContainer) {
+                controlsContainer.style.display = isFullscreen ? 'none' : '';
             }
         });
         
