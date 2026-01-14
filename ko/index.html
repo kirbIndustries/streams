@@ -3032,6 +3032,56 @@
         let isFetchingQueue = false; // Lock to prevent overlapping fetches
         let isPlaylistEditMode = false; // Track edit state for playlist drawer
 
+        function triggerHapticFeedback(type) {
+            if (!navigator.vibrate) return;
+
+            switch(type) {
+                case 'selection':
+                    navigator.vibrate(5); // Very crisp tick
+                    break;
+                case 'light':
+                    navigator.vibrate(10); // Standard tap
+                    break;
+                case 'medium':
+                    navigator.vibrate(25); // Buttons / Controls
+                    break;
+                case 'heavy':
+                    navigator.vibrate(50); // Long press / Drag
+                    break;
+                case 'success':
+                    navigator.vibrate([10, 30, 10]);
+                    break;
+                case 'error':
+                    navigator.vibrate([30, 50, 30, 50]);
+                    break;
+            }
+        }
+
+        function setupGlobalHaptics() {
+            document.addEventListener('touchstart', (e) => {
+                const target = e.target.closest('button, a, input, .clickable, .music-item, .item-card, .tab-btn, .filter-btn, .filter-btn-sc, .action-btn, .library-action-btn, .control-btn, .mini-control-btn, .highlight-card, .queue-item, .drawer-handle, .playlist-drag-handle');
+                
+                if (!target) return;
+
+                if (target.classList.contains('control-btn') || 
+                    target.classList.contains('mini-control-btn') || 
+                    target.id === 'playPauseBtn' ||
+                    target.tagName === 'INPUT') {
+                    triggerHapticFeedback('medium');
+                } else if (target.classList.contains('music-item') || 
+                           target.classList.contains('item-card') ||
+                           target.classList.contains('queue-item') ||
+                           target.classList.contains('tab-btn')) {
+                    triggerHapticFeedback('selection');
+                } else if (target.classList.contains('drawer-handle') ||
+                           target.classList.contains('playlist-drag-handle')) {
+                    triggerHapticFeedback('light');
+                } else {
+                    triggerHapticFeedback('light');
+                }
+            }, { passive: true });
+        }
+
         function handleSystemPreferences() {
             // 1. Theme (Light/Dark)
             const updateTheme = () => {
@@ -3652,7 +3702,7 @@ function setupPlayerGestures() {
     if (albumArt) {
         albumArt.addEventListener('touchstart', (e) => {
             artLongPressTimer = setTimeout(() => {
-                if (navigator.vibrate) navigator.vibrate(50);
+                triggerHapticFeedback('heavy');
                 
                 // Visual feedback
                 albumArt.style.transform = 'scale(0.90)';
@@ -6276,7 +6326,7 @@ function makePlaylistItemsDraggable(container, playlistId) {
                 isTouchDragging = true;
                 item.classList.add('dragging');
                 
-                if (navigator.vibrate) navigator.vibrate(50);
+                triggerHapticFeedback('heavy');
 
                 touchGhost = item.cloneNode(true);
                 touchGhost.style.position = 'fixed';
@@ -9934,6 +9984,7 @@ window.addEventListener("load", async () => {
 
         await initDB();
         initModalVariables();
+        setupGlobalHaptics();
 
         if ('showDirectoryPicker' in window) {
             const tx = db.transaction('config', 'readonly');
