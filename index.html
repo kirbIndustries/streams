@@ -9486,7 +9486,31 @@ async function playNextSong({ userInitiated = false, isTransition = false } = {}
     if (currentQueueIndex >= playQueue.length) {
         if (repeatMode === 'all') currentQueueIndex = 0;
         else {
-            resetPlayer();
+            // Queue ended: Go back to start, stop playback, but keep queue
+            if (playQueue.length > 0) {
+                currentQueueIndex = 0;
+                const resetSong = playQueue[0];
+                currentSongId = resetSong.id;
+                currentlyPlayingSong = resetSong;
+                
+                audioPlayer.pause();
+                audioPlayer.currentTime = 0;
+                audioPlayer.removeAttribute('src'); // Unload audio to prevent auto-resume
+                if (hls) { hls.destroy(); hls = null; }
+                
+                updatePlayerUI(resetSong);
+                updateMiniplayerUI(resetSong, 'paused');
+                playPauseIcon.textContent = 'play_arrow';
+                playPauseBtn.classList.remove('playing');
+                
+                // Update system media controls
+                if ('mediaSession' in navigator) {
+                    updateMediaSessionMetadata(resetSong);
+                    updateMediaSessionPlaybackState('paused');
+                }
+            } else {
+                resetPlayer();
+            }
             return;
         }
     }
