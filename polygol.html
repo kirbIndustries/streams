@@ -2471,7 +2471,7 @@
         let radioSeed = null; // { type: 'artist'|'track', query: '...' }
         const GENRES = ["Pop", "Hip-Hop", "R&B", "Electronic", "Rock", "Indie", "K-Pop", "J-Pop", "Classical", "Jazz", "Metal", "Alternative", "Country"];
         let currentEndpointIndex = 0;
-        let hifiApiBaseUrl = "https://tidal.kinoplus.online"; // Default fallback
+        let hifiApiBaseUrl = "https://api.monochrome.tf"; // Default fallback
         const hifiApiEndpoints = [
             "https://arran.monochrome.tf",
             "https://api.monochrome.tf",
@@ -2480,8 +2480,7 @@
             "https://maus.qqdl.site",
             "https://vogel.qqdl.site",
             "https://katze.qqdl.site",
-            "https://hund.qqdl.site",
-            "https://tidal.kinoplus.online"
+            "https://hund.qqdl.site"
         ];
         let sortedApiEndpoints = [...hifiApiEndpoints]; // Default to unsorted list
 
