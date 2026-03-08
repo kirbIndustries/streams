@@ -6781,9 +6781,9 @@ function setPlayerLoadingState(isLoading, song = null) {
             // Register session immediately so keys work while loading
             let artworkSrc = song.albumArt;
             // Quick check for high-res URL to use as placeholder
-            if(artworkSrc && artworkSrc.includes('resources.tidal.com')) {
-               artworkSrc = artworkSrc.replace(/\/\d+x\d+\.jpg$/, '/320x320.jpg');
-            }
+            // if(artworkSrc && artworkSrc.includes('resources.tidal.com')) {
+            //    artworkSrc = artworkSrc.replace(/\/\d+x\d+\.jpg$/, '/320x320.jpg');
+            // }
             const fullTitle = song.name + (song.explicit ? ' 🅴' : '');
             Gurasuraisu.registerMediaSession(
                 { title: fullTitle, artist: song.artist, artwork: [{ src: artworkSrc }] },
