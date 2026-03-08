@@ -11126,7 +11126,7 @@ async function loadSongsAndPlaylists() {
                     const items = playlists.map(p => {
                         return { id: `view_pl_${p.id}`, title: p.name, subtitle: `${p.songIds.length} songs` };
                     });
-                    ui.push({ type: 'list', items });
+                    ui.push({ type: 'list', id: 'lib_pl_list', items });
                 }
                 else if (this.currentView === 'library_playlist_view') {
                     const playlist = playlists.find(p => p.id === this.activePlaylistId);
@@ -11140,7 +11140,7 @@ async function loadSongsAndPlaylists() {
                                 { id: 'q_last', label: 'Add to Queue', icon: 'playlist_add' }
                             ]
                         }));
-                        ui.push({ type: 'list', items });
+                        ui.push({ type: 'list', id: 'lib_pl_songs_list', items });
                     }
                 }
                 else if (this.currentView === 'library_albums') {
@@ -11157,7 +11157,7 @@ async function loadSongsAndPlaylists() {
                             ]
                         };
                     });
-                    ui.push({ type: 'list', items });
+                    ui.push({ type: 'list', id: 'lib_albums_list', items });
     
                     if (albums.length > itemsToShow.length) {
                         ui.push({ type: 'button', id: 'more_library_albums', label: 'Show More', style: 'tonal' });
@@ -11176,7 +11176,7 @@ async function loadSongsAndPlaylists() {
                             { id: 'q_last', label: 'Add to Queue', icon: 'playlist_add' }
                         ]
                     }));
-                    ui.push({ type: 'list', items });
+                    ui.push({ type: 'list', id: 'lib_artists_list', items });
     
                     if (allArtists.length > artistsToShow.length) {
                         ui.push({ type: 'button', id: 'more_library_artists', label: 'Show More', style: 'tonal' });
@@ -11192,7 +11192,7 @@ async function loadSongsAndPlaylists() {
                             { id: 'q_last', label: 'Add to Queue', icon: 'playlist_add' }
                         ]
                     }));
-                    ui.push({ type: 'list', items });
+                    ui.push({ type: 'list', id: 'lib_songs_list', items });
     
                     if (songs.length > songsToShow.length) {
                         ui.push({ type: 'button', id: 'more_library_songs', label: 'Show More', style: 'tonal' });
@@ -11217,7 +11217,7 @@ async function loadSongsAndPlaylists() {
                                 { id: 'q_last', label: 'Add to Queue', icon: 'playlist_add' }
                             ]
                         }));
-                        ui.push({ type: 'list', items });
+                        ui.push({ type: 'list', id: 'lib_search_list', items });
     
                         if (results.length > itemsToShow.length) {
                             ui.push({ type: 'button', id: 'more_library_search', label: 'Show More', style: 'tonal' });
@@ -11250,7 +11250,7 @@ async function loadSongsAndPlaylists() {
                                 ]
                             };
                         });
-                        ui.push({ type: 'list', items });
+                        ui.push({ type: 'list', id: 'tidal_search_list', items });
     
                         if (lasttidalSearchResults.length > itemsToShow.length) {
                              ui.push({ type: 'button', id: 'more_tidal_search', label: 'Show More', style: 'tonal' });
@@ -11262,6 +11262,7 @@ async function loadSongsAndPlaylists() {
             },
             
             handleAction: function(id, value) {
+                if (!id || typeof id !== 'string') return;
                 if (id.startsWith('nav_')) {
                     const oldViewFamily = this.currentView.split('_')[0];
                     let newView = id.replace('nav_', '');
@@ -11298,7 +11299,17 @@ async function loadSongsAndPlaylists() {
                     const itemId = value.itemId;
                     if (action === 'q_next' || action === 'q_last') {
                         const pos = action === 'q_next' ? 'next' : 'last';
-                        if (itemId.startsWith('play_song_')) {
+                        // Clean ID if it comes through with a prefix from a context menu action
+                        const cleanId = itemId.replace('play_song_', '').replace('play_tidal_', '').replace('play_pl_song_', '');
+
+                        if (itemId.includes('tidal')) {
+                            const filter = this.tidalFilter || 'tracks';
+                            const typeMap = { 'tracks': 'song_tidal', 'albums': 'album_tidal', 'artists': 'artist_tidal', 'playlists': 'playlist_tidal' };
+                            handleContextQueue(typeMap[filter], cleanId, {}, pos);
+                        } else {
+                            handleContextQueue('song_local', parseFloat(cleanId), {}, pos);
+                        }
+                    } else if (action === 'remove' && itemId.startsWith('q_')) {
                             handleContextQueue('song_local', parseFloat(itemId.replace('play_song_', '')), {}, pos);
                         } else if (itemId.startsWith('play_alb_')) {
                             handleContextQueue('album_local', itemId.replace('play_alb_', ''), {}, pos);
