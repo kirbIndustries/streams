@@ -6784,8 +6784,9 @@ function setPlayerLoadingState(isLoading, song = null) {
             if(artworkSrc && artworkSrc.includes('resources.tidal.com')) {
                artworkSrc = artworkSrc.replace(/\/\d+x\d+\.jpg$/, '/320x320.jpg');
             }
+            const fullTitle = song.name + (song.explicit ? ' 🅴' : '');
             Gurasuraisu.registerMediaSession(
-                { title: song.name, artist: song.artist, artwork: [{ src: artworkSrc }] },
+                { title: fullTitle, artist: song.artist, artwork: [{ src: artworkSrc }] },
                 ['playPause', 'next', 'prev']
             );
             
@@ -9993,8 +9994,9 @@ playPauseBtn.addEventListener('click', async () => {
             const song = currentlyPlayingSong;
             if (song) {
                 updateMediaSessionMetadata(song);
+                const fullTitle = song.name + (song.explicit ? ' 🅴' : '');
                 Gurasuraisu.registerMediaSession(
-                    { title: song.name, artist: song.artist, album: song.album, artwork: [{ src: song.albumArt }] },
+                    { title: fullTitle, artist: song.artist, album: song.album, artwork: [{ src: song.albumArt }] },
                     ['playPause', 'next', 'prev']
                 );
             }
