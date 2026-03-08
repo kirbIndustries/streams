@@ -170,65 +170,46 @@
         	--polygol-cursor-visible: var(--polygol-cursor-light) !important;
         }
         
-        @media (prefers-contrast: more) {
-            :root {
-                --background-color-tr: var(--background-color-dark-tr-highcontrast) !important;
-                --background-color-tr-op: var(--background-color-light-tr-highcontrast) !important;
-                --secondary-text-color: var(--secondary-text-color-dark-highcontrast) !important;
-                --accent: var(--accent-dark-highcontrast) !important;
-                --tonal: var(--tonal-dark-highcontrast) !important;
-                --modal-background: var(--modal-background-dark-highcontrast) !important;
-                --modal-transparent: var(--modal-transparent-dark-highcontrast) !important;
-                --search-background: var(--search-background-dark-highcontrast) !important;
-                --search-background-op: var(--search-background-light-highcontrast) !important;
-                --overlay-color: var(--dark-overlay-highcontrast) !important;
-                --overlay-color-op: var(--light-overlay-highcontrast) !important;
-                --transparent-color: var(--dark-transparent-highcontrast) !important;
-                --glass-border: var(--accent-dark-highcontrast) !important;
-            }
-            
-            /* For light theme with high contrast */
-            body.light-theme {
-                --background-color-tr: var(--background-color-light-tr-highcontrast) !important;
-                --background-color-tr-op: var(--background-color-dark-tr-highcontrast) !important;
-                --secondary-text-color: var(--secondary-text-color-light-highcontrast) !important;
-                --accent: var(--accent-light-highcontrast) !important;
-                --tonal: var(--tonal-light-highcontrast) !important;
-                --modal-background: var(--modal-background-light-highcontrast) !important;
-                --modal-transparent: var(--modal-transparent-light-highcontrast) !important;
-                --search-background: var(--search-background-light-highcontrast) !important;
-                --search-background-op: var(--search-background-dark-highcontrast) !important;
-                --overlay-color: var(--light-overlay-highcontrast) !important;
-                --overlay-color-op: var(--dark-overlay-highcontrast) !important;
-                --transparent-color: var(--light-transparent-highcontrast) !important;
-                --glass-border: var(--accent-light-highcontrast) !important;
-            }
-
-            /* Universal backdrop-filter removal for high contrast */
-            * {
-                backdrop-filter: none !important;
-            }
-
-            .tab-btn.active {
-                color: var(--background-color) !important;
-                background: var(--accent) !important;
-                border-radius: 12px;
-                corner-shape: superellipse(1.5);
-            }
-
-            .toolbar .tab-btn.active .material-symbols-rounded {
-                color: var(--background-color) !important;
-            }
+        html.gurasuraisu-high-contrast body:not(.light-theme) {
+            --background-color-tr: var(--background-color-dark-tr-highcontrast) !important;
+            --background-color-tr-op: var(--background-color-light-tr-highcontrast) !important;
+            --secondary-text-color: var(--secondary-text-color-dark-highcontrast) !important;
+            --accent: var(--accent-dark-highcontrast) !important;
+            --tonal: var(--tonal-dark-highcontrast) !important;
+            --modal-background: var(--modal-background-dark-highcontrast) !important;
+            --modal-transparent: var(--modal-transparent-dark-highcontrast) !important;
+            --search-background: var(--search-background-dark-highcontrast) !important;
+            --search-background-op: var(--search-background-light-highcontrast) !important;
+            --overlay-color: var(--dark-overlay-highcontrast) !important;
+            --overlay-color-op: var(--light-overlay-highcontrast) !important;
+            --transparent-color: var(--dark-transparent-highcontrast) !important;
+            --glass-border: var(--accent-dark-highcontrast) !important;
+        }
+        
+        /* For light theme with high contrast */
+        html.gurasuraisu-high-contrast body.light-theme { {
+            --background-color-tr: var(--background-color-light-tr-highcontrast) !important;
+            --background-color-tr-op: var(--background-color-dark-tr-highcontrast) !important;
+            --secondary-text-color: var(--secondary-text-color-light-highcontrast) !important;
+            --accent: var(--accent-light-highcontrast) !important;
+            --tonal: var(--tonal-light-highcontrast) !important;
+            --modal-background: var(--modal-background-light-highcontrast) !important;
+            --modal-transparent: var(--modal-transparent-light-highcontrast) !important;
+            --search-background: var(--search-background-light-highcontrast) !important;
+            --search-background-op: var(--search-background-dark-highcontrast) !important;
+            --overlay-color: var(--light-overlay-highcontrast) !important;
+            --overlay-color-op: var(--dark-overlay-highcontrast) !important;
+            --transparent-color: var(--light-transparent-highcontrast) !important;
+            --glass-border: var(--accent-light-highcontrast) !important;
         }
 
-        /* When animations are disabled */
-        .reduce-animations * {
-            /* Disable all animations */
-            animation: none !important;
-        
-            /* Disable all transitions except opacity */
-            transition: opacity 0.3s ease !important;
-            transition-property: opacity !important;
+        .tab-btn.active {
+            color: var(--background-color) !important;
+            background: var(--accent) !important;
+        }
+
+        .toolbar .tab-btn.active .material-symbols-rounded {
+            color: var(--background-color) !important;
         }
         
         /* Special handling for clickable elements */
@@ -1287,7 +1268,7 @@
             pointer-events: none;
         }
 
-        html.high-contrast #distortion-container {
+        html.gurasuraisu-high-contrast #distortion-container {
             display: none !important; /* Do NOT display for high contrast */
         }
 
@@ -2856,46 +2837,6 @@
                     break;
             }
         }
-
-        function handleSystemPreferences() {
-            // 1. Theme (Light/Dark)
-            const updateTheme = () => {
-                const storedTheme = localStorage.getItem('theme');
-                const systemLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-                const isLight = storedTheme === 'light' || (!storedTheme && systemLight);
-                
-                if (isLight) {
-                    document.body.classList.add('light-theme');
-                    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#ffffff');
-                } else {
-                    document.body.classList.remove('light-theme');
-                    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#000000');
-                }
-            };
-            updateTheme();
-            window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', updateTheme);
-
-            // 2. Reduced Motion
-            const updateMotion = () => {
-                const shouldReduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-                if (shouldReduce) document.body.classList.add('reduce-animations');
-                else document.body.classList.remove('reduce-animations');
-            };
-            updateMotion();
-            window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', updateMotion);
-
-            // 3. High Contrast
-            const updateContrast = () => {
-                const highContrast = window.matchMedia('(prefers-contrast: more)').matches;
-                if (highContrast) document.documentElement.classList.add('high-contrast');
-                else document.documentElement.classList.remove('high-contrast');
-            };
-            updateContrast();
-            window.matchMedia('(prefers-contrast: more)').addEventListener('change', updateContrast);
-        }
-        
-        // Initialize immediately
-        handleSystemPreferences();
         
         async function requestQueueReplaceConfirmation() {
             if (playQueue.length > 0 && isQueueUserModified) {
@@ -11175,8 +11116,8 @@ async function loadSongsAndPlaylists() {
                     ui.push({ type: 'list', items:[
                         { id: 'view_albums', title: 'Albums', subtitle: 'Browse your library by album', image: '' },
                         { id: 'view_artists', title: 'Artists', subtitle: 'Browse your library by artist', image: '' },
-                        { id: 'view_songs', title: 'All Songs', subtitle: 'View all tracks', image: '' },
-                        { id: 'view_playlists', title: 'Playlists', subtitle: 'Your custom playlists', image: '' }
+                        { id: 'view_songs', title: 'Songs', subtitle: 'View all tracks', image: '' },
+                        { id: 'view_playlists', title: 'Playlists', subtitle: 'Your library playlists', image: '' }
                     ]});
                 }
                 else if (this.currentView === 'library_playlists') {
@@ -11204,7 +11145,16 @@ async function loadSongsAndPlaylists() {
                     const albums = groupSongsByAlbum(songs);
                     const offset = this.listOffsets.library_albums || 0;
                     const itemsToShow = albums.slice(0, offset + 20);
-                    const items = itemsToShow.map(a => ({ id: `play_alb_${a.originalAlbumArtist}::${a.originalAlbum}`, title: a.name, subtitle: a.artist, image: a.albumArt }));
+                    const items = itemsToShow.map(a => {
+                        const aid = `${a.originalAlbumArtist}::${a.originalAlbum}`;
+                        return { 
+                            id: `play_alb_${aid}`, title: a.name, subtitle: a.artist, image: a.albumArt,
+                            contextMenu: [
+                                { id: 'q_next', label: 'Play Next', icon: 'playlist_play' },
+                                { id: 'q_last', label: 'Add to Queue', icon: 'playlist_add' }
+                            ]
+                        };
+                    });
                     ui.push({ type: 'list', items });
     
                     if (albums.length > itemsToShow.length) {
@@ -11217,7 +11167,13 @@ async function loadSongsAndPlaylists() {
                     const allArtists = Array.from(artistsMap);
                     const offset = this.listOffsets.library_artists || 0;
                     const artistsToShow = allArtists.slice(0, offset + 20);
-                    const items = artistsToShow.map(([artist, art]) => ({ id: `filter_artist_${artist}`, title: artist, subtitle: 'Artist', image: art }));
+                    const items = artistsToShow.map(([artist, art]) => ({ 
+                        id: `filter_artist_${artist}`, title: artist, subtitle: 'Artist', image: art,
+                        contextMenu: [
+                            { id: 'q_next', label: 'Play Next', icon: 'playlist_play' },
+                            { id: 'q_last', label: 'Add to Queue', icon: 'playlist_add' }
+                        ]
+                    }));
                     ui.push({ type: 'list', items });
     
                     if (allArtists.length > artistsToShow.length) {
@@ -11270,10 +11226,10 @@ async function loadSongsAndPlaylists() {
                     ui.push({ type: 'input', id: 'tidal_input', placeholder: 'Search Discover', value: this.lastSearchQuery });
                     
                     ui.push({ type: 'row', components:[
-                        { type: 'button', id: 'tf_tracks', label: 'Tracks', style: (this.tidalFilter || 'tracks') === 'tracks' ? 'filled' : 'outlined' },
+                        { type: 'button', id: 'tf_tracks', label: 'Songs', style: (this.tidalFilter || 'tracks') === 'tracks' ? 'filled' : 'outlined' },
                         { type: 'button', id: 'tf_albums', label: 'Albums', style: this.tidalFilter === 'albums' ? 'filled' : 'outlined' },
                         { type: 'button', id: 'tf_artists', label: 'Artists', style: this.tidalFilter === 'artists' ? 'filled' : 'outlined' },
-                        { type: 'button', id: 'tf_playlists', label: 'Lists', style: this.tidalFilter === 'playlists' ? 'filled' : 'outlined' }
+                        { type: 'button', id: 'tf_playlists', label: 'Playlists', style: this.tidalFilter === 'playlists' ? 'filled' : 'outlined' }
                     ]});
 
                     ui.push({ type: 'row', components:[{ type: 'button', id: 'tidal_go', label: 'Search', icon: 'search', style: 'filled' }] });
@@ -11341,7 +11297,13 @@ async function loadSongsAndPlaylists() {
                     if (action === 'q_next' || action === 'q_last') {
                         const pos = action === 'q_next' ? 'next' : 'last';
                         if (itemId.startsWith('play_song_')) {
-                            addToQueue(parseFloat(itemId.replace('play_song_', '')), pos);
+                            handleContextQueue('song_local', parseFloat(itemId.replace('play_song_', '')), {}, pos);
+                        } else if (itemId.startsWith('play_alb_')) {
+                            handleContextQueue('album_local', itemId.replace('play_alb_', ''), {}, pos);
+                        } else if (itemId.startsWith('filter_artist_')) {
+                            handleContextQueue('artist_local', null, { name: itemId.replace('filter_artist_', '') }, pos);
+                        } else if (itemId.startsWith('view_pl_')) {
+                            handleContextQueue('playlist_local', parseInt(itemId.replace('view_pl_', '')), {}, pos);
                         } else if (itemId.startsWith('play_tidal_')) {
                             const tidalId = itemId.replace('play_tidal_', '');
                             const filter = this.tidalFilter || 'tracks';
