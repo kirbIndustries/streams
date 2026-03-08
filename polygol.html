@@ -592,6 +592,7 @@
             background: var(--accent);
             color: var(--background-color);
             font-weight: 500;
+            box-shadow: var(--sun-shadow);
         }
         
         .filter-container .filter-btn .material-symbols-rounded, .filter-container .filter-btn-sc .material-symbols-rounded{
@@ -900,6 +901,8 @@
             background: var(--search-background) !important;
             width: 28px !important;
             height: 28px !important;
+            box-shadow: var(--sun-shadow);
+            backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px);
         }
         
         .quality-badge {
@@ -1003,7 +1006,6 @@
             cursor: pointer;
             transition: all 0.25s ease;
             backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px);
-            box-shadow: var(--sun-shadow);
             box-shadow: var(--sun-shadow), 0 0 0 1px var(--glass-border);
             overflow: hidden;
         }
@@ -1076,6 +1078,8 @@
             background: var(--text-color);
             color: var(--background-color);
             border-radius: 50%;
+            box-shadow: var(--sun-shadow);
+            backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px);
         }
 
         .lyrics-button.active .material-symbols-rounded, .queue-button.active .material-symbols-rounded {
@@ -2022,7 +2026,7 @@
             overflow: hidden;
             touch-action: none;
             user-select: none;
-            backdrop-filter: blur(10px);
+            backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px); box-shadow: var(--sun-shadow);
             border-top: 1px solid var(--glass-border);
             border-radius: 50px 50px 0 0;
             corner-shape: superellipse(1.5);
@@ -2101,6 +2105,7 @@
             cursor: pointer;
             transition: all 0.3s cubic-bezier(.3, 1.2, .64, 1);
             backdrop-filter: saturate(0) var(--edge-refraction-filter) saturate(2) blur(2.5px);
+            box-shadow: var(--sun-shadow);
         }
         .highlight-card:active {
             transform: scale(0.96);
@@ -2531,7 +2536,7 @@
 
     <!-- Manage Folders Modal -->
     <div id="manageFoldersModal" class="modal-overlay">
-        <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 450px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 450px; backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px); box-shadow: var(--sun-shadow); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 15px;">Settings</h2>
             <button class="action-btn" id="uploadBtn" style="margin: 0 auto 15px;"><span class="material-symbols-rounded">add</span>Import Media</button>
             <div style="display: flex; flex-direction: column; gap: 15px;">
@@ -2600,7 +2605,7 @@
 
     <!-- Edit Song Modal -->
     <div id="editModal" class="modal-overlay">
-        <div id="editModalContent" style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 400px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+        <div id="editModalContent" style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 400px; backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px); box-shadow: var(--sun-shadow); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Edit Song Info</h2>
             <input type="hidden" id="editSongId">
             <div style="display: flex; flex-direction: column; gap: 15px;">
@@ -2617,7 +2622,7 @@
 
     <!-- Manual Lyrics Search Modal -->
     <div id="manualLyricsSearchModal" class="modal-overlay">
-        <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 450px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 450px; backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px); box-shadow: var(--sun-shadow); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Lyrics Search</h2>
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                 <input type="text" id="manualLyricsSearchInput" placeholder="Artist - Title" class="search-input" style="padding-left: 15px;">
@@ -2634,7 +2639,7 @@
 
     <!-- Sleep Timer Modal -->
     <div id="sleepTimerModal" class="modal-overlay">
-        <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 300px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 300px; backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px); box-shadow: var(--sun-shadow); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Sleep Timer</h2>
             <p style="margin-bottom: 15px; color: var(--secondary-text-color);">Playback will stop after:</p>
             <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -2649,7 +2654,7 @@
 
     <!-- Playlist Modal -->
     <div id="playlistModal" class="modal-overlay">
-         <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 400px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+         <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 400px; backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px); box-shadow: var(--sun-shadow); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Add to playlist</h2>
             <div id="playlistList" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
             <div class="menu-separator"></div>
@@ -2663,7 +2668,7 @@
     
     <!-- Equalizer Modal -->
     <div id="equalizerModal" class="modal-overlay">
-        <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 400px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
+        <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 400px; backdrop-filter: var(--edge-refraction-filter) saturate(2) blur(2.5px); box-shadow: var(--sun-shadow); border: 1px solid var(--glass-border);">
             <h2 style="margin-bottom: 20px;">Equalizer</h2>
             
             <div id="eq-bands-container" style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 25px;">
