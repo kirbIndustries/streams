@@ -11293,41 +11293,44 @@ async function loadSongsAndPlaylists() {
                 }
                 else if (id.startsWith('q_')) playSong(playQueue[parseInt(id.split('_')[1])], null);
                 
-                // Library Browsing Handlers
+                // Context / queue actions from remote UI
                 else if (value && value.type === 'context') {
                     const action = value.actionId;
                     const itemId = value.itemId;
+    
                     if (action === 'q_next' || action === 'q_last') {
                         const pos = action === 'q_next' ? 'next' : 'last';
-                        // Clean ID if it comes through with a prefix from a context menu action
-                        const cleanId = itemId.replace('play_song_', '').replace('play_tidal_', '').replace('play_pl_song_', '');
-
+    
                         if (itemId.includes('tidal')) {
-                            const filter = this.tidalFilter || 'tracks';
-                            const typeMap = { 'tracks': 'song_tidal', 'albums': 'album_tidal', 'artists': 'artist_tidal', 'playlists': 'playlist_tidal' };
-                            handleContextQueue(typeMap[filter], cleanId, {}, pos);
-                        } else {
-                            handleContextQueue('song_local', parseFloat(cleanId), {}, pos);
-                        }
-                    } else if (action === 'remove' && itemId.startsWith('q_')) {
-                            handleContextQueue('song_local', parseFloat(itemId.replace('play_song_', '')), {}, pos);
-                        } else if (itemId.startsWith('play_alb_')) {
-                            handleContextQueue('album_local', itemId.replace('play_alb_', ''), {}, pos);
-                        } else if (itemId.startsWith('filter_artist_')) {
-                            handleContextQueue('artist_local', null, { name: itemId.replace('filter_artist_', '') }, pos);
-                        } else if (itemId.startsWith('view_pl_')) {
-                            handleContextQueue('playlist_local', parseInt(itemId.replace('view_pl_', '')), {}, pos);
-                        } else if (itemId.startsWith('play_tidal_')) {
                             const tidalId = itemId.replace('play_tidal_', '');
                             const filter = this.tidalFilter || 'tracks';
+    
                             if (filter === 'tracks') {
                                 addTidalTrackToQueue(tidalId, pos);
                             } else {
-                                const typeMap = { 'albums': 'album_tidal', 'artists': 'artist_tidal', 'playlists': 'playlist_tidal' };
+                                const typeMap = {
+                                    tracks: 'song_tidal',
+                                    albums: 'album_tidal',
+                                    artists: 'artist_tidal',
+                                    playlists: 'playlist_tidal'
+                                };
                                 handleContextQueue(typeMap[filter], tidalId, {}, pos);
                             }
+                        } else if (itemId.startsWith('play_song_')) {
+                            const songId = parseFloat(itemId.replace('play_song_', ''));
+                            handleContextQueue('song_local', songId, {}, pos);
+                        } else if (itemId.startsWith('play_alb_')) {
+                            const albumId = itemId.replace('play_alb_', '');
+                            handleContextQueue('album_local', albumId, {}, pos);
+                        } else if (itemId.startsWith('filter_artist_')) {
+                            const artistName = itemId.replace('filter_artist_', '');
+                            handleContextQueue('artist_local', null, { name: artistName }, pos);
+                        } else if (itemId.startsWith('view_pl_')) {
+                            const playlistId = parseInt(itemId.replace('view_pl_', ''));
+                            handleContextQueue('playlist_local', playlistId, {}, pos);
                         } else if (itemId.startsWith('play_pl_song_')) {
-                            addToQueue(parseFloat(itemId.replace('play_pl_song_', '')), pos);
+                            const plSongId = parseFloat(itemId.replace('play_pl_song_', ''));
+                            addToQueue(plSongId, pos);
                         }
                     } else if (action === 'remove' && itemId.startsWith('q_')) {
                         const idx = parseInt(itemId.replace('q_', ''));
@@ -11338,16 +11341,20 @@ async function loadSongsAndPlaylists() {
                                 let nextIndex = idx >= playQueue.length ? 0 : idx;
                                 currentQueueIndex = nextIndex - 1;
                                 playNextSong();
-                            } else resetPlayer();
+                            } else {
+                                resetPlayer();
+                            }
                         } else {
                             playQueue.splice(idx, 1);
                             if (idx < currentQueueIndex) currentQueueIndex--;
                         }
                         if (isPanelVisible && panelContent === 'queue') renderQueue();
                     }
+    
                     this.render();
                     return; // Prevent fallthrough
                 }
+                
                 else if (value && value.type === 'reorder') {
                     if (id === 'queue_list') {
                         isQueueUserModified = true;
