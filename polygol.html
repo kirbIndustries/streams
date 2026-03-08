@@ -10008,6 +10008,7 @@ audioPlayer.addEventListener('timeupdate', async () => {
             await logSongPlay(song.id);
         }
 
+        if (audioPlayer.duration) Gurasuraisu.updateMediaProgress({ currentTime: audioPlayer.currentTime, duration: audioPlayer.duration });
         if ('mediaSession' in navigator) updateMediaSessionPositionState();
         if (crossfadeEnabled && audioPlayer.duration > 0 && audioPlayer.duration - audioPlayer.currentTime < 3 && !audioPlayer.isFading) {
              audioPlayer.isFading = true;
