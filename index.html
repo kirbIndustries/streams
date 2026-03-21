@@ -10413,7 +10413,7 @@ audioPlayer.addEventListener('ended', () => {
 });
 
 window.addEventListener('GurasuraisuVolumeChange', (e) => {
-    audioPlayer.volume = e.detail.level / 100;
+    audioPlayer.volume = e.detail.muted ? 0 : e.detail.level;
 });
 
 audioPlayer.addEventListener('durationchange', updateMediaSessionPositionState);
