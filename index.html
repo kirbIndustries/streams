@@ -10412,10 +10412,6 @@ audioPlayer.addEventListener('ended', () => {
     playNextSong(); 
 });
 
-window.addEventListener('GurasuraisuVolumeChange', (e) => {
-    audioPlayer.volume = e.detail.muted ? 0 : e.detail.level;
-});
-
 audioPlayer.addEventListener('durationchange', updateMediaSessionPositionState);
 audioPlayer.addEventListener('loadedmetadata', updateMediaSessionPositionState);
 
