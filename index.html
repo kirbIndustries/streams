@@ -3178,21 +3178,18 @@
         let currentEndpointIndex = 0;
         let hifiApiBaseUrl = "https://api.monochrome.tf"; // Default fallback
         const hifiApiEndpoints = [
-            "https://ohio-1.monochrome.tf",
-            "https://singapore-1.monochrome.tf",
-            "https://frankfurt-1.monochrome.tf",
             "https://eu-central.monochrome.tf",
             "https://us-west.monochrome.tf",
-            "https://hifi.geeked.wtf",
-            "https://hifi-one.spotisaver.net",
-            "https://api.monochrome.tf",
             "https://monochrome-api.samidy.com",
             "https://tidal.kinoplus.online",
-            "https://ohio-1.monochrome.tf",
-            "https://singapore-1.monochrome.tf",
-            "https://frankfurt-1.monochrome.tf",
-            "https://hifi.geeked.wtf",
-            "https://hifi-one.spotisaver.net"
+            "https://arran.monochrome.tf",
+            "https://triton.squid.wtf",
+            "https://wolf.qqdl.site",
+            "https://maus.qqdl.site",
+            "https://vogel.qqdl.site",
+            "https://katze.qqdl.site",
+            "https://hund.qqdl.site",
+            "https://hifi.p1nkhamster.xyz/"
         ];
         let sortedApiEndpoints = [...hifiApiEndpoints]; // Default to unsorted list
 
@@ -3214,14 +3211,20 @@
 
             const results = await Promise.all(promises);
             
-            // Sort by latency (lowest first)
-            const validResults = results.filter(r => r.latency !== Infinity).sort((a, b) => a.latency - b.latency);
+            // Sort by latency (lowest first). Keep ALL endpoints so we can failover.
+            sortedApiEndpoints = results.sort((a, b) => {
+                if (a.latency === Infinity && b.latency === Infinity) return 0;
+                if (a.latency === Infinity) return 1;
+                if (b.latency === Infinity) return -1;
+                return a.latency - b.latency;
+            }).map(r => r.endpoint);
             
-            if (validResults.length > 0) {
-                console.log(`Fastest Hi-Fi endpoint: ${validResults[0].endpoint} (${validResults[0].latency.toFixed(2)}ms)`);
-                sortedApiEndpoints = validResults.map(r => r.endpoint);
-                hifiApiBaseUrl = sortedApiEndpoints[0];
-                currentEndpointIndex = 0;
+            hifiApiBaseUrl = sortedApiEndpoints[0];
+            currentEndpointIndex = 0;
+            
+            const fastest = results.find(r => r.latency !== Infinity);
+            if (fastest) {
+                console.log(`Fastest Hi-Fi endpoint: ${fastest.endpoint} (${fastest.latency.toFixed(2)}ms)`);
             } else {
                 console.warn("No responsive Hi-Fi endpoints found, using default order.");
             }
@@ -3233,9 +3236,23 @@
                 const url = `${hifiApiBaseUrl}${path}`;
                 const response = await fetch(url, options);
                 
-                // If 5xx Server Error or 429 Too Many Requests, throw to trigger failover
-                if (!response.ok && (response.status >= 500 || response.status === 429)) {
+                // If the response is not OK (any error), throw to trigger failover across all endpoints
+                if (!response.ok) {
                     throw new Error(`API Error ${response.status}`);
+                }
+                
+                // If song duration is 30 seconds or less, assume it is an error and try to refetch it.
+                if (path.includes('/info/')) {
+                    const clone = response.clone();
+                    try {
+                        const data = await clone.json();
+                        const duration = data?.data?.duration || data?.duration;
+                        if (duration !== undefined && duration <= 30) {
+                            throw new Error(`Track duration is ${duration}s (<=30s). Assuming preview/error.`);
+                        }
+                    } catch (e) {
+                        if (e.message.includes('duration is')) throw e; 
+                    }
                 }
                 
                 return response;
@@ -3246,7 +3263,7 @@
                 // If we haven't tried all servers yet, switch and retry
                 if (retries < sortedApiEndpoints.length - 1) {
                     currentEndpointIndex = (currentEndpointIndex + 1) % sortedApiEndpoints.length;
-                    hifiApiBaseUrl = sortedApiEndpoints[currentEndpointIndex];
+                    hifiApiBaseUrl = sortedApiEndpoints[currentEndpointIndex]; // <--- Set as new default until broken
                     console.warn(`API Error (${err.message}). Switching to: ${hifiApiBaseUrl}`);
                     
                     return fetchHifi(path, options, retries + 1);
@@ -3911,27 +3928,58 @@ async function appendRadioTracks() {
     toggleQueueLoading(true);
 
     const query = radioSeed.query;
+    const type = radioSeed.type || 'artist';
     
-    // 1. Randomness: Use a large offset, but fetch MORE items (limit 100) to get a better shuffle pool
-    let offset = Math.floor(Math.random() * 500); 
-    let searchPath = `/search/?s=${encodeURIComponent(query)}&limit=100&offset=${offset}`;
-
     try {
-        let res = await fetchHifi(searchPath);
-        let data = await res.json();
-        let rawItems = (data.data || data).items || [];
+        let rawItems =[];
 
-        // FALLBACK: If random offset was too deep (no results), try offset 0 once
-        if (rawItems.length === 0 && offset > 0) {
-            console.log("Radio seed offset too deep, retrying at 0...");
-            searchPath = `/search/?s=${encodeURIComponent(query)}&limit=100&offset=0`;
-            res = await fetchHifi(searchPath);
-            data = await res.json();
-            rawItems = (data.data || data).items || [];
+        if (type === 'artist') {
+            const searchRes = await fetchHifi(`/search/?a=${encodeURIComponent(query)}&limit=1`);
+            const searchData = await searchRes.json();
+            const artistData = searchData.data?.artists?.items?.[0] || searchData.artists?.items?.[0];
+            
+            if (artistData) {
+                if (artistData.mixes && artistData.mixes.ARTIST_MIX) {
+                    const mixRes = await fetchHifi(`/mix/?id=${artistData.mixes.ARTIST_MIX}`);
+                    const mixData = await mixRes.json();
+                    rawItems = mixData.items ||[];
+                } else {
+                    const artistRes = await fetchHifi(`/artist/?f=${artistData.id}`);
+                    const artistFullData = await artistRes.json();
+                    rawItems = (artistFullData.data || artistFullData).tracks ||[];
+                }
+            }
+        } else if (type === 'track' || type === 'query') {
+            const searchRes = await fetchHifi(`/search/?s=${encodeURIComponent(query)}&limit=1`);
+            const searchData = await searchRes.json();
+            const trackData = (searchData.data || searchData).items?.[0];
+            
+            if (trackData) {
+                if (trackData.mixes && trackData.mixes.TRACK_MIX) {
+                    const mixRes = await fetchHifi(`/mix/?id=${trackData.mixes.TRACK_MIX}`);
+                    const mixData = await mixRes.json();
+                    rawItems = mixData.items ||[];
+                } else {
+                    const recRes = await fetchHifi(`/recommendations/?id=${trackData.id}`);
+                    const recData = await recRes.json();
+                    rawItems = ((recData.data || recData).items ||[]).map(i => i.track).filter(Boolean);
+                }
+            }
+        }
+
+        if (rawItems.length === 0) {
+            let offset = Math.floor(Math.random() * 100); 
+            let fallbackRes = await fetchHifi(`/search/?s=${encodeURIComponent(query)}&limit=100&offset=${offset}`);
+            let fallbackData = await fallbackRes.json();
+            rawItems = (fallbackData.data || fallbackData).items ||[];
+            
+            if (rawItems.length === 0 && offset > 0) {
+                fallbackRes = await fetchHifi(`/search/?s=${encodeURIComponent(query)}&limit=100&offset=0`);
+                fallbackData = await fallbackRes.json();
+                rawItems = (fallbackData.data || fallbackData).items ||[];
+            }
         }
         
-        // If STILL no items, we simply return. 
-        // We do NOT switch to random genres or "mixes" as requested.
         if (rawItems.length === 0) {
             console.log("No tracks found for Radio seed.");
             isFetchingQueue = false;
@@ -3940,14 +3988,14 @@ async function appendRadioTracks() {
         }
         
         let mappedTracks = rawItems.map(track => {
-            const safeArtist = (track.artist && track.artist.name) ? track.artist.name : (track.artist || "Unknown Artist");
-            const safeAlbum = (track.album && track.album.title) ? track.album.title : (track.album || "Unknown Album");
-            const safeCover = (track.album && track.album.cover) ? track.album.cover : null;
-            const safeColor = (track.album && track.album.vibrantColor) ? track.album.vibrantColor : null;
+            const safeArtist = track.artist?.name || track.artists?.[0]?.name || track.artist || "Unknown Artist";
+            const safeAlbum = track.album?.title || track.album || "Unknown Album";
+            const safeCover = track.album?.cover || null;
+            const safeColor = track.album?.vibrantColor || null;
 
             return {
                 id: track.id,
-                name: track.title || "Unknown Title",
+                name: track.title || track.name || "Unknown Title",
                 artist: safeArtist,
                 album: safeAlbum,
                 albumArt: getHighResArtwork(safeCover),
@@ -7144,17 +7192,30 @@ async function generateAutoplaySongs() {
     removeAutoplaySongs(); 
 
     const lastSong = playQueue.length > 0 ? playQueue[playQueue.length - 1] : (currentlyPlayingSong || null);
-    if (!lastSong || !lastSong.artist) {
+    if (!lastSong) {
         isFetchingQueue = false;
         toggleQueueLoading(false);
         return;
     }
 
     try {
-        // Fetch 100 items for better variety
-        const response = await fetchHifi(`/search/?s=${encodeURIComponent(lastSong.artist)}&limit=100`);
-        const data = await response.json();
-        const potentialTracks = (data.data || data).items || [];
+        let potentialTracks =[];
+
+        if (lastSong.storage === 'tidal' && lastSong.id) {
+            try {
+                const recRes = await fetchHifi(`/recommendations/?id=${lastSong.id}`);
+                const recData = await recRes.json();
+                potentialTracks = ((recData.data || recData).items ||[]).map(i => i.track).filter(Boolean);
+            } catch (e) {
+                console.warn("Recommendations failed, falling back", e);
+            }
+        }
+
+        if (potentialTracks.length === 0 && lastSong.artist) {
+            const response = await fetchHifi(`/search/?s=${encodeURIComponent(lastSong.artist)}&limit=100`);
+            const data = await response.json();
+            potentialTracks = (data.data || data).items ||[];
+        }
         
         // Immediate Shuffle
         shuffleArray(potentialTracks);
@@ -7164,9 +7225,9 @@ async function generateAutoplaySongs() {
         // Map first to get clean objects
         let mappedCandidates = potentialTracks.map(track => ({
             id: track.id,
-            name: track.title,
-            artist: (track.artist && track.artist.name) ? track.artist.name : track.artist,
-            album: (track.album && track.album.title) ? track.album.title : track.album,
+            name: track.title || track.name || "Unknown Title",
+            artist: track.artist?.name || track.artists?.[0]?.name || track.artist || "Unknown Artist",
+            album: track.album?.title || track.album || "Unknown Album",
             albumArt: getHighResArtwork(track.album ? track.album.cover : null),
             storage: 'tidal',
             duration: track.duration,
@@ -7234,14 +7295,19 @@ async function generateAiAutoplaySongs() {
         const searchTerms = [...new Set([...contextArtists, ...contextGenres])];
         
         const promises = searchTerms.map(term =>
-            fetch(proxyUrl(`https://api-v2.tidal.com/search/tracks?q=${encodeURIComponent(term)}&client_id=${tidalClientId}&limit=10`))
-                .then(res => res.ok ? res.json() : { collection: [] })
-                .catch(() => ({ collection: [] }))
+            fetchHifi(`/search/?s=${encodeURIComponent(term)}&limit=10`)
+                .then(res => res.ok ? res.json() : null)
+                .catch(() => null)
         );
         const results = await Promise.all(promises);
-        const scTracks = results.flatMap(data => data.collection).map(track => ({
-            id: track.id, name: track.title, artist: track.user.username,
-            album: 'tidal', albumArt: getHighResArtwork(track.artwork_url), storage: 'tidal', genre: track.genre
+        const scTracks = results.filter(Boolean).flatMap(data => (data.data || data).items ||[]).map(track => ({
+            id: track.id, 
+            name: track.title || track.name, 
+            artist: track.artist?.name || track.artists?.[0]?.name || track.artist || "Unknown Artist",
+            album: track.album?.title || track.album || "Unknown Album", 
+            albumArt: getHighResArtwork(track.album?.cover), 
+            storage: 'tidal', 
+            genre: 'Unknown'
         }));
 
         // Add tidal tracks to the library if they aren't duplicates of local songs
@@ -8667,34 +8733,44 @@ async function processAndCacheAudio(songObject, signal = null) {
             }
         }
 
-        // --- Stage 2: If /track failed, attempt to fetch using /dash endpoint (Fallback) ---
+        // --- Stage 2: If /track failed, attempt to fetch using /trackManifests endpoint (Fallback) ---
         if (!concatenatedBlob) {
-            console.log(`All /track attempts failed. Trying /dash endpoint...`);
+            console.log(`All /track attempts failed. Trying /trackManifests endpoint...`);
             for (const quality of qualityLevelsToTry) {
                 if (concatenatedBlob) break;
                 
                 try {
-                    const response = await fetchHifi(`/dash/?id=${songObject.id}&quality=${quality}`, { signal });
+                    const formats = quality === 'LOW' ? 'HEAACV1' : quality === 'HIGH' ? 'AACLC' : quality === 'LOSSLESS' ? 'FLAC' : 'FLAC_HIRES';
+                    const response = await fetchHifi(`/trackManifests/?id=${songObject.id}&manifestType=MPEG_DASH&formats=${formats}`, { signal });
                     if (!response.ok) continue;
 
-                    const text = await response.text();
+                    const json = await response.json();
+                    const uri = json.data?.data?.attributes?.uri;
+                    if (!uri) continue;
+
+                    console.log(`Found XML manifest URI via /trackManifests for quality: ${quality}`);
+                    const mpdRes = await fetch(uri, { signal });
+                    const text = await mpdRes.text();
                     
                     if (text && text.trim().startsWith('<?xml')) {
-                        console.log(`Found XML manifest via /dash for quality: ${quality}`);
                         const parser = new DOMParser();
                         const xmlDoc = parser.parseFromString(text, "application/xml");
                         const representation = xmlDoc.querySelector("Representation");
+                        if (!representation) continue;
+                        
                         const segmentTemplate = representation.querySelector("SegmentTemplate");
+                        if (!segmentTemplate) continue;
+                        
                         const initUrl = segmentTemplate.getAttribute("initialization");
                         const mediaUrlTemplate = segmentTemplate.getAttribute("media");
                         const segmentTimeline = segmentTemplate.querySelector("SegmentTimeline");
                         const sElements = segmentTimeline.querySelectorAll("S");
-                        const segments = [];
+                        const segments =[];
                         sElements.forEach(s => {
                             const r = parseInt(s.getAttribute("r") || "0");
                             for (let i = 0; i <= r; i++) segments.push(1);
                         });
-                        const segmentUrls = [];
+                        const segmentUrls =[];
                         for (let i = 0; i < segments.length; i++) {
                             segmentUrls.push(mediaUrlTemplate.replace('$Number$', i + 1));
                         }
@@ -8705,25 +8781,10 @@ async function processAndCacheAudio(songObject, signal = null) {
                         );
                         concatenatedBlob = new Blob([initSegmentBlob, ...mediaSegmentBlobs], { type: 'audio/mp4' });
                         finalQuality = quality;
-
-                    } else {
-                        try {
-                            const directUrlData = JSON.parse(text);
-                            if (directUrlData && directUrlData.urls && directUrlData.urls.length > 0) {
-                                console.log(`Found direct URL via /dash for quality: ${quality}`);
-                                const audioResponse = await fetch(directUrlData.urls[0], { signal });
-                                if (audioResponse.ok) {
-                                    concatenatedBlob = await audioResponse.blob();
-                                    finalQuality = quality;
-                                }
-                            }
-                        } catch (e) {
-                           // Silent catch for JSON parse errors on XML data
-                        }
                     }
                 } catch (e) {
                     if (e.name === 'AbortError') throw e;
-                    console.warn(`Request to /dash with quality ${quality} failed:`, e);
+                    console.warn(`Request to /trackManifests with quality ${quality} failed:`, e);
                 }
             }
         }
@@ -8800,38 +8861,17 @@ async function resolveTidalUrl(songObject) {
         } catch(e) { /* continue */ }
     }
 
-    // 2. Fallback to /dash/ endpoint
+    // 2. Fallback to /trackManifests/ endpoint with HLS
     for (const quality of qualityLevelsToTry) {
         try {
-            const response = await fetchHifi(`/dash/?id=${songObject.id}&quality=${quality}`);
+            const formats = quality === 'LOW' ? 'HEAACV1' : quality === 'HIGH' ? 'AACLC' : quality === 'LOSSLESS' ? 'FLAC' : 'FLAC_HIRES';
+            const response = await fetchHifi(`/trackManifests/?id=${songObject.id}&manifestType=HLS&formats=${formats}`);
             if (!response.ok) continue;
 
-            const text = await response.text();
-            if (text && text.trim().startsWith('<?xml')) {
-                // XML Manifest logic
-                const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(text, "application/xml");
-                const representation = xmlDoc.querySelector("Representation");
-                const segmentTemplate = representation.querySelector("SegmentTemplate");
-                const mediaUrlTemplate = segmentTemplate.getAttribute("media");
-                
-                // Construct a direct URL for the first segment (often works for playback start) 
-                // or just fail over to processAndCacheAudio if DASH is strict.
-                // However, usually DASH requires MediaSource Extensions which don't work well 
-                // in standard Audio tags without HLS.js or Dash.js.
-                // For this specific API, often the XML route implies complex handling.
-                // We will return null here to force the fallback or error, 
-                // BUT many of these endpoints also return JSON on other qualities.
-                
-                // Optimized: If we hit XML, we might be better off skipping "Stream Direct" 
-                // and letting the robust downloader handle it, OR just return null.
-            } else {
-                try {
-                    const json = JSON.parse(text);
-                    if (json && json.urls && json.urls[0]) {
-                        return { url: json.urls[0], quality };
-                    }
-                } catch (e) {}
+            const json = await response.json();
+            const uri = json.data?.data?.attributes?.uri;
+            if (uri) {
+                return { url: uri, quality };
             }
         } catch (e) {}
     }
@@ -8892,6 +8932,11 @@ async function playtidalTrack(trackId, playContext = null) {
                           currentDrawerContext.find(t => t.id === numericTrackId) ||
                           browseContext.find(t => t.id === numericTrackId) || // Check browse context
                           playQueue.find(t => t.id === numericTrackId);
+
+        // If duration is <= 30, discard cached context so we fetch /info/ and potentially failover the API
+        if (trackData && trackData.duration <= 30) {
+            trackData = null;
+        }
 
         if (!trackData) {
             try {
@@ -9204,10 +9249,12 @@ async function removeFolder(folderName) {
                     return null;
                 }
                 const data = await response.json();
-                if (!data || data.length === 0 || (!data[0].lyrics && !data[0].subtitles)) {
+                
+                const lyricsData = data.lyrics || (Array.isArray(data) ? data[0] : data);
+                if (!lyricsData || (!lyricsData.lyrics && !lyricsData.subtitles)) {
                     return null;
                 }
-                const lyricsData = data[0];
+                
                 if (lyricsData.subtitles) {
                     return { type: 'lrc', content: lyricsData.subtitles };
                 } else if (lyricsData.lyrics) {
@@ -10460,9 +10507,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     
         document.getElementById('radioSearchInput').addEventListener('change', (e) => {
-            if(e.target.value.trim()) startRadio('query', e.target.value.trim());
+            if(e.target.value.trim()) startRadio('track', e.target.value.trim());
         });
-    
         
         document.getElementById('home-view').addEventListener('click', async (e) => {
             const highlightCard = e.target.closest('.highlight-card[data-id]');
