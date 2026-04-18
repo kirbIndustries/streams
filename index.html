@@ -686,16 +686,6 @@
             top: calc(20px + env(safe-area-inset-top));
         }
 
-        @media (max-width: 470px) {
-            #library-controls {
-                flex-wrap: wrap-reverse;
-            }
-
-            #library-view {
-                padding-top: calc(130px + env(safe-area-inset-top)) !important;
-            }
-        }
-
         @media (max-width: 330px) {
             #tidal-controls {
                 flex-wrap: wrap-reverse;
@@ -742,14 +732,18 @@
         }
 
         .filter-container .filter-btn, .filter-container .filter-btn-sc {
-            padding: 8px 18px;
+            padding: 8px 16px;
             border-radius: 50px;
             text-wrap-mode: nowrap;
         }
 
         .filter-container .filter-btn:active, .filter-container .filter-btn-sc:active {
             transform: scale(1);
-            padding: 8px 20px;
+            background-color: var(--transparent-color);
+        }
+
+        .filter-container .filter-btn.active:active, .filter-container .filter-btn-sc.active:active {
+            transform: scale(1);
             filter: brightness(1.5);
         }
 
@@ -763,10 +757,17 @@
             font-size: 22px;
         }
         
+        .action-btn-icn {
+            background-color: transparent;
+            color: var(--text-color);
+            border: none;
+            border-radius: 50%;
+            padding: 12px;
+        }
+
         .action-btn {
             background-color: var(--search-background);
             color: var(--text-color);
-            border: none;
             border-radius: 50px;
             padding: 12px 18px;
             cursor: pointer;
@@ -1119,9 +1120,9 @@
             background: transparent;
             border: none;
             color: var(--text-color);
-            width: 50px;
-            height: 50px;
-            border-radius: 35px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
             cursor: pointer;
             font-size: 1.2rem;
             transition: all 0.2s;
@@ -1135,16 +1136,25 @@
             background-color: transparent;
             font-size: 1.5rem;
             transition: all 0.3s ease;
-            border-radius: 35px;
+            width: 80px;
+            height: 80px;
             display: flex;
             justify-content: center;
             align-items: center;
             line-height: 0;
         }
-        
-        .control-btn.play-pause.playing {
-            border-radius: 35px;
-            corner-shape: superellipse(1.5);
+
+        .control-btn:active {
+            background-color: var(--transparent-color);
+        }
+
+        .control-btn.play-pause .material-symbols-rounded {
+            transition: scale 0.3s cubic-bezier(.3,1.2,.64,1), opacity 0.3s ease;
+        }
+
+        .control-btn.play-pause:active .material-symbols-rounded {
+            scale: 0;
+            opacity: 0;
         }
         
         .progress-container {
@@ -1510,7 +1520,7 @@
 
         .filter-container {
             display: flex;
-            gap: 0;
+            gap: 4px;
             justify-content: center;
             background: var(--search-background);
             border: 1px solid var(--glass-border);
@@ -2159,43 +2169,6 @@
             z-index: 5;
         }
 
-        /* App Drawer Styles */
-        .drawer {
-            position: fixed;
-            bottom: -100% !important; /* Initially hidden */
-            left: 0;
-            width: 100%;
-            background-color: var(--search-background); 
-            z-index: 1008;
-            overflow: hidden;
-            touch-action: none;
-            user-select: none;
-            backdrop-filter: blur(10px);
-            border-top: 1px solid var(--glass-border);
-            border-radius: 50px 50px 0 0;
-            corner-shape: superellipse(1.5);
-            transform-origin: bottom;
-            will-change: transform, opacity, bottom;
-            transition: all 0.3s cubic-bezier(.3,1.2,.64,1);
-            max-height: calc(100% - 80px);
-        }
-
-        .drawer.open {
-            bottom: 0 !important;
-        }
-
-        .drawer-handle {
-            width: 50px;
-            height: 5px;
-            background-color: var(--secondary-text-color);
-            border-radius: 3px;
-            position: absolute;
-            top: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            cursor: grab;
-        }
-
         .hitpoint-drawer-handle-player {
             padding: 10px;
             position: absolute;
@@ -2212,24 +2185,6 @@
             background-color: var(--overlay-color-op);
             border-radius: 3px;
         }
-
-        .drawer-content {
-            max-height: calc(100vh - 150px);
-            overflow-y: auto;
-            user-select: none;
-            padding: 20px 20px 0 20px;
-        }
-        
-        .drawer-content::-webkit-scrollbar { width: 4px; }
-        .drawer-content::-webkit-scrollbar-track { background: transparent; }
-        .drawer-content::-webkit-scrollbar-thumb { background: var(--modal-transparent); border-radius: 4px; }
-        
-        .drawer-header {
-            padding: 40px 20px 10px 20px;
-            text-align: center;
-        }
-        #drawer-title { font-size: 1.5rem; }
-        #drawer-subtitle { color: var(--secondary-text-color); }
 
         .highlight-grid {
             display: grid;
@@ -2411,21 +2366,24 @@
         .toast-message {
             background-color: var(--modal-background);
             color: var(--text-color);
-            padding: 12px 24px;
+            padding: 12px 18px;
             border-radius: 25px;
             corner-shape: superellipse(1.5);
             border: 1px solid var(--glass-border);
             backdrop-filter: blur(10px);
             font-size: 14px;
             opacity: 0;
-            transition: opacity 0.3s, transform 0.3s;
+            transform: scale(0.96);
+            transition: opacity 0.2s, transform 0.2s;
             text-align: left;
             width: fit-content;
         }
 
         .toast-message.show {
             opacity: 1;
+            transform: scale(1);
         }
+        
     </style>
 </head>
 <body data-app-name="STREAMS">
@@ -2518,18 +2476,27 @@
     </div>
     <div id="library-view" class="view-container" style="display: none; padding-top: calc(80px + env(safe-area-inset-top));">
         <div class="page-content-wrapper">
+            <div style="display: flex;justify-content: space-between;margin-bottom: 20px;align-items: center;">
+                <h1 style="">Library</h1>
+                <div style="display: flex;align-items: center;flex-direction: row;gap: 12px;">
+                    <div class="view-controls">
+                        <button id="sortBtn" class="library-action-btn">
+                            <span class="material-symbols-rounded">history</span>
+                            <span id="sort-mode-display"></span>
+                        </button>
+                    </div>
+                    <div class="library-actions">
+                        <button class="library-action-btn" id="settingsBtn"><span class="material-symbols-rounded">more_horiz</span></button>
+                    </div>
+                </div>
+            </div>
+
             <div class="library-controls" id="library-controls">
                 <div class="filter-container">
                     <button class="filter-btn active" data-filter="albums">Albums</button>
                     <button class="filter-btn" data-filter="artists">Artists</button>
                     <button class="filter-btn" data-filter="songs">Songs</button>
                     <button class="filter-btn" data-filter="playlists">Playlists</button>
-                </div>
-                <div class="view-controls">
-                    <button id="sortBtn" class="library-action-btn"><span class="material-symbols-rounded">history</span><span id="sort-mode-display"></span></button>
-                </div>
-                 <div class="library-actions">
-                    <button class="library-action-btn" id="manageFoldersBtn"><span class="material-symbols-rounded">more_horiz</span></button>
                 </div>
             </div>
             <div id="library-grid" class="item-grid" style="padding-bottom: 240px;">
@@ -2630,13 +2597,13 @@
             </div>
             <div class="player-controls">
                 <button class="control-btn" id="prevBtn">
-                    <span class="material-symbols-rounded" style="font-size: 36px;">fast_rewind</span>
+                    <span class="material-symbols-rounded" style="font-size: 40px;">fast_rewind</span>
                 </button>
                 <button class="control-btn play-pause" id="playPauseBtn">
-                    <span class="material-symbols-rounded" id="playPauseIcon" style="font-size: 50px; font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 48;">play_arrow</span>
+                    <span class="material-symbols-rounded" id="playPauseIcon" style="font-size: 54px; font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 48;">play_arrow</span>
                 </button>
                 <button class="control-btn" id="nextBtn">
-                    <span class="material-symbols-rounded" style="font-size: 36px;">fast_forward</span>
+                    <span class="material-symbols-rounded" style="font-size: 40px;">fast_forward</span>
                 </button>
             </div>
             <div class="controls-container">
@@ -2708,75 +2675,6 @@
             <button id="miniplayer-prev-btn" class="mini-control-btn"><span class="material-symbols-rounded">fast_rewind</span></button>
             <button id="miniplayer-play-btn" class="mini-control-btn"><span class="material-symbols-rounded" style="font-size: 32px; font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 48;">play_arrow</span></button>
             <button id="miniplayer-next-btn" class="mini-control-btn"><span class="material-symbols-rounded">fast_forward</span></button>
-        </div>
-    </div>
-
-    <!-- Manage Folders Modal -->
-    <div id="manageFoldersModal" class="modal-overlay">
-        <div style="background: var(--modal-background); padding: 25px; border-radius: 50px; corner-shape: superellipse(1.5); width: 90%; max-width: 450px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border);">
-            <h2 style="margin-bottom: 15px;">Settings</h2>
-            <button class="action-btn" id="uploadBtn" style="margin: 0 auto 15px;"><span class="material-symbols-rounded">add</span>Import Media</button>
-            <div style="display: flex; flex-direction: column; gap: 15px;">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="tidalToggle">Enable Streaming</label>
-                    <input type="checkbox" id="tidalToggle">
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 5px;">
-                    <label for="prefAudioQuality" style="font-size: 14px; color: var(--secondary-text-color);">Streaming Quality</label>
-                    <select id="prefAudioQuality" class="library-search-input" style="padding: 8px 15px;">
-                        <option value="LOSSLESS">Highest</option>
-                        <option value="HIGH">320kbps</option>
-                        <option value="LOW">96kbps</option>
-                    </select>
-                </div>
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="explicitToggle">Hide Explicit Content</label>
-                    <input type="checkbox" id="explicitToggle">
-                </div>
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="smartCacheToggle">Intelligent Cache</label>
-                    <input type="checkbox" id="smartCacheToggle" checked>
-                </div>
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="streamOnlyToggle">Don't save songs to temporary storage</label>
-                    <input type="checkbox" id="streamOnlyToggle">
-                </div>
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="lrclibToggle">Search LRCLIB for lyrics</label>
-                    <input type="checkbox" id="lrclibToggle">
-                </div>
-            </div>
-
-            <div class="menu-separator" style="margin: 15px 0;"></div>
-                
-            <h3 style="font-size: 1rem; margin-bottom: 10px;">Cloud Library</h3>
-            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
-                <input type="text" id="gDriveClientId" placeholder="Paste Google Client ID here" class="library-search-input" style="padding: 8px 15px;">
-                <div style="display: flex; gap: 10px;">
-                    <button id="gDriveLoginBtn" class="filter-btn">
-                        <span class="material-symbols-rounded" style="font-size: 18px; margin-right: 5px;">login</span> Login
-                    </button>
-                    <button id="gDriveSyncBtn" class="filter-btn active" style="flex: 1; display: none;">
-                        <span class="material-symbols-rounded" style="font-size: 18px; margin-right: 5px;">sync</span> Sync Library
-                    </button>
-                </div>
-                <small id="gDriveStatus" style="color: var(--secondary-text-color); font-size: 11px;">Not connected</small>
-            </div>
-                
-            <h3 style="font-size: 1rem; margin-bottom: 10px;">Local Library</h3>
-            <div style="display: flex; gap: 10px;">
-                <button id="exportLibraryBtn" class="filter-btn" style="flex: 1;">
-                    <span class="material-symbols-rounded" style="font-size: 18px; vertical-align: middle; margin-right: 5px;">upload</span> Export
-                </button>
-                <button id="importLibraryBtn" class="filter-btn" style="flex: 1;">
-                    <span class="material-symbols-rounded" style="font-size: 18px; vertical-align: middle; margin-right: 5px;">download</span> Import
-                </button>
-                <input type="file" id="importLibraryInput" accept=".json" style="display: none;">
-            </div>
-
-            <div style="display: flex; justify-content: flex-end; margin-top: 25px; gap: 10px;">
-                <button id="saveIntegrations" class="filter-btn active">Close</button>
-            </div>
         </div>
     </div>
 
@@ -2884,17 +2782,20 @@
         </div>
     </div>
 
-    <div id="drawer" class="drawer">
-        <div class="drawer-handle"></div>
-        <div class="drawer-header">
-            <h2 id="drawer-title"></h2>
-            <p id="drawer-subtitle"></p>
-        </div>
-        <div class="drawer-content" id="drawer-content">
-            <!-- Content will be injected here -->
+    <div id="detail-view" class="view-container" style="display: none; padding-top: calc(12px + env(safe-area-inset-top));">
+        <div class="page-content-wrapper">
+            <div class="detail-header" style="display: flex; align-items: center; margin-bottom: 20px;">
+                <button class="action-btn" id="detail-back-btn" style="padding: 10px;border-radius: 50%;width: 46px;height: 46px;position: fixed;z-index: 10;">
+                    <span class="material-symbols-rounded">arrow_back</span>
+                </button>
+                <div style="flex-grow: 1;min-width: 0;margin-left: 60px;">
+                    <h2 id="detail-title" style="font-size: 1.5rem; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></h2>
+                    <div id="detail-subtitle" style="color: var(--secondary-text-color); font-size: 0.9rem;"></div>
+                </div>
+            </div>
+            <div id="detail-content" style="padding-bottom: 120px;"></div>
         </div>
     </div>
-    <div id="drawer-overlay" class="modal-overlay"></div>
 
     <div id="toast-container"></div>
 
@@ -2937,11 +2838,7 @@
         const miniplayerProgress = document.querySelector('.miniplayer-progress');
         const toolbar = document.querySelector('.toolbar');
         
-        const drawer = document.getElementById('drawer');
-        const drawerContent = document.getElementById('drawer-content');
-        const drawerOverlay = document.getElementById('drawer-overlay');
-        let isDrawerOpen = false;
-        let closeDrawerTimeout = null;
+
         
         let listenAgainIndex = parseInt(localStorage.getItem('listenAgainIndex') || '0');
         let currentMediaSessionArtBlobUrl = null;
@@ -2999,7 +2896,7 @@
         let isVisualizerInitialized = false;
         let source;
         let currentFilter = 'albums'; // 'albums', 'artists', 'songs'
-        let editModal, editSongId, editTitle, editArtist, editAlbum, saveEdit, cancelEdit, equalizerModal, manageFoldersModal;
+        let editModal, editSongId, editTitle, editArtist, editAlbum, saveEdit, cancelEdit, equalizerModal;
         let crossfadeEnabled = false;
         let sleepTimerId = null;
         let eqBass, eqMid, eqTreble; // Add these for the EQ
@@ -3011,6 +2908,7 @@
         let activeAlbum = null; // Will store { artist, name } of the selected album
         let isFetchingQueue = false; // Lock to prevent overlapping fetches
         let isPlaylistEditMode = false; // Track edit state for playlist drawer
+        let isLibraryDirty = true; // Optimization flag for library rendering
 
         function triggerHapticFeedback(type) {
             if (!navigator.vibrate) return;
@@ -3146,7 +3044,9 @@
         let lasttidalSearchResults = []; // To store API results for filtering
         let browseContext = [];
         let currentDrawerContext = []; // To store full objects for drawer context
-        const tidal_CACHE_LIMIT = 200 * 1024 * 1024; // 200MB
+        let detailNavigationStack = []; // Navigation history stack for detail view
+        let currentDetailState = null; // Currently rendered detail state
+        const tidal_CACHE_LIMIT = 1024 * 1024 * 1024; // 1GB
         let prefAudioQuality = 'LOSSLESS';
         let enableSmartCache = true;
         let enableStreamOnly = false;
@@ -3160,12 +3060,8 @@
         let currentEndpointIndex = 0;
         let hifiApiBaseUrl = "https://api.monochrome.tf"; // Default fallback
         const hifiApiEndpoints = [
-            "https://eu-central.monochrome.tf",
-            "https://us-west.monochrome.tf",
             "https://monochrome-api.samidy.com",
-            "https://tidal.kinoplus.online",
-            "https://arran.monochrome.tf",
-            "https://triton.squid.wtf",
+            "https://hifi.geeked.wtf",
             "https://wolf.qqdl.site",
             "https://maus.qqdl.site",
             "https://vogel.qqdl.site",
@@ -3286,18 +3182,29 @@
             return array;
         }
 
-function openDrawer(title, subtitle, contentHtml, context = {}) {
-    clearTimeout(closeDrawerTimeout);
+function openDetailView(title, subtitle, contentHtml, context = {}) {
+    const detailTitleEl = document.getElementById('detail-title');
+    const detailSubtitleEl = document.getElementById('detail-subtitle');
+    const detailContentEl = document.getElementById('detail-content');
+    const detailViewEl = document.getElementById('detail-view');
 
-    const drawerTitleEl = document.getElementById('drawer-title');
-    const drawerSubtitleEl = document.getElementById('drawer-subtitle');
+    // Push the current state to the navigation stack if we are drilling deeper
+    if (activeView === 'detail' && currentDetailState) {
+        currentDetailState.scrollTop = detailViewEl.scrollTop;
+        currentDetailState.drawerContext = [...currentDrawerContext];
+        detailNavigationStack.push(currentDetailState);
+    } else {
+        // Reset stack if we navigated away to a top-level tab
+        detailNavigationStack =[];
+    }
 
-    drawerTitleEl.textContent = sanitize(title);
+    currentDetailState = { title, subtitle, contentHtml, context };
+
+    detailTitleEl.textContent = sanitize(title);
     
-    // Check the context to see if we should add edit buttons
     if (context.type === 'playlist' && context.id) {
-        drawerSubtitleEl.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+        detailSubtitleEl.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px;">
                 <span>${sanitize(subtitle)}</span>
                 <button id="drawer-edit-playlist-btn" data-playlist-id="${context.id}" title="Edit Order" style="background:var(--search-background);border:1px solid var(--glass-border);border-radius:20px;padding:5px 12px;cursor:pointer;color:var(--text-color);display:flex;align-items:center;gap:5px;">
                     Edit
@@ -3311,28 +3218,65 @@ function openDrawer(title, subtitle, contentHtml, context = {}) {
             </div>
         `;
     } else {
-        // Otherwise, just show the normal subtitle
-        drawerSubtitleEl.textContent = sanitize(subtitle);
+        detailSubtitleEl.innerHTML = sanitize(subtitle);
     }
 
-    drawerContent.innerHTML = contentHtml;
-    drawer.classList.add('open');
-    drawerOverlay.classList.add('visible');
-    isDrawerOpen = true;
+    detailContentEl.innerHTML = contentHtml;
+    isPlaylistEditMode = false;
+    setView('detail');
+    detailViewEl.scrollTop = 0;
 }
 
-function closeDrawer() {
-    drawer.classList.remove('open');
-    drawerOverlay.classList.remove('visible');
-    isDrawerOpen = false;
-    // Reset edit mode when closing drawer
-    isPlaylistEditMode = false; 
-    
-    // Clear content after animation
-    closeDrawerTimeout = setTimeout(() => {
-        drawer.style.transform = '';
-        drawerContent.innerHTML = '';
-    }, 400);
+function closeDetailView() {
+    // If we are currently on the Settings page, save before leaving
+    if (currentDetailState && currentDetailState.title === 'Settings') {
+        saveIntegrationSettings();
+    }
+
+    if (detailNavigationStack.length > 0) {
+        // Pop previous state and restore it
+        const prevState = detailNavigationStack.pop();
+        currentDetailState = prevState;
+        currentDrawerContext = prevState.drawerContext ||[];
+        
+        const detailTitleEl = document.getElementById('detail-title');
+        const detailSubtitleEl = document.getElementById('detail-subtitle');
+        const detailContentEl = document.getElementById('detail-content');
+
+        detailTitleEl.textContent = sanitize(prevState.title);
+        
+        if (prevState.subtitleHtml) {
+            detailSubtitleEl.innerHTML = prevState.subtitleHtml;
+        } else if (prevState.context && prevState.context.type === 'playlist' && prevState.context.id) {
+            detailSubtitleEl.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px;">
+                    <span>${sanitize(prevState.subtitle)}</span>
+                    <button id="drawer-edit-playlist-btn" data-playlist-id="${prevState.context.id}" title="Edit Order" style="background:var(--search-background);border:1px solid var(--glass-border);border-radius:20px;padding:5px 12px;cursor:pointer;color:var(--text-color);display:flex;align-items:center;gap:5px;">
+                        Edit
+                    </button>
+                    <button id="drawer-rename-playlist-btn" data-playlist-id="${prevState.context.id}" title="Rename" style="background:none;border:none;cursor:pointer;color:var(--text-color); display:flex;">
+                        <span class="material-symbols-rounded">drive_file_rename_outline</span>
+                    </button>
+                    <button id="drawer-delete-playlist-btn" data-playlist-id="${prevState.context.id}" title="Delete" style="background:none;border:none;cursor:pointer;color:var(--text-color); display:flex;">
+                        <span class="material-symbols-rounded">delete_forever</span>
+                    </button>
+                </div>
+            `;
+        } else {
+            detailSubtitleEl.innerHTML = sanitize(prevState.subtitle);
+        }
+        
+        detailContentEl.innerHTML = prevState.contentHtml;
+        isPlaylistEditMode = false;
+        
+        requestAnimationFrame(() => {
+            document.getElementById('detail-view').scrollTop = prevState.scrollTop || 0;
+        });
+    } else {
+        // Exit entirely to main view
+        currentDetailState = null;
+        setView(lastMainView === 'detail' ? 'library' : lastMainView);
+    }
 }
 
 // --- Google Drive Sync Logic ---
@@ -3375,17 +3319,95 @@ function initGoogleClient(clientId) {
 }
 
 function updateDriveUI(isConnected) {
+    const statusEl = document.getElementById('gDriveStatus');
+    const loginBtn = document.getElementById('gDriveLoginBtn');
+    const syncBtn = document.getElementById('gDriveSyncBtn');
+    const clientIdEl = document.getElementById('gDriveClientId');
+    
+    if (!statusEl || !loginBtn || !syncBtn || !clientIdEl) return;
+
     if (isConnected) {
-        document.getElementById('gDriveStatus').textContent = "Connected. Ready to sync.";
-        document.getElementById('gDriveLoginBtn').style.display = 'none';
-        document.getElementById('gDriveSyncBtn').style.display = 'flex';
-        document.getElementById('gDriveClientId').disabled = true;
+        statusEl.textContent = "Connected. Ready to sync.";
+        loginBtn.style.display = 'none';
+        syncBtn.style.display = 'flex';
+        clientIdEl.disabled = true;
     } else {
-        document.getElementById('gDriveStatus').textContent = "Not connected";
-        document.getElementById('gDriveLoginBtn').style.display = 'flex';
-        document.getElementById('gDriveSyncBtn').style.display = 'none';
-        document.getElementById('gDriveClientId').disabled = false;
+        statusEl.textContent = "Not connected";
+        loginBtn.style.display = 'flex';
+        syncBtn.style.display = 'none';
+        clientIdEl.disabled = false;
     }
+}
+
+function openSettingsView() {
+    const settingsHtml = `
+        <div style="display: flex; flex-direction: column; gap: 25px; padding: 0 10px;">
+            <button class="action-btn" id="uploadBtn" style="margin: 0 auto;"><span class="material-symbols-rounded">add</span>Import Media</button>
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label for="tidalToggle">Enable Streaming</label>
+                    <input type="checkbox" id="tidalToggle" ${istidalEnabled ? 'checked' : ''}>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <label for="prefAudioQuality" style="font-size: 14px; color: var(--secondary-text-color);">Streaming Quality</label>
+                    <select id="prefAudioQuality" class="library-search-input" style="padding: 8px 15px;">
+                        <option value="LOSSLESS" ${prefAudioQuality === 'LOSSLESS' ? 'selected' : ''}>Highest</option>
+                        <option value="HIGH" ${prefAudioQuality === 'HIGH' ? 'selected' : ''}>320kbps</option>
+                        <option value="LOW" ${prefAudioQuality === 'LOW' ? 'selected' : ''}>96kbps</option>
+                    </select>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label for="explicitToggle">Hide Explicit Content</label>
+                    <input type="checkbox" id="explicitToggle" ${hideExplicitContent ? 'checked' : ''}>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label for="smartCacheToggle">Intelligent Cache</label>
+                    <input type="checkbox" id="smartCacheToggle" ${enableSmartCache ? 'checked' : ''}>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label for="streamOnlyToggle">Don't save songs to temporary storage</label>
+                    <input type="checkbox" id="streamOnlyToggle" ${enableStreamOnly ? 'checked' : ''}>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label for="lrclibToggle">Search LRCLIB for lyrics</label>
+                    <input type="checkbox" id="lrclibToggle" ${isLrclibEnabled ? 'checked' : ''}>
+                </div>
+            </div>
+
+            <div class="menu-separator" style="margin: 5px 0;"></div>
+                
+            <h3 style="font-size: 1rem; margin-bottom: -10px;">Cloud Library</h3>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <input type="text" id="gDriveClientId" placeholder="Paste Google Client ID here" class="library-search-input" style="padding: 8px 15px;" value="${localStorage.getItem('gDriveClientId_cache') || ''}">
+                <div style="display: flex; gap: 10px;">
+                    <button id="gDriveLoginBtn" class="filter-btn">
+                        <span class="material-symbols-rounded" style="font-size: 18px; margin-right: 5px;">login</span> Login
+                    </button>
+                    <button id="gDriveSyncBtn" class="filter-btn active" style="flex: 1; display: none;">
+                        <span class="material-symbols-rounded" style="font-size: 18px; margin-right: 5px;">sync</span> Sync Library
+                    </button>
+                </div>
+                <small id="gDriveStatus" style="color: var(--secondary-text-color); font-size: 11px;">Not connected</small>
+            </div>
+                
+            <h3 style="font-size: 1rem; margin-bottom: -10px;">Local Library</h3>
+            <div style="display: flex; gap: 10px;">
+                <button id="exportLibraryBtn" class="filter-btn" style="flex: 1;">
+                    <span class="material-symbols-rounded" style="font-size: 18px; vertical-align: middle; margin-right: 5px;">upload</span> Export
+                </button>
+                <button id="importLibraryBtn" class="filter-btn" style="flex: 1;">
+                    <span class="material-symbols-rounded" style="font-size: 18px; vertical-align: middle; margin-right: 5px;">download</span> Import
+                </button>
+                <input type="file" id="importLibraryInput" accept=".json" style="display: none;">
+            </div>
+        </div>
+    `;
+    openDetailView('Settings', 'Streams Music', settingsHtml);
+    
+    updateDriveUI(!!gAccessToken);
+
+    const importInput = document.getElementById('importLibraryInput');
+    if (importInput) importInput.addEventListener('change', handleImportLibrary);
 }
 
 // Async helper to ensure we have a valid token before syncing
@@ -3415,14 +3437,6 @@ function getValidToken() {
         tokenClient.requestAccessToken({ prompt: '' }); 
     });
 }
-
-document.getElementById('gDriveLoginBtn').addEventListener('click', () => {
-    const clientId = document.getElementById('gDriveClientId').value.trim();
-    if (!clientId) return showToast("Please enter a Google Client ID");
-    
-    initGoogleClient(clientId);
-    tokenClient.requestAccessToken();
-});
 
 async function syncLibraryToDrive(interactive = false) {
     // Auto-sync shouldn't trigger popup if completely logged out, 
@@ -3615,55 +3629,6 @@ function triggerAutoSync() {
     syncDebounceTimer = setTimeout(() => {
         syncLibraryToDrive(false); // Silent sync
     }, 5000); // Wait 5 seconds after last change
-}
-
-function setupDrawerInteractions() {
-    let startY = 0;
-    let currentY = 0;
-    let isDragging = false;
-    const handle = document.querySelector('.drawer-handle');
-    const drawer = document.getElementById('drawer');
-
-    const startDrag = (y) => {
-        if (!isDrawerOpen) return;
-        isDragging = true;
-        startY = y;
-        drawer.style.transition = 'none';
-    };
-
-    const moveDrag = (y) => {
-        if (!isDragging) return;
-        currentY = y;
-        const deltaY = currentY - startY;
-        if (deltaY > 0) { // Only allow dragging down
-            drawer.style.transform = `translateY(${deltaY}px)`;
-        }
-    };
-
-    const endDrag = () => {
-        if (!isDragging) return;
-        isDragging = false;
-        drawer.style.transition = '';
-        drawer.style.transform = ''; // Reset transform to allow CSS transition
-        
-        const deltaY = currentY - startY;
-        if (deltaY > 100) { // Close threshold
-            closeDrawer();
-        } else {
-            drawer.style.bottom = '0';
-        }
-    };
-
-    handle.addEventListener('mousedown', (e) => startDrag(e.clientY));
-    document.addEventListener('mousemove', (e) => moveDrag(e.clientY));
-    document.addEventListener('mouseup', endDrag);
-    document.addEventListener('mouseleave', endDrag);
-
-    handle.addEventListener('touchstart', (e) => startDrag(e.touches[0].clientY), { passive: true });
-    document.addEventListener('touchmove', (e) => moveDrag(e.touches[0].clientY), { passive: true });
-    document.addEventListener('touchend', endDrag);
-
-    document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
 }
 
 function setupPlayerGestures() {
@@ -4194,9 +4159,11 @@ function setView(viewName) {
     }
     
     // Tab State
-    tabBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.view === viewName);
-    });
+    if (viewName !== 'detail') {
+        tabBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.view === viewName);
+        });
+    }
 
     if (isNowPlaying && currentSongId) {
         const song = currentlyPlayingSong; 
@@ -5082,6 +5049,7 @@ async function saveSongs() {
         
         transaction.oncomplete = () => {
             console.log(`Songs saved. Total count: ${songs.length}`);
+            isLibraryDirty = true;
             triggerAutoSync();
             resolve();
         };
@@ -6023,9 +5991,18 @@ function renderLibraryPage() {
     const libraryGrid = document.getElementById('library-grid');
     if (!libraryGrid) return;
 
+    // Only skip rendering if data is clean AND the grid already contains content
+    if (!isLibraryDirty && libraryGrid.children.length > 0) {
+        requestAnimationFrame(() => {
+            libraryView.scrollTop = scrollPositions.library;
+        });
+        return;
+    }
+    isLibraryDirty = false;
+    libraryGrid.innerHTML = ''; // Clear previous filter's content
+
     // --- RENDER MAIN LIBRARY VIEW ---
     const searchFilteredSongs = songs; // No search bar here anymore
-
     if (searchFilteredSongs.length === 0) {
         libraryGrid.innerHTML = `<div class="no-results" style="grid-column: 1 / -1;"><span class="material-symbols-rounded">library_music</span><p>You have nothing owned.</p><p style="font-size: 0.8em; color: var(--secondary-text-color);">Enable Streaming, then open Discover to start saving songs.</p></div>`;
         return;
@@ -6214,10 +6191,10 @@ async function deletePlaylist(playlistId) {
         triggerAutoSync();
 
         // 3. Close the drawer, as its content is now invalid.
-        closeDrawer();
+        closeDetailView();
 
-        // 4. Notify the user and refresh the library view.
         showToast(`Playlist "${playlist.name}" deleted`);
+        isLibraryDirty = true;
         if (activeView === 'library') {
             renderLibraryPage(); 
         }
@@ -6248,25 +6225,13 @@ async function removeSongFromPlaylist(songId, playlistId, event) {
     triggerAutoSync();
     
     if (isPlaylistEditMode) {
-        // In edit mode, remove element directly to keep position context for others
         const item = event.target.closest('.music-item');
-        if(item) item.remove();
-        // Update DB is already done, but if we dragged things around, the DOM order matters.
-        // If we just clicked remove, filtering songIds is fine.
+        if (item) item.remove();
     } else {
-        // In view mode, refresh to keep consistent
-        // If we are in the drawer (normal library usage), we might need to refresh drawer content manually
-        // But since this function is usually called from the drawer context:
-        const drawerContent = document.getElementById('drawer-content');
-        if (drawerContent && document.getElementById('drawer').classList.contains('open')) {
-             // Re-render only if we aren't in edit mode (to avoid resetting scroll/focus)
-             // However, openDrawer call is complex to reconstruct here.
-             // Simplest approach: remove the row from DOM.
-             const item = event.target.closest('.music-item');
-             if(item) item.remove();
-             
-             // If we were viewing the dedicated Playlist View (not drawer), handle that?
-             // Currently playlists are only fully viewable in Drawer.
+        const detailContent = document.getElementById('detail-content');
+        if (detailContent && activeView === 'detail') {
+            const item = event.target.closest('.music-item');
+            if (item) item.remove();
         }
     }
     
@@ -7418,6 +7383,34 @@ function addListToQueue(trackList, position) {
     if (!trackList || trackList.length === 0) return;
     isQueueUserModified = true;
     
+    const queueContainer = lyricsQueuePanel.querySelector('.queue-list-container');
+    if (queueContainer) {
+        const existingItems = queueContainer.querySelectorAll('.queue-item');
+        if (existingItems.length === playQueue.length) {
+            let match = true;
+            for (let i = 0; i < playQueue.length; i++) {
+                if (parseFloat(existingItems[i].dataset.id) !== playQueue[i].id) {
+                    match = false; break;
+                }
+            }
+            if (match) {
+                // Same queue, just update active states efficiently
+                existingItems.forEach((item, index) => {
+                    if (playQueue[index].id === currentSongId) item.classList.add('active');
+                    else item.classList.remove('active');
+                    
+                    // Update indices in case they shifted
+                    item.dataset.queueIndex = index;
+                    const btn = item.querySelector('.remove-from-queue-btn');
+                    if (btn) btn.dataset.queueIndex = index;
+                });
+                // Disable loading if shown
+                toggleQueueLoading(false);
+                return;
+            }
+        }
+    }
+
     if (playQueue.length === 0) {
         playSong(trackList[0], trackList);
         return;
@@ -7617,9 +7610,10 @@ async function playSong(song, playContext = null) {
         }
 
         // --- Local Playback Logic ---
-        let fileUrl = song.blobUrl || song.streamUrl || await getSongFileUrl(song);
+        const isIOSSyncPlaying = isIOS && audioPlayer.src === song.preloadedUrl && !audioPlayer.paused;
+        let fileUrl = song.preloadedUrl || song.blobUrl || song.streamUrl || await getSongFileUrl(song);
         
-        if (!fileUrl) {
+        if (!fileUrl && !isIOSSyncPlaying) {
             if (song.storage !== 'tidal') {
                  fileUrl = await recoverMissingLocalSong(song);
                  if (fileUrl) showToast(`Recovered "${song.name}" from cloud`);
@@ -7655,24 +7649,36 @@ async function playSong(song, playContext = null) {
             connectAudioGraph();
         }
 
-        if (isHlsStream) {
-            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                hls = new Hls();
-                hls.on(Hls.Events.ERROR, function (event, data) {
-                    if (data.fatal) {
-                        console.error('Fatal HLS Error:', data);
-                        isPlayerLoading = false;
-                        playNextSong({ userInitiated: false });
-                    }
-                });
-                hls.loadSource(fileUrl);
-                hls.attachMedia(audioPlayer);
-            } else if (audioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+        if (!isIOSSyncPlaying) {
+            if (isHlsStream) {
+                if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                    hls = new Hls();
+                    hls.on(Hls.Events.ERROR, function (event, data) {
+                        if (data.fatal) {
+                            console.error('Fatal HLS Error:', data);
+                            isPlayerLoading = false;
+                            playNextSong({ userInitiated: false });
+                        }
+                    });
+                    hls.loadSource(fileUrl);
+                    hls.attachMedia(audioPlayer);
+                } else if (audioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                    audioPlayer.src = fileUrl;
+                }
+            } else {
                 audioPlayer.src = fileUrl;
+                audioPlayer.load();
             }
-        } else {
-            audioPlayer.src = fileUrl;
-            audioPlayer.load();
+
+            await new Promise((resolve, reject) => {
+                const playAudio = () => {
+                    audioPlayer.play().then(resolve).catch(e => {
+                        if (e.name === 'AbortError') resolve();
+                        else reject(e);
+                    });
+                };
+                playAudio();
+            });
         }
 
         let base64Artwork = song.albumArt;
@@ -7681,20 +7687,6 @@ async function playSong(song, playContext = null) {
         } catch (e) {
             console.warn("Artwork conversion failed", e);
         }
-
-        await new Promise((resolve, reject) => {
-            const playAudio = () => {
-                audioPlayer.play().then(resolve).catch(e => {
-                    if (e.name === 'AbortError') {
-                        resolve();
-                    } else {
-                        reject(e);
-                    }
-                });
-            };
-            // iOS optimization: trigger play immediately
-            playAudio();
-        });
 
         lastSongStartTime = Date.now();
 
@@ -7875,36 +7867,10 @@ function initModalVariables() {
     document.getElementById('mid-slider').addEventListener('input', (e) => { if(eqMid) eqMid.gain.value = e.target.value; });
     document.getElementById('treble-slider').addEventListener('input', (e) => { if(eqTreble) eqTreble.gain.value = e.target.value; });
     
-    manageFoldersModal = document.getElementById('manageFoldersModal');
     manualLyricsSearchModal = document.getElementById('manualLyricsSearchModal');
     document.getElementById('manualLyricsSearchBtn').addEventListener('click', searchLrclibForManualPick);
     document.getElementById('closeManualLyricsModal').addEventListener('click', () => closeModal(manualLyricsSearchModal));
 }
-
-document.getElementById('gDriveSyncBtn').addEventListener('click', () => syncLibraryToDrive(true));
-
-function openManageFoldersModal() {
-    document.getElementById('tidalToggle').checked = istidalEnabled;
-    document.getElementById('lrclibToggle').checked = isLrclibEnabled;
-    document.getElementById('prefAudioQuality').value = prefAudioQuality;
-    document.getElementById('smartCacheToggle').checked = enableSmartCache;
-    document.getElementById('streamOnlyToggle').checked = enableStreamOnly;
-    document.getElementById('explicitToggle').checked = hideExplicitContent;
-    openModal(manageFoldersModal);
-}
-
-        async function saveIntegrationSettings() {
-            istidalEnabled = document.getElementById('tidalToggle').checked;
-            isLrclibEnabled = document.getElementById('lrclibToggle').checked;
-
-            const tx = db.transaction('config', 'readwrite');
-            await Promise.all([
-                tx.objectStore('config').put({ key: 'istidalEnabled', value: istidalEnabled }),
-                tx.objectStore('config').put({ key: 'isLrclibEnabled', value: isLrclibEnabled })
-            ]);
-            
-            toggletidalTab();
-        }
 
 async function saveIntegrationSettings() {
     istidalEnabled = document.getElementById('tidalToggle').checked;
@@ -7914,6 +7880,9 @@ async function saveIntegrationSettings() {
     enableStreamOnly = document.getElementById('streamOnlyToggle').checked;
     hideExplicitContent = document.getElementById('explicitToggle').checked;
 
+    const gClientId = document.getElementById('gDriveClientId').value.trim();
+    localStorage.setItem('gDriveClientId_cache', gClientId);
+
     const tx = db.transaction('config', 'readwrite');
     await Promise.all([
         tx.objectStore('config').put({ key: 'istidalEnabled', value: istidalEnabled }),
@@ -7921,12 +7890,128 @@ async function saveIntegrationSettings() {
         tx.objectStore('config').put({ key: 'prefAudioQuality', value: prefAudioQuality }),
         tx.objectStore('config').put({ key: 'enableSmartCache', value: enableSmartCache }),
         tx.objectStore('config').put({ key: 'enableStreamOnly', value: enableStreamOnly }),
-        tx.objectStore('config').put({ key: 'hideExplicitContent', value: hideExplicitContent })
+        tx.objectStore('config').put({ key: 'hideExplicitContent', value: hideExplicitContent }),
+        tx.objectStore('config').put({ key: 'gDriveClientId', value: gClientId })
     ]);
     
     toggletidalTab();
-    showToast("Settings saved");
-    closeModal(manageFoldersModal);
+}
+
+async function handleExportLibrary() {
+    try {
+        showToast("Preparing library export...");
+        
+        const tx = db.transaction(['songs', 'playlists', 'playHistory'], 'readonly');
+        const[songsData, playlistsData, historyData] = await Promise.all([
+            promiseIDBRequest(tx.objectStore('songs').getAll()),
+            promiseIDBRequest(tx.objectStore('playlists').getAll()),
+            promiseIDBRequest(tx.objectStore('playHistory').getAll())
+        ]);
+
+        const exportObj = {
+            version: 1,
+            timestamp: Date.now(),
+            source: 'Streams',
+            songs: songsData,
+            playlists: playlistsData,
+            history: historyData
+        };
+
+        const blob = new Blob([JSON.stringify(exportObj)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `streams-library-${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast("Library exported successfully");
+    } catch (e) {
+        console.error("Export failed:", e);
+        showToast("Export failed");
+    }
+}
+
+async function handleImportLibrary(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!await showConfirmDialog("Importing will REPLACE your current library. All existing data will be lost. Continue?")) {
+        e.target.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        try {
+            showToast("Importing data...");
+            const data = JSON.parse(event.target.result);
+            
+            if (!data.songs || !Array.isArray(data.songs)) {
+                throw new Error("Invalid library file format");
+            }
+
+            const tx = db.transaction(['songs', 'playlists', 'playHistory'], 'readwrite');
+            
+            // 1. Clear existing data
+            await Promise.all([
+                tx.objectStore('songs').clear(),
+                tx.objectStore('playlists').clear(),
+                tx.objectStore('playHistory').clear()
+            ]);
+
+            // 2. Import Songs
+            const songStore = tx.objectStore('songs');
+            for (const song of data.songs) {
+                songStore.put(song);
+            }
+
+            // 3. Import Playlists
+            if (data.playlists) {
+                const plStore = tx.objectStore('playlists');
+                for (const pl of data.playlists) {
+                    plStore.put(pl);
+                }
+            }
+
+            // 4. Import History
+            if (data.history) {
+                const histStore = tx.objectStore('playHistory');
+                for (const h of data.history) {
+                    histStore.put(h);
+                }
+            }
+
+            await tx.done;
+            
+            // Refresh memory and UI
+            await loadSongsAndPlaylists();
+            if (activeView === 'library') renderLibraryPage();
+            if (activeView === 'home') renderHomePage();
+            
+            // Update lookups
+            updateLocalSongLookup(data.songs, { clear: true });
+            isrcToLocalSongMap.clear();
+            data.songs.forEach(song => {
+                if(song.isrc) isrcToLocalSongMap.set(song.isrc, song);
+            });
+
+            showToast(`Library restored. Starting downloads...`);
+            
+            // 5. Trigger download for Tidal tracks
+            restoreTidalDownloads(data.songs);
+            
+            closeDetailView();
+
+        } catch (err) {
+            console.error("Import error:", err);
+            showToast("Failed to import library file");
+        }
+        e.target.value = '';
+    };
+    reader.readAsText(file);
 }
 
 function toggletidalTab() {
@@ -8111,6 +8196,11 @@ async function proactivelyCacheNextInQueue() {
 
         const nextSong = playQueue[nextIndex];
         
+        // Preload local DB URLs for synchronous iOS playback
+        if (nextSong.storage === 'indexeddb' && !nextSong.preloadedUrl && i === 1) {
+            getSongFileUrl(nextSong).then(url => { nextSong.preloadedUrl = url; });
+        }
+        
         // Only cache Tidal songs that aren't already cached
         if (nextSong.storage === 'tidal') {
             const tx = db.transaction('tidalCache', 'readonly');
@@ -8119,14 +8209,17 @@ async function proactivelyCacheNextInQueue() {
 
             checkReq.onsuccess = async () => {
                 if (!checkReq.result) {
-                    console.log(`Proactively caching [${i}/${cacheDepth}]: ${nextSong.name}`);
+                    console.log(`Proactively caching[${i}/${cacheDepth}]: ${nextSong.name}`);
                     try {
-                        // Use a small delay for subsequent items to prioritize the immediate next song
                         if (i > 1) await new Promise(r => setTimeout(r, 2000));
-                        await processAndCachetidalTrack(nextSong);
+                        const cached = await processAndCachetidalTrack(nextSong);
+                        if (cached && i === 1) nextSong.preloadedUrl = URL.createObjectURL(cached.blob);
                     } catch (err) {
                         console.error(`Failed to proactively cache ${nextSong.name}:`, err);
                     }
+                } else if (i === 1 && !nextSong.preloadedUrl) {
+                    // Cache exists, generate object URL for synchronous fallback
+                    nextSong.preloadedUrl = URL.createObjectURL(checkReq.result.blob);
                 }
             };
         }
@@ -8163,7 +8256,7 @@ async function processAndCachetidalTrack(songObject) {
 
 async function openArtistView(artistId, artistName) {
     currentDrawerContext = [];
-    openDrawer(artistName, "Loading content...", `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
+    openDetailView(artistName, '', `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
 
     try {
         const response = await fetchHifi(`/artist/?f=${artistId}`);
@@ -8196,8 +8289,8 @@ async function openArtistView(artistId, artistName) {
         // Generate HTML for the top tracks list
         if (topTracks.length > 0) {
             contentHtml += `
-                <h3 class="section-title" style="font-size: 1.2rem; margin-bottom: 10px;">Top Tracks</h3>
-                <div class="item-list" style="margin-bottom: 20px;">${topTracks.slice(0, 10).map(track => `
+                <h3 class="section-title" style="font-size: 1.2rem; margin-bottom: 10px;">Top</h3>
+                <div class="item-list" style="margin-bottom: 20px; padding-bottom: 0;">${topTracks.slice(0, 10).map(track => `
                     <div class="music-item" data-track-id="${track.id}" style="cursor: pointer;">
                         <div class="song-info">
                             <img src="${getHighResArtwork(track.album.cover, 80)}" class="album-thumbnail" style="width: 40px; height: 40px; border-radius: 6px; margin-right: 10px;">
@@ -8224,27 +8317,23 @@ async function openArtistView(artistId, artistName) {
                 </div>`;
         }
         
-        // Update the drawer's subtitle and include the "Own All" button
-        const drawerSubtitleEl = document.getElementById('drawer-subtitle');
-        if(albums.length > 0) {
-            drawerSubtitleEl.innerHTML = `
-                <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
+        const detailSubtitleEl = document.getElementById('detail-subtitle');
+        const subtitleHtml = albums.length > 0 ? `
+                <div style="display: flex; align-items: center; gap: 15px;">
                     <span>${albums.length} albums</span>
-                    <button class="action-btn" id="save-artist-btn" style="padding: 8px 12px; height: auto;">
+                    <button class="action-btn-icn" id="save-artist-btn" data-artist-name="${sanitize(artistName)}" style="padding: 0;">
                         <span class="material-symbols-rounded" style="font-size: 16px;">arrow_circle_down</span>
-                        Own All
                     </button>
                 </div>
-            `;
-        } else {
-             drawerSubtitleEl.textContent = `${topTracks.length} top tracks`;
-        }
+            ` : `${topTracks.length} top tracks`;
+            
+        detailSubtitleEl.innerHTML = subtitleHtml;
+        document.getElementById('detail-content').innerHTML = contentHtml;
         
-
-        drawerContent.innerHTML = contentHtml;
-        
-        if (document.getElementById('save-artist-btn')) {
-            document.getElementById('save-artist-btn').addEventListener('click', () => saveArtistContent(currentDrawerContext, artistName));
+        // Update state for back navigation
+        if (currentDetailState) {
+            currentDetailState.subtitleHtml = subtitleHtml;
+            currentDetailState.contentHtml = contentHtml;
         }
 
     } catch (error) {
@@ -8254,7 +8343,7 @@ async function openArtistView(artistId, artistName) {
 }
         
 async function openPlaylistView(playlistId, playlistTitle) {
-    openDrawer(playlistTitle, 'Playlist', `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
+    openDetailView(playlistTitle, 'Playlist', `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
 
     try {
         const response = await fetchHifi(`/playlist/?id=${playlistId}`);
@@ -8263,9 +8352,9 @@ async function openPlaylistView(playlistId, playlistTitle) {
         const responseData = await response.json();
         const playlistData = responseData.playlist || responseData.data || {};
         const items = responseData.items || responseData.data?.items || [];
-        const tracks = items.filter(item => item.type === 'track' && item.item).map(item => item.item);
+        const tracks = items.filter(item => item.type === 'track' && item && item.item).map(item => item.item).filter(Boolean);
 
-        if (!tracks || tracks.length === 0) {
+        if (tracks.length === 0) {
             drawerContent.innerHTML = `<div class="no-results"><p>This playlist has no tracks.</p></div>`;
             return;
         }
@@ -8298,16 +8387,19 @@ async function openPlaylistView(playlistId, playlistTitle) {
                 </div>`).join('')}
             </div>`;
 
-        drawerContent.innerHTML = contentHtml;
+        document.getElementById('detail-content').innerHTML = contentHtml;
+        if (currentDetailState) {
+            currentDetailState.contentHtml = contentHtml;
+        }
 
     } catch (error) {
         console.error("Error fetching playlist tracks:", error);
-        drawerContent.innerHTML = `<div class="no-results"><p>Failed to load playlist tracks.</p></div>`;
+        document.getElementById('detail-content').innerHTML = `<div class="no-results"><p>Failed to load playlist tracks.</p></div>`;
     }
 }
 
 async function openAlbumView(albumId, albumName, artistName) {
-    openDrawer(albumName, artistName, `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
+    openDetailView(albumName, artistName, `<div class="loading-message"><svg width="24" height="24" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg></div>`);
 
     try {
         // FIX: Use the direct album endpoint to get its tracks.
@@ -8316,9 +8408,10 @@ async function openAlbumView(albumId, albumName, artistName) {
         
         const responseData = await response.json();
         const data = responseData.data || {};
-        const tracks = (data.items || []).map(t => t.item);
+        // Filter out any items that failed to load or are empty
+        const tracks = (data.items || []).map(t => t.item).filter(Boolean);
 
-        if (!tracks || tracks.length === 0) {
+        if (tracks.length === 0) {
             drawerContent.innerHTML = `<div class="no-results"><p>No tracks found for this album.</p></div>`;
             return;
         }
@@ -8332,7 +8425,7 @@ async function openAlbumView(albumId, albumName, artistName) {
                 <div style="display: flex; align-items: center; gap: 15px;">
                     <img src="${albumArt}" style="width: 250px; height: 250px; border-radius: 12px; corner-shape: superellipse(1.5); box-shadow: 0 0 0 1px var(--glass-border);">
                 </div>
-                <button class="action-btn" id="save-album-btn" style="padding: 8px 12px; height: auto;">
+                <button class="action-btn" id="save-album-btn" data-album-name="${sanitize(albumName)}" style="padding: 8px 12px; height: auto;">
                     <span class="material-symbols-rounded" style="font-size: 16px;">arrow_circle_down</span>
                     Own
                 </button>
@@ -8346,12 +8439,14 @@ async function openAlbumView(albumId, albumName, artistName) {
                 </div>`).join('')}
             </div>`;
 
-        drawerContent.innerHTML = contentHtml;
-        document.getElementById('save-album-btn').addEventListener('click', () => saveAlbumContent(tracks, albumName));
+        document.getElementById('detail-content').innerHTML = contentHtml;
+        if (currentDetailState) {
+            currentDetailState.contentHtml = contentHtml;
+        }
 
     } catch (error) {
         console.error("Error fetching album tracks:", error);
-        drawerContent.innerHTML = `<div class="no-results"><p>Could not load album tracks.</p></div>`;
+        document.getElementById('detail-content').innerHTML = `<div class="no-results"><p>Could not load album tracks.</p></div>`;
     }
 }
 
@@ -8361,7 +8456,7 @@ function openLocalAlbumView(artistName, albumName) {
                            .sort((a,b) => (a.trackNumber || 0) - (b.trackNumber || 0));
 
     if (albumSongs.length === 0) {
-        openDrawer(albumName, artistName, `<div class="no-results"><p>No songs found for this local album.</p></div>`);
+        openDetailView(albumName, artistName, `<div class="no-results"><p>No songs found for this local album.</p></div>`);
         return;
     }
     
@@ -8378,13 +8473,13 @@ function openLocalAlbumView(artistName, albumName) {
         <div class="item-list">${albumSongs.map(song => `
             <div class="music-item" data-id="${song.id}" style="cursor: pointer;">
                 <div class="song-info">
-                    <span class="track-number">${song.trackNumber || '•'}.</span>
+                    <span class="track-number">${song.trackNumber || '•'}</span>
                     <div class="song-title">${sanitize(song.name)}${getExplicitBadge(song.explicit)}</div>
                 </div>
             </div>`).join('')}
         </div>`;
 
-    openDrawer(albumName, artistName, contentHtml);
+    openDetailView(albumName, artistName, contentHtml);
 }
 
 async function fetchAndUpdateLyrics(song) {
@@ -9800,15 +9895,32 @@ function updateMediaSessionPositionState() {
 function setupMediaSessionActions() {
     if (!('mediaSession' in navigator)) return;
 
-    navigator.mediaSession.setActionHandler('play', () => playPauseBtn.click());
+    navigator.mediaSession.setActionHandler('play', async () => {
+        if (audioContext && audioContext.state === 'suspended' && !isIOS) {
+            await audioContext.resume();
+        }
+        audioPlayer.play().catch(() => {
+            if (currentlyPlayingSong) {
+                audioPlayer.load();
+                audioPlayer.play().catch(e => console.error("Media session play fallback failed", e));
+            }
+        });
+    });
     navigator.mediaSession.setActionHandler('pause', () => playPauseBtn.click());
     navigator.mediaSession.setActionHandler('nexttrack', () => playNextSong({ userInitiated: true }));
     navigator.mediaSession.setActionHandler('previoustrack', () => playPreviousSong());
     navigator.mediaSession.setActionHandler('stop', () => resetPlayer());
 
-    navigator.mediaSession.setActionHandler('seekforward', null);
-    navigator.mediaSession.setActionHandler('seekbackward', null);
-    navigator.mediaSession.setActionHandler('seekto', (d) => { audioPlayer.currentTime = d.seekTime; });
+    if (isIOS) {
+        // Disabling seekto on iOS prevents it from assuming the audio is a podcast, ensuring skip buttons appear.
+        navigator.mediaSession.setActionHandler('seekto', null);
+        navigator.mediaSession.setActionHandler('seekforward', null);
+        navigator.mediaSession.setActionHandler('seekbackward', null);
+    } else {
+        navigator.mediaSession.setActionHandler('seekforward', null);
+        navigator.mediaSession.setActionHandler('seekbackward', null);
+        navigator.mediaSession.setActionHandler('seekto', (d) => { audioPlayer.currentTime = d.seekTime; });
+    }
 }
 
 window.__onGCastApiAvailable = function(isAvailable) {
@@ -10073,7 +10185,7 @@ window.addEventListener("load", async () => {
         
         if (gClientIdRes && gClientIdRes.value) {
             const savedId = gClientIdRes.value;
-            document.getElementById('gDriveClientId').value = savedId;
+            localStorage.setItem('gDriveClientId_cache', savedId);
             
             // Initialize Client
             if (typeof google !== 'undefined') {
@@ -10443,6 +10555,16 @@ audioPlayer.addEventListener('play', () => {
 
 audioPlayer.addEventListener('ended', () => {
     audioPlayer.isFading = false;
+    
+    // Synchronous iOS background fallback for continuous playback
+    if (isIOS && playQueue && currentQueueIndex + 1 < playQueue.length && repeatMode !== 'one') {
+        const nextSong = playQueue[currentQueueIndex + 1];
+        if (nextSong && nextSong.preloadedUrl) {
+            audioPlayer.src = nextSong.preloadedUrl;
+            audioPlayer.play().catch(e => console.warn("iOS sync background play failed", e));
+        }
+    }
+    
     playNextSong(); 
 });
 
@@ -10550,14 +10672,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <div class="item-card-title">${sanitize(album.name)}</div>
                         </div>
                     </div>`).join('')}</div>`;
-                openDrawer(artistName, `${artistAlbums.length} albums`, contentHtml); // Pass details
+                openDetailView(artistName, `${artistAlbums.length} albums`, contentHtml); // Pass details
             } else if (playlistCard) {
                  const playlistId = parseInt(playlistCard.dataset.playlistId, 10);
                  const playlist = playlists.find(p => p.id === playlistId);
                  const playlistSongs = playlist.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
                  
                 // Render with Remove Buttons & Drag Handles
-                 const contentHtml = `<div class="item-list" id="playlist-items-container">${playlistSongs.map(song => `
+                const contentHtml = `<div class="item-list" id="playlist-items-container">${playlistSongs.map(song => `
                     <div class="music-item playlist-item" data-id="${song.id}" style="cursor: pointer;">
                          <div class="song-info">
                             <div class="playlist-drag-handle">
@@ -10574,40 +10696,87 @@ document.addEventListener('DOMContentLoaded', async () => {
                         </div>
                     </div>`).join('')}</div>`;
                 
-                openDrawer(playlist.name, `${playlistSongs.length} songs`, contentHtml, { type: 'playlist', id: playlistId });
+                openDetailView(playlist.name, `${playlistSongs.length} songs`, contentHtml, { type: 'playlist', id: playlistId });
             }
         });
 
-        drawerContent.addEventListener('click', async (e) => {
+        document.getElementById('detail-view').addEventListener('click', async (e) => {
+            const saveArtistBtn = e.target.closest('#save-artist-btn');
+            const saveAlbumBtn = e.target.closest('#save-album-btn');
+            
+            if (saveArtistBtn) {
+                saveArtistContent(currentDrawerContext, saveArtistBtn.dataset.artistName);
+                return;
+            }
+            if (saveAlbumBtn) {
+                saveAlbumContent(currentDrawerContext, saveAlbumBtn.dataset.albumName);
+                return;
+            }
+
+            const gDriveLoginBtn = e.target.closest('#gDriveLoginBtn');
+            const gDriveSyncBtn = e.target.closest('#gDriveSyncBtn');
+            const exportLibraryBtn = e.target.closest('#exportLibraryBtn');
+            const importLibraryBtn = e.target.closest('#importLibraryBtn');
+            const uploadBtn = e.target.closest('#uploadBtn');
+
+            if (gDriveLoginBtn) {
+                const clientId = document.getElementById('gDriveClientId').value.trim();
+                if (!clientId) return showToast("Please enter a Google Client ID");
+                initGoogleClient(clientId);
+                tokenClient.requestAccessToken();
+                return;
+            }
+            if (gDriveSyncBtn) {
+                syncLibraryToDrive(true);
+                return;
+            }
+            if (exportLibraryBtn) {
+                handleExportLibrary();
+                return;
+            }
+            if (importLibraryBtn) {
+                document.getElementById('importLibraryInput').click();
+                return;
+            }
+            if (uploadBtn) {
+                if ('showDirectoryPicker' in window) {
+                    try {
+                        const handle = await window.showDirectoryPicker();
+                        for (const existingHandle of directoryHandles) {
+                            if (await handle.isSameEntry(existingHandle)) {
+                                showToast("This folder has already been added");
+                                return;
+                            }
+                        }
+                        if (await verifyPermission(handle, true)) {
+                            directoryHandles.push(handle);
+                            const tx = db.transaction('config', 'readwrite');
+                            tx.objectStore('config').put({ key: 'directoryHandles', value: directoryHandles });
+                            await tx.done;
+                            await processDirectory(handle);
+                        }
+                    } catch (err) {
+                        if (err.name !== 'AbortError') console.error('Error picking directory:', err);
+                    }
+                } else {
+                    document.getElementById('musicUpload').click();
+                }
+                return;
+            }
+
             const localSongItem = e.target.closest('.music-item[data-id]');
             const tidalSongItem = e.target.closest('.music-item[data-track-id]');
             const albumCard = e.target.closest('.item-card[data-album-id]');
-            const backButton = e.target.closest('.drawer-back-btn'); 
 
-            if (backButton) {
-                const artistName = backButton.dataset.artistName;
-                const artistAlbums = groupSongsByAlbum(songs.filter(s => s.albumArtist === artistName));
-                const contentHtml = `<div class="item-grid">${artistAlbums.map(album => {
-                    const albumId = `${album.artist}::${album.originalAlbum}`;
-                    return `
-                    <div class="item-card" data-album-id="${sanitize(albumId)}">
-                        <img src="${album.albumArt}" alt="${sanitize(album.name)}" class="item-card-art">
-                        <div class="item-card-info">
-                            <div class="item-card-title">${sanitize(album.name)}</div>
-                        </div>
-                    </div>`;
-                }).join('')}</div>`;
-                openDrawer(sanitize(artistName), `${artistAlbums.length} albums`, contentHtml);
-            } else if (localSongItem) {
+            if (localSongItem) {
                 const songId = parseFloat(localSongItem.dataset.id);
                 const song = songs.find(s => s.id === songId);
                 if (song) {
                     if (!await requestQueueReplaceConfirmation()) return;
-                    const contextSongs = Array.from(drawerContent.querySelectorAll('.music-item[data-id]'))
+                    const contextSongs = Array.from(document.getElementById('detail-content').querySelectorAll('.music-item[data-id]'))
                         .map(item => songs.find(s => s.id === parseFloat(item.dataset.id)))
                         .filter(Boolean);
                     playSong(song, contextSongs.length > 0 ? contextSongs : [song]);
-                    closeDrawer();
                 }
             } else if (albumCard) {
                 const albumId = albumCard.dataset.albumId;
@@ -10623,9 +10792,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (tidalSongItem) {
                 if (!await requestQueueReplaceConfirmation()) return;
                 const trackId = tidalSongItem.dataset.trackId;
-                const playContext = currentDrawerContext.map(track => ({
+                const playContext = currentDrawerContext.filter(Boolean).map(track => ({
                     id: track.id,
-                    name: track.title,
+                    name: track.title || track.name,
                     artist: track.artist.name,
                     album: track.album.title,
                     albumArt: getHighResArtwork(track.album.cover),
@@ -10634,26 +10803,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     audioQuality: track.audioQuality
                 }));
                 playtidalTrack(trackId, playContext);
-                closeDrawer();
-            }
-        });
-
-        document.getElementById('uploadBtn').addEventListener('click', async () => {
-            if ('showDirectoryPicker' in window) {
-                try {
-                    const handle = await window.showDirectoryPicker();
-                    if (await verifyPermission(handle, true)) {
-                        directoryHandles.push(handle);
-                        const tx = db.transaction('config', 'readwrite');
-                        tx.objectStore('config').put({ key: 'directoryHandles', value: directoryHandles });
-                        await tx.done;
-                        await processDirectory(handle);
-                    }
-                } catch (err) {
-                    if (err.name !== 'AbortError') console.error('Error picking directory:', err);
-                }
-            } else {
-                musicUploadInput.click();
             }
         });
 
@@ -10667,6 +10816,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.querySelector('.filter-container .filter-btn.active').classList.remove('active');
                 btn.classList.add('active');
                 currentFilter = btn.dataset.filter;
+                isLibraryDirty = true; // Force re-render for new filter
                 if (activeView === 'library') renderLibraryPage();
             });
         });
@@ -10677,6 +10827,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         sortBtn.addEventListener('click', () => {
             // Toggle the sort mode
             currentSortMode = currentSortMode === 'alpha' ? 'dateAdded' : 'alpha';
+            isLibraryDirty = true;
             
             // Update the button's appearance
             if (currentSortMode === 'alpha') {
@@ -10742,15 +10893,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await tx.done;
                 triggerAutoSync();
                 
-                document.getElementById('drawer-title').textContent = playlist.name;
+                document.getElementById('detail-title').textContent = playlist.name;
                 showToast("Playlist renamed");
+                isLibraryDirty = true;
                 if (activeView === 'library') renderLibraryPage();
             }
         }
         
         setupLongPressListeners(document.getElementById('library-grid'));
         setupLongPressListeners(document.getElementById('search-results-grid'));
-        setupLongPressListeners(drawerContent);
+        setupLongPressListeners(document.getElementById('detail-content'));
 
         initVisualizer();
         setupMediaSessionActions();
@@ -10799,10 +10951,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
         tabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
-                if (isDrawerOpen) {
-                    closeDrawer();
-                    return; 
-                }
                 const viewName = btn.dataset.view;
                 const currentViewElement = document.getElementById(`${activeView}-view`);
                 if (currentViewElement) {
@@ -10913,140 +11061,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('shuffleBtn').addEventListener('click', toggleShuffle);
         document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
 
-        document.getElementById('manageFoldersBtn').addEventListener('click', openManageFoldersModal);
-
-        document.getElementById('saveIntegrations').addEventListener('click', async () => {
-            // Save Google Client ID
-            const gClientId = document.getElementById('gDriveClientId').value.trim();
-            const tx = db.transaction('config', 'readwrite');
-            tx.objectStore('config').put({ key: 'gDriveClientId', value: gClientId });
-            await tx.done;
-            saveIntegrationSettings();
-        });
-
-        document.getElementById('saveIntegrations').addEventListener('click', saveIntegrationSettings);
-
-        // --- Library Export/Import Logic ---
-        document.getElementById('exportLibraryBtn').addEventListener('click', async () => {
-            try {
-                showToast("Preparing library export...");
-                
-                const tx = db.transaction(['songs', 'playlists', 'playHistory'], 'readonly');
-                const [songsData, playlistsData, historyData] = await Promise.all([
-                    promiseIDBRequest(tx.objectStore('songs').getAll()),
-                    promiseIDBRequest(tx.objectStore('playlists').getAll()),
-                    promiseIDBRequest(tx.objectStore('playHistory').getAll())
-                ]);
-
-                const exportObj = {
-                    version: 1,
-                    timestamp: Date.now(),
-                    source: 'Streams',
-                    songs: songsData,
-                    playlists: playlistsData,
-                    history: historyData
-                };
-
-                const blob = new Blob([JSON.stringify(exportObj)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `streams-library-${new Date().toISOString().slice(0,10)}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                showToast("Library exported successfully");
-            } catch (e) {
-                console.error("Export failed:", e);
-                showToast("Export failed");
-            }
-        });
-
-        document.getElementById('importLibraryBtn').addEventListener('click', () => {
-            document.getElementById('importLibraryInput').click();
-        });
-
-document.getElementById('importLibraryInput').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            if (!await showConfirmDialog("Importing will REPLACE your current library. All existing data will be lost. Continue?")) {
-                e.target.value = '';
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = async (event) => {
-                try {
-                    showToast("Importing data...");
-                    const data = JSON.parse(event.target.result);
-                    
-                    if (!data.songs || !Array.isArray(data.songs)) {
-                        throw new Error("Invalid library file format");
-                    }
-
-                    const tx = db.transaction(['songs', 'playlists', 'playHistory'], 'readwrite');
-                    
-                    // 1. Clear existing data
-                    await Promise.all([
-                        tx.objectStore('songs').clear(),
-                        tx.objectStore('playlists').clear(),
-                        tx.objectStore('playHistory').clear()
-                    ]);
-
-                    // 2. Import Songs
-                    const songStore = tx.objectStore('songs');
-                    for (const song of data.songs) {
-                        songStore.put(song);
-                    }
-
-                    // 3. Import Playlists
-                    if (data.playlists) {
-                        const plStore = tx.objectStore('playlists');
-                        for (const pl of data.playlists) {
-                            plStore.put(pl);
-                        }
-                    }
-
-                    // 4. Import History
-                    if (data.history) {
-                        const histStore = tx.objectStore('playHistory');
-                        for (const h of data.history) {
-                            histStore.put(h);
-                        }
-                    }
-
-                    await tx.done;
-                    
-                    // Refresh memory and UI
-                    await loadSongsAndPlaylists();
-                    if (activeView === 'library') renderLibraryPage();
-                    if (activeView === 'home') renderHomePage();
-                    
-                    // Update lookups
-                    updateLocalSongLookup(data.songs, { clear: true });
-                    isrcToLocalSongMap.clear();
-                    data.songs.forEach(song => {
-                        if(song.isrc) isrcToLocalSongMap.set(song.isrc, song);
-                    });
-
-                    showToast(`Library restored. Starting downloads...`);
-                    
-                    // 5. Trigger download for Tidal tracks
-                    restoreTidalDownloads(data.songs);
-                    
-                    closeModal(manageFoldersModal);
-
-                } catch (err) {
-                    console.error("Import error:", err);
-                    showToast("Failed to import library file");
-                }
-                e.target.value = '';
-            };
-            reader.readAsText(file);
-        });
+        document.getElementById('settingsBtn').addEventListener('click', openSettingsView);
 
         const tidalSearchInput = document.getElementById('tidalSearchInput');
         tidalSearchInput.addEventListener('input', () => {
@@ -11087,9 +11102,9 @@ document.getElementById('importLibraryInput').addEventListener('change', async (
         
             if (trackCard) {
                 if (!await requestQueueReplaceConfirmation()) return;
-                const playContext = lasttidalSearchResults.map(track => ({
+                const playContext = lasttidalSearchResults.filter(Boolean).map(track => ({
                     id: track.id,
-                    name: track.title,
+                    name: track.title || track.name,
                     artist: track.artist.name,
                     album: track.album.title,
                     albumArt: getHighResArtwork(track.album.cover),
@@ -11193,7 +11208,7 @@ document.getElementById('importLibraryInput').addEventListener('change', async (
             rendertidalPage();
         });
 
-        setupDrawerInteractions();
+        document.getElementById('detail-back-btn').addEventListener('click', closeDetailView);
         setupSwipeGestures();
         setupPlayerGestures();
 
@@ -11211,33 +11226,6 @@ document.getElementById('importLibraryInput').addEventListener('change', async (
         }
     } catch (error) {
         console.error('Failed to initialize application:', error);
-    }
-});
-
-document.getElementById('uploadBtn').addEventListener('click', async () => {
-    if ('showDirectoryPicker' in window) {
-        try {
-            const handle = await window.showDirectoryPicker();
-            
-            for (const existingHandle of directoryHandles) {
-                if (await handle.isSameEntry(existingHandle)) {
-                    showToast("This folder has already been added");
-                    return;
-                }
-            }
-
-            if (await verifyPermission(handle, true)) {
-                directoryHandles.push(handle);
-                const tx = db.transaction('config', 'readwrite');
-                tx.objectStore('config').put({ key: 'directoryHandles', value: directoryHandles });
-                await tx.done;
-                await processDirectory(handle);
-            }
-        } catch (err) {
-            if (err.name !== 'AbortError') console.error('Error picking directory:', err);
-        }
-    } else {
-        document.getElementById('musicUpload').click();
     }
 });
 
