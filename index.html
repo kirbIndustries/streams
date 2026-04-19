@@ -7217,7 +7217,9 @@ function addListToQueue(trackList, position) {
     if (!trackList || trackList.length === 0) return;
     isQueueUserModified = true;
     
-    const queueContainer = lyricsQueuePanel.querySelector('.queue-list-container');
+    const lyricsQueuePanel = document.getElementById('lyrics-queue-panel');
+    
+    const queueContainer = lyricsQueuePanel ? lyricsQueuePanel.querySelector('.queue-list-container') : null;
     if (queueContainer) {
         const existingItems = queueContainer.querySelectorAll('.queue-item');
         if (existingItems.length === playQueue.length) {
