@@ -1461,17 +1461,6 @@
             z-index: -9998;
         }
 
-        /* High-frequency grain overlay */
-        #distortion-container::after {
-            content: "";
-            position: absolute;
-            inset: -100%;
-            background-image: url("data:image/svg+xml,%3Csvg%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20512%20512%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cfilter%20id%3D%22noiseFilter%22%20color-interpolation-filters%3D%22sRGB%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%220.9%22%20numOctaves%3D%224%22%20stitchTiles%3D%22stitch%22/%3E%3C/filter%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20filter%3D%22url(%23noiseFilter)%22/%3E%3C/svg%3E");
-            opacity: 0.2;
-            mix-blend-mode: overlay;
-            pointer-events: none;
-        }
-
         html.high-contrast #distortion-container {
             display: none !important; /* Do NOT display for high contrast */
         }
@@ -1482,7 +1471,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            filter: blur(clamp(40px, 2vw, 200px)) brightness(0.8) saturate(1.5);
+            filter: blur(clamp(40px, 3vw, 200px)) brightness(0.8) saturate(1.5);
             transform: scale(1.2) translateZ(0); /* Hardware acceleration */
             will-change: transform;
             opacity: 0.8;
