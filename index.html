@@ -502,6 +502,23 @@
             border-radius: 50px;
             corner-shape: superellipse(1.5);
             overflow: clip;
+
+            --background-app: var(--background-app-dark);
+            --background-color: var(--background-color-dark);
+            --background-color-tr: var(--background-color-dark-tr);
+            --background-color-tr-op: var(--background-color-light-tr);
+            --text-color: var(--text-color-dark);
+            --secondary-text-color: var(--secondary-text-color-dark);
+            --accent: var(--accent-dark);
+            --tonal: var(--tonal-dark);
+            --modal-background: var(--modal-background-dark);
+            --modal-transparent: var(--modal-transparent-dark);
+            --search-background: var(--search-background-dark);
+            --search-background-op: var(--search-background-light);
+            --overlay-color: var(--dark-overlay);
+            --overlay-color-op: var(--light-overlay);
+            --transparent-color: var(--dark-transparent);
+            --glass-border: var(--glass-border-dark);
         }
 
         #now-playing-view.visible {
@@ -1197,7 +1214,10 @@
         }
 
         #player-status {
-            font-weight: 600;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         
         .controls-container {
@@ -1462,16 +1482,16 @@
             left: 0;
             width: 100%;
             height: 100%;
-            filter: blur(clamp(25px, 2.5vw, 100px)) brightness(0.6);
-            transform: scale(1.15) translateZ(0); /* Hardware acceleration */
+            filter: blur(40px) brightness(0.8) saturate(1.5);
+            transform: scale(1.2) translateZ(0); /* Hardware acceleration */
             will-change: transform;
-            opacity: 1;
+            opacity: 0.8;
         }
 
-        body.light-theme #distortionCanvas {
-            opacity: 0.6; /* 60% opacity for light theme */
+        /* body.light-theme #distortionCanvas {
+            opacity: 0.6;
             filter: blur(clamp(25px, 2.5vw, 100px)) saturate(3) brightness(1);
-        }
+        } */
         
         @keyframes rotate {
             from {
@@ -1843,7 +1863,8 @@
 
         .more-options-menu {
             position: absolute;
-            background-color: var(--search-background);
+            background-color: var(--search-background-dark);
+            color: var(--text-color-dark);
             border-radius: 35px;
             corner-shape: superellipse(1.5);
             padding: 8px 10px;
@@ -1961,6 +1982,8 @@
             filter: blur(1px);
             align-items: flex-start;
             justify-content: center;
+            mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
         }
         
         #lyrics-queue-panel.visible {
@@ -2031,6 +2054,7 @@
             .now-queue {
                 width: 100%;
                 max-width: none;
+                padding-top: 80px;
             }
         }
 
@@ -3009,7 +3033,7 @@
                     const loader = document.createElement('div');
                     loader.id = 'queue-loader';
                     loader.style.cssText = 'padding: 15px; text-align: center; color: var(--secondary-text-color); display: flex; align-items: center; justify-content: center; gap: 10px;';
-                    loader.innerHTML = `<svg width="20" height="20" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg><span>Autoplay</span>`;
+                    loader.innerHTML = `<svg width="20" height="20" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="color: var(--text-color);"><style>.spinner_V8m1{transform-origin:center;animation:spinner_zKoa 2s linear infinite}.spinner_V8m1 circle{stroke-linecap:round;animation:spinner_YpZS 1.5s ease-in-out infinite}@keyframes spinner_zKoa{100%{transform:rotate(360deg)}}@keyframes spinner_YpZS{0%{stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style><g class="spinner_V8m1"><circle cx="12" cy="12" r="9.5" fill="none" stroke-width="3"></circle></g></svg><span>Loading</span>`;
                     targetContainer.appendChild(loader);
                     loader.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
@@ -3338,6 +3362,7 @@ function openSettingsView() {
                 <div style="display: flex; flex-direction: column; gap: 5px;">
                     <label for="prefAudioQuality" style="font-size: 14px; color: var(--secondary-text-color);">Streaming Quality</label>
                     <select id="prefAudioQuality" class="library-search-input" style="padding: 8px 15px;">
+                        <option value="DOLBY_ATMOS" ${prefAudioQuality === 'DOLBY_ATMOS' ? 'selected' : ''}>Dolby Atmos</option>
                         <option value="LOSSLESS" ${prefAudioQuality === 'LOSSLESS' ? 'selected' : ''}>Highest</option>
                         <option value="HIGH" ${prefAudioQuality === 'HIGH' ? 'selected' : ''}>320kbps</option>
                         <option value="LOW" ${prefAudioQuality === 'LOW' ? 'selected' : ''}>96kbps</option>
@@ -3722,13 +3747,7 @@ function setupSwipeGestures() {
         
         // Threshold of 60px for swipe down
         if (deltaY > 60) {
-            // Logic: If panel (queue/lyrics) is open, close it first.
-            // If panel is closed, minimize the player.
-            if (isPanelVisible) {
-                closePanel();
-            } else {
-                setView(lastMainView); // Return to previous view (Home/Library etc)
-            }
+            setView(lastMainView); // Return to previous view (Home/Library etc)
         }
     }, { passive: true });
 }
@@ -5308,7 +5327,7 @@ function findSongByString(artistTitleString, additionalSongs = []) {
                     vy: (Math.random() - 0.5) * maxSpeed,
                     radius: radius,
                     rotation: Math.random() * Math.PI * 2,
-                    rotationSpeed: (Math.random() - 0.5) * 0.002,
+                    rotationSpeed: (Math.random() - 0.5) * 0.02,
                     sourceX: sourceX,
                     sourceY: sourceY,
                     sourceSize: sourceSize,
@@ -5333,36 +5352,24 @@ function findSongByString(artistTitleString, additionalSongs = []) {
          */
         function drawOrganicBlob(context, blob, imageToDraw, currentBeatIntensity, currentPreBeat) {
             context.save();
-            
-            // Compound Intensity: Subtle swell (pre-beat) + Sharp kick (beat)
-            const combinedIntensity = (currentPreBeat * 0.3) + currentBeatIntensity;
 
-            // 1. Calculate an effective scale for the blob
-            const effectiveScale = 1 + combinedIntensity * 0.06; 
-            // 2. Calculate an effective rotation
-            const effectiveRotation = blob.rotation + combinedIntensity * 0.08; 
+            const combinedIntensity = currentPreBeat + currentBeatIntensity;
+            const effectiveRotation = blob.rotation
 
             context.translate(blob.x, blob.y);
-            context.rotate(effectiveRotation); // Use the animated rotation
-            
+            context.rotate(effectiveRotation);
+
             context.beginPath();
-            const points = 24; // Slightly more points for smoother liquid edges
-            
-            // Liquid Viscosity: Modulate the "stretchiness" over time
+            const points = 24;
             const viscosity = 1.2 + Math.sin(blob.time * 0.05) * 0.4;
             const noiseSpeed = 0.006;
-            
+
             for (let i = 0; i < points; i++) {
                 const angle = (i / points) * Math.PI * 2;
                 const nx = Math.cos(angle);
                 const ny = Math.sin(angle);
-                
-                // Sample noise in 3D (X, Y, Time) for organic liquid evolution
                 const noiseVal = noise((nx + 1) * viscosity, (ny + 1) * viscosity, blob.time * noiseSpeed);
-                
-                // Calculate dynamic radius with a "surface tension" floor
-                const radius = blob.radius * effectiveScale * (0.8 + noiseVal * 0.5);
-
+                const radius = blob.radius * (0.8 + noiseVal * 0.5);
                 const pointX = nx * radius;
                 const pointY = ny * radius;
                 if (i === 0) context.moveTo(pointX, pointY);
@@ -5370,33 +5377,19 @@ function findSongByString(artistTitleString, additionalSongs = []) {
             }
             context.closePath();
             context.clip();
-            
-            // Refined Liquid Slicing: Vertical strips with organic horizontal drift
-            const totalWarp = blob.baseWarp + Math.sin(blob.time * 0.08) * (blob.baseWarp * 0.6);
-            const numStrips = isMobile ? 20 : 30; // Adaptive strip count for performance
-            const stripWidth = (blob.radius * 2.5 * effectiveScale) / numStrips;
-            
-            for (let i = 0; i < numStrips; i++) {
-                const stripX = -blob.radius * effectiveScale + i * stripWidth;
-                const sinInput = (i / numStrips) * Math.PI + (blob.time * 0.12);
-                const yOffset = Math.sin(sinInput) * totalWarp;
-                
-                const srcX = blob.sourceX + (blob.sourceSize / numStrips) * i;
-                const srcW = blob.sourceSize / numStrips;
-                const destY = -blob.radius * effectiveScale + yOffset;
-                const destH = blob.radius * 2 * effectiveScale;
 
-                context.drawImage(imageToDraw, srcX, blob.sourceY, srcW, blob.sourceSize, stripX, destY, stripWidth + 1, destH);
-
-                // Performant Contrast Boost: Double-draw with overlay mode on beat
-                if (blob.contrastBoost && currentBeatIntensity > 0.1) {
-                    context.save();
-                    context.globalCompositeOperation = 'overlay';
-                    context.globalAlpha = currentBeatIntensity * 0.4;
-                    context.drawImage(imageToDraw, srcX, blob.sourceY, srcW, blob.sourceSize, stripX, destY, stripWidth + 1, destH);
-                    context.restore();
-                }
-            }
+            // Draw the album image inside blob
+            context.drawImage(
+                imageToDraw,
+                blob.sourceX,
+                blob.sourceY,
+                blob.sourceSize,
+                blob.sourceSize,
+                -blob.radius,
+                -blob.radius,
+                blob.radius * 2,
+                blob.radius * 2
+            );
 
             context.restore();
         }
@@ -5407,23 +5400,34 @@ function findSongByString(artistTitleString, additionalSongs = []) {
          */
         function animateCanvas() {
             animationFrameId = requestAnimationFrame(animateCanvas);
-            if (!ctx || document.visibilityState !== 'visible') return; // Do not render if screen is off
+            if (!ctx || document.visibilityState !== 'visible') return;
             
             const { width: canvasWidth, height: canvasHeight } = distortionCanvas;
             
+            // 1. Calculate Global Pulsing Contrast
+            const combinedIntensity = (preBeatIntensity * 0.6) + beatIntensity;
+            
+            // Apply a "hanging" curve (Power 0.7)
+            // This makes the transition slower and the peak intensity feel more sustained
+            const curvedIntensity = Math.pow(combinedIntensity, 0.2);
+
+            const contrast = 100 + (curvedIntensity * 10);
+            const saturation = 100 + (curvedIntensity * 5);
+
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            
+            ctx.filter = `contrast(${contrast}%) saturate(${saturation}%)`;
 
             // --- Beat Effect Logic ---
-            const BEAT_DECAY_SPEED = 0.95; // Controls how fast the effect fades out (closer to 1 is slower)
+            const BEAT_DECAY_SPEED = 0.94; 
 
-            // If a beat is active, smoothly decay the intensity on every frame.
             if (beatIntensity > 0.001) {
                 beatIntensity *= BEAT_DECAY_SPEED;
             } else {
-                beatIntensity = 0; // Clamp to zero to prevent tiny residual values
+                beatIntensity = 0;
             }
 
-            // --- Background Rotation and Drawing (Unchanged) ---
+            // --- Background Rotation and Drawing ---
             backgroundRotation += 0.002;
             if (isTransitioning) {
                 transitionProgress += 1 / TRANSITION_DURATION;
@@ -5533,6 +5537,8 @@ class BeatDetector {
 
     update(dataArray) {
         let isBeat = false;
+        this.sustainedBassEnergy = 0;
+
         for (let i = 0; i < this.frequencyBands.length; i++) {
             const band = this.frequencyBands[i];
             const history = this.fluxHistories[i];
@@ -5540,6 +5546,9 @@ class BeatDetector {
             let currentEnergy = 0;
             for (let j = band[0]; j <= band[1]; j++) currentEnergy += dataArray[j];
             currentEnergy /= (band[1] - band[0] + 1);
+
+            // Export energy for continuous bass detection
+            this.sustainedBassEnergy = Math.max(this.sustainedBassEnergy, currentEnergy);
 
             const flux = Math.max(0, currentEnergy - this.lastEnergies[i]);
             this.lastEnergies[i] = currentEnergy;
@@ -5551,7 +5560,7 @@ class BeatDetector {
             
             const averageFlux = history.reduce((a, b) => a + b, 0) / history.length;
             const stdDev = this._calculateStandardDeviation(history, averageFlux);
-            const dynamicThreshold = averageFlux + (1.5 * stdDev);
+            const dynamicThreshold = averageFlux + (2.2 * stdDev);
 
             if (flux > dynamicThreshold && flux > this.minFluxThreshold) {
                 isBeat = true;
@@ -5646,8 +5655,10 @@ function initVisualizer() {
         const turbulenceFilter = document.getElementById('turbulence');
 
         // Focused bands for real-time analysis (Sub-bass, Bass, Low-Mid)
-        const bands = isMobile ? [[0, 1], [1, 2], [2, 4]] : [[0, 10], [10, 20], [40, 80], [100, 200]];
-        beatDetector = new BeatDetector(bands);
+        // Strict Bass Focus: Only monitor the low-end punch (20Hz - 150Hz range)
+        // This prevents mid-range transients (snares/claps) from false-triggering
+        const bands = isMobile ? [[0, 2]] : [[1, 8]]; 
+        beatDetector = new BeatDetector(bands, 30, 12); // Slightly smaller history, higher min threshold
         tempoEstimator = new TempoEstimator();
         
         const canvas = document.getElementById('visualizerCanvas');
@@ -5658,10 +5669,10 @@ function initVisualizer() {
         const mobileBarIndices = [1, 2, 4, 8, 16, 32]; // Mapped to a 128-bin array
         const numBars = 6;
         
-        // Mobile frequencies are often louder in analysis; dampen them
+        // Balanced Sensitivity: Keep the bass punchy but prevent over-scaling
         const sensitivityMultipliers = isMobile ? 
-            [0.9, 1.0, 1.0, 1.0, 1.1, 1.2] : 
-            [1.0, 1.05, 1.1, 1.15, 1.25, 1.4];
+            [0.8, 0.9, 1.0, 1.1, 1.2, 1.3] : 
+            [0.85, 1.0, 1.1, 1.2, 1.3, 1.5];
 
         // Increase power curve on mobile to prevent constant peaking
         const powerCurve = isMobile ? 2.8 : 2.2;
@@ -5699,10 +5710,17 @@ function initVisualizer() {
                     }
 
                     const tolerance = beatInterval * 0.15; 
-                    if (isSpectralBeat && currentTime > nextBeatTime - tolerance) {
+                    const isBpmWindow = currentTime > nextBeatTime - tolerance;
+
+                    // Assumptions:
+                    // 1. If we detect a peak (isSpectralBeat), trigger.
+                    // 2. If bass is continuous/high (energy > 180) and we hit the BPM mark, trigger.
+                    const isContinuousBassBeat = isBpmWindow && beatDetector.sustainedBassEnergy > 180;
+
+                    if ((isSpectralBeat && isBpmWindow) || isContinuousBassBeat) {
                         triggerBeatEffect();
                         lastBpmAlignedBeatTime = currentTime;
-                        preBeatIntensity = 0; // Reset anticipation on hit
+                        preBeatIntensity = 0; 
                     }
                 }
             }
@@ -5714,7 +5732,7 @@ function initVisualizer() {
             const gap = 2;
             const barWidth = (canvas.width - (numBars - 1) * gap) / numBars;
             const style = getComputedStyle(document.body);
-            const textColor = style.getPropertyValue('--text-color').trim() || '#FFFFFF';
+            const textColor = style.getPropertyValue('--secondary-text-color-dark').trim() || '#FFFFFF';
             canvasCtx.fillStyle = textColor;
 
             const indicesToUse = isMobile ? mobileBarIndices : desktopBarIndices;
@@ -5748,6 +5766,24 @@ function initVisualizer() {
         }
 
         isVisualizerInitialized = true;
+        
+        // Route audio correctly upon initialization based on current song
+        if (currentlyPlayingSong) {
+            const fileUrl = currentlyPlayingSong.preloadedUrl || currentlyPlayingSong.blobUrl || currentlyPlayingSong.streamUrl || '';
+            const isBlob = fileUrl.startsWith('blob:');
+            
+            if (currentlyPlayingSong.audioQuality === 'DOLBY_ATMOS') {
+                disconnectAudioGraph();
+            } else if (isBlob) {
+                connectAudioGraph();
+            } else if (currentlyPlayingSong.storage === 'tidal' || currentlyPlayingSong.storage === 'filesystem') {
+                disconnectAudioGraph();
+            } else {
+                connectAudioGraph();
+            }
+        } else {
+            connectAudioGraph();
+        }
 
     } catch(e) {
         console.error("Failed to initialize AudioContext/Visualizer:", e);
@@ -6622,7 +6658,7 @@ function renderQueue() {
     // Create the header with the title and the new autoplay toggle
     const headerHtml = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; flex-shrink: 0;">
-            <h2 class="section-title" style="margin: 0;">Up Next</h2>
+            <h2 class="section-title" style="margin: 0; color: var(--text-color-dark);">Up Next</h2>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <label for="autoplayToggle" style="font-size: 14px; color: var(--secondary-text-color);">Autoplay</label>
                 <input type="checkbox" id="autoplayToggle" ${isAutoplayEnabled ? 'checked' : ''}>
@@ -7434,7 +7470,10 @@ async function playSong(song, playContext = null) {
         const isHlsStream = song.streamUrl && song.streamUrl.includes('.m3u8');
         const isBlob = fileUrl.startsWith('blob:');
         
-        if (isBlob) {
+        if (song.audioQuality === 'DOLBY_ATMOS') {
+            audioPlayer.removeAttribute('crossorigin');
+            disconnectAudioGraph();
+        } else if (isBlob) {
             audioPlayer.removeAttribute('crossorigin');
             connectAudioGraph();
         } else if (song.storage === 'tidal' || song.storage === 'filesystem') {
@@ -8274,20 +8313,30 @@ async function savetidalTrackToLibrary() {
 
         const newLocalId = Date.now() + Math.random();
         const newLocalSong = {
-            id: newLocalId, name: songToSave.name, artist: songToSave.artist,
-            album: songToSave.album, albumArtist: songToSave.albumArtist || songToSave.artist,
-            storage: 'indexeddb', handleName: `${songToSave.name}.mp3`,
-            dateAdded: Date.now(), year: songToSave.year || new Date().getFullYear().toString(),
-            albumArt: songToSave.albumArt, trackNumber: songToSave.trackNumber,
-            discNumber: songToSave.volumeNumber,
-            lyrics: null, lrcData: null, playCount: 0,
+            id: newLocalId, 
+            name: songToSave.name, 
+            artist: songToSave.artist,
+            album: songToSave.album, 
+            albumArtist: songToSave.albumArtist || songToSave.artist,
+            storage: 'indexeddb', 
+            handleName: `${songToSave.name}.mp3`,
+            dateAdded: Date.now(), 
+            year: songToSave.year || new Date().getFullYear().toString(),
+            albumArt: songToSave.albumArt, 
+            trackNumber: songToSave.trackNumber,
+            discNumber: songToSave.volumeNumber || songToSave.discNumber || 1,
+            effectiveDiscNumber: songToSave.volumeNumber || songToSave.discNumber || 1,
+            lyrics: songToSave.lyrics || null, 
+            lrcData: songToSave.lrcData || null, 
+            playCount: 0,
             vibrantColor: songToSave.vibrantColor,
             peak: songToSave.peak,
             bpm: songToSave.bpm,
             isrc: songToSave.isrc,
             copyright: songToSave.copyright,
             explicit: songToSave.explicit,
-            tidalId: songToSave.id
+            tidalId: songToSave.id,
+            audioQuality: songToSave.audioQuality || 'HIGH'
         };
         const songTx = db.transaction(['songs', 'musicFiles'], 'readwrite');
         songTx.objectStore('songs').put(newLocalSong);
@@ -8329,14 +8378,21 @@ async function batchSaveTidalTracks(tracks) {
 
             const newLocalId = Date.now() + Math.random();
             const newLocalSong = {
-                id: newLocalId, name: track.name, artist: track.artist,
-                album: track.album, albumArtist: track.albumArtist || track.artist,
-                storage: 'indexeddb', handleName: `${track.name}.mp3`,
-                dateAdded: Date.now(), year: track.year || new Date().getFullYear().toString(),
-                albumArt: track.albumArt, trackNumber: track.trackNumber,
-                discNumber: track.volumeNumber,
-                lyrics: null,
-                lrcData: null,
+                id: newLocalId, 
+                name: track.name, 
+                artist: track.artist,
+                album: track.album, 
+                albumArtist: track.albumArtist || track.artist,
+                storage: 'indexeddb', 
+                handleName: `${track.name}.mp3`,
+                dateAdded: Date.now(), 
+                year: track.year || new Date().getFullYear().toString(),
+                albumArt: track.albumArt, 
+                trackNumber: track.trackNumber,
+                discNumber: track.volumeNumber || track.discNumber || 1,
+                effectiveDiscNumber: track.volumeNumber || track.discNumber || 1,
+                lyrics: track.lyrics || null, 
+                lrcData: track.lrcData || null,
                 peak: track.peak,
                 bpm: track.bpm,
                 playCount: 0,
@@ -8344,7 +8400,8 @@ async function batchSaveTidalTracks(tracks) {
                 isrc: track.isrc,
                 copyright: track.copyright,
                 explicit: track.explicit,
-                tidalId: track.id
+                tidalId: track.id,
+                audioQuality: track.audioQuality || 'HIGH'
             };
             
             return { 
@@ -8447,15 +8504,24 @@ async function saveAlbumContent(tracks, albumName, silent = false) {
     }
 
     const tracksToSave = tracks.map(trackData => ({
-        id: trackData.id, name: trackData.title, artist: trackData.artist.name,
-        album: trackData.album.title, albumArtist: trackData.album?.artist?.name || trackData.artist.name,
+        id: trackData.id, 
+        name: trackData.title, 
+        artist: trackData.artist.name,
+        album: trackData.album.title, 
+        albumArtist: trackData.album?.artist?.name || trackData.artist.name,
         year: (trackData.streamStartDate || trackData.album?.releaseDate || "").split('-')[0],
         albumArt: getHighResArtwork(trackData.album.cover),
-        storage: 'tidal', duration: trackData.duration, audioQuality: trackData.audioQuality,
-        trackNumber: trackData.trackNumber, volumeNumber: trackData.volumeNumber,
-        isrc: trackData.isrc, copyright: trackData.copyright,
-        vibrantColor: trackData.album.vibrantColor,
-        explicit: trackData.explicit || false
+        storage: 'tidal', 
+        duration: trackData.duration, 
+        audioQuality: trackData.audioQuality,
+        trackNumber: trackData.trackNumber || trackData.number, 
+        volumeNumber: trackData.volumeNumber || trackData.discNumber || 1,
+        isrc: trackData.isrc, 
+        copyright: trackData.copyright,
+        vibrantColor: trackData.album.vibrantColor || trackData.vibrantColor,
+        explicit: trackData.explicit || false,
+        peak: trackData.peak || trackData.trackPeakAmplitude,
+        bpm: trackData.bpm
     }));
 
     const savedCount = await batchSaveTidalTracks(tracksToSave);
@@ -8482,12 +8548,10 @@ async function processAndCacheAudio(songObject, signal = null) {
             userPref = 'LOW';
         }
         
-        const allQualities = ['LOSSLESS', 'HIGH', 'LOW'];
-        
         let qualityLevelsToTry = [userPref];
         
-        // Add remaining qualities as fallbacks
-        allQualities.forEach(q => {
+        // Add remaining qualities as fallbacks (Skip Atmos as a fallback if not explicitly requested)
+        ['LOSSLESS', 'HIGH', 'LOW'].forEach(q => {
             if (!qualityLevelsToTry.includes(q)) qualityLevelsToTry.push(q);
         });
 
@@ -8549,7 +8613,7 @@ async function processAndCacheAudio(songObject, signal = null) {
                 if (concatenatedBlob) break;
                 
                 try {
-                    const formats = quality === 'LOW' ? 'HEAACV1' : quality === 'HIGH' ? 'AACLC' : quality === 'LOSSLESS' ? 'FLAC' : 'FLAC_HIRES';
+                    const formats = quality === 'LOW' ? 'HEAACV1' : quality === 'HIGH' ? 'AACLC' : quality === 'LOSSLESS' ? 'FLAC' : (quality === 'DOLBY_ATMOS' ? 'EAC3' : 'FLAC_HIRES');
                     const response = await fetchHifi(`/trackManifests/?id=${songObject.id}&manifestType=MPEG_DASH&formats=${formats}`, { signal });
                     if (!response.ok) continue;
 
@@ -8644,10 +8708,9 @@ async function resolveTidalUrl(songObject) {
     let userPref = (typeof prefAudioQuality !== 'undefined') ? prefAudioQuality : 'LOSSLESS';
     if (isDataSaver()) userPref = 'LOW';
     
-    const allQualities = ['LOSSLESS', 'HIGH', 'LOW'];
-    
-    let qualityLevelsToTry = [userPref];
-    allQualities.forEach(q => { if (!qualityLevelsToTry.includes(q)) qualityLevelsToTry.push(q); });
+    let qualityLevelsToTry = [userPref];['LOSSLESS', 'HIGH', 'LOW'].forEach(q => { 
+        if (!qualityLevelsToTry.includes(q)) qualityLevelsToTry.push(q); 
+    });
 
     // 1. Try /track/ endpoint
     for (const quality of qualityLevelsToTry) {
@@ -8673,7 +8736,7 @@ async function resolveTidalUrl(songObject) {
     // 2. Fallback to /trackManifests/ endpoint with HLS
     for (const quality of qualityLevelsToTry) {
         try {
-            const formats = quality === 'LOW' ? 'HEAACV1' : quality === 'HIGH' ? 'AACLC' : quality === 'LOSSLESS' ? 'FLAC' : 'FLAC_HIRES';
+            const formats = quality === 'LOW' ? 'HEAACV1' : quality === 'HIGH' ? 'AACLC' : quality === 'LOSSLESS' ? 'FLAC' : (quality === 'DOLBY_ATMOS' ? 'EAC3' : 'FLAC_HIRES');
             const response = await fetchHifi(`/trackManifests/?id=${songObject.id}&manifestType=HLS&formats=${formats}`);
             if (!response.ok) continue;
 
@@ -8854,9 +8917,10 @@ function connectAudioGraph() {
 function disconnectAudioGraph() {
     if (isIOS) return;
 
-    if (source) {
+    if (source && audioContext) {
         try {
             source.disconnect();
+            source.connect(audioContext.destination);
         } catch(e) { }
         document.getElementById('visualizerCanvas').style.visibility = 'hidden';
     }
@@ -10019,8 +10083,10 @@ async function openContextFromPlayer(type) {
             if (statusEl) {
                 if (isRadioMode) {
                     statusEl.textContent = 'Station';
-                } else if (song.storage === 'tidal' && song.audioQuality === 'LOSSLESS') {
-                    statusEl.textContent = 'Lossless';
+                } else if (song.audioQuality === 'DOLBY_ATMOS') {
+                    statusEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110.76 15.643" xml:space="preserve"><path d="M65.774 12.028h-1.073L69.918.007h.967l5.117 12.021h-1.074l-1.359-3.242h-6.434zm1.715-4.124h5.726l-2.84-6.877zm13.064-4.198h-2.26V0h-.929v3.706h-1.653v.781h1.668v5.504c0 1.547.965 2.037 1.936 2.037.474 0 .883-.084 1.256-.219l-.049-.798a2.4 2.4 0 0 1-.971.221c-.748 0-1.258-.324-1.258-1.46V4.487h2.26zm1.707 8.322h.934v-4.23c0-2.206 1.242-3.329 2.5-3.329 1.632 0 2.023 1.241 2.023 2.7v4.859h.932V7.696c0-1.751.816-3.227 2.463-3.227 1.593 0 2.156 1.309 2.156 2.87v4.689h.916V7.001c0-1.869-.899-3.295-2.938-3.295-1.308 0-2.328.68-2.836 1.886h-.033c-.443-1.324-1.342-1.886-2.531-1.886-1.119 0-2.205.697-2.67 1.781h-.033c0-.424-.035-1.341-.067-1.781h-.882c.049.526.066 1.579.066 2.02zm17.522.014c-2.446 0-4.164-1.781-4.164-4.177 0-2.411 1.718-4.159 4.164-4.159 2.464 0 4.179 1.748 4.179 4.159 0 2.396-1.715 4.177-4.179 4.177m0-7.538c-1.971 0-3.211 1.477-3.211 3.361s1.24 3.346 3.211 3.346c1.986 0 3.228-1.461 3.228-3.346 0-1.884-1.242-3.361-3.228-3.361m10.826.552c-.51-.867-1.516-1.341-2.67-1.341-1.375 0-2.699.68-2.699 2.207 0 2.938 4.599 1.63 4.599 3.785 0 1.106-.965 1.545-1.951 1.545a2.71 2.71 0 0 1-2.275-1.224l-.729.529c.676 1.001 1.817 1.476 3.004 1.476 1.443 0 2.873-.712 2.873-2.392 0-1.29-.973-1.902-2.652-2.276-1.307-.288-1.985-.594-1.985-1.512 0-.984.95-1.374 1.782-1.374.882 0 1.597.422 1.988 1.086zM0 12.017h1.773c3.31 0 6.006-2.698 6.006-6.004 0-3.309-2.696-6.008-6.006-6.008H0zM17.088.005h-1.771a6.02 6.02 0 0 0-6.008 6.008c0 3.306 2.698 6.004 6.008 6.004h1.771zm7.978 0h-4.339v12.012h4.339a6.014 6.014 0 0 0 6.006-6.005A6.015 6.015 0 0 0 25.066.005m0 10.192h-2.518V1.828h2.518a4.19 4.19 0 0 1 4.184 4.184 4.194 4.194 0 0 1-4.184 4.185m11.093-6.491a4.167 4.167 0 0 0-4.163 4.161 4.164 4.164 0 0 0 4.163 4.159 4.164 4.164 0 0 0 4.162-4.159 4.166 4.166 0 0 0-4.162-4.161m0 6.653a2.51 2.51 0 1 1 0-5.019 2.524 2.524 0 0 1 2.51 2.511 2.51 2.51 0 0 1-2.51 2.508m5.34 1.669h1.82V.007h-1.82zm7.555-8.321c-.882 0-1.705.277-2.379.75V.007H44.85v12.021h1.825v-.75a4.15 4.15 0 0 0 2.379.749 4.166 4.166 0 0 0 4.164-4.16 4.167 4.167 0 0 0-4.164-4.16m0 6.653a2.51 2.51 0 0 1-2.379-1.718 2.5 2.5 0 0 1 0-1.582 2.51 2.51 0 0 1 2.379-1.719 2.523 2.523 0 0 1 2.511 2.511 2.51 2.51 0 0 1-2.511 2.508m10.835-6.65L57.52 9.041 55.146 3.71h-1.992l3.368 7.564-.826 1.858a.973.973 0 0 1-1.283.492l-.262-.117-.733 1.651.002.001.633.281a2.36 2.36 0 0 0 3.109-1.195c.006-.011 4.313-9.633 4.715-10.535z"/><g/><g/><g/><g/><g/><g/></svg>`;
+                } else if (song.audioQuality === 'LOSSLESS') {
+                    statusEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="12" viewBox="0 0 15 9" fill="currentColor" style="font-size: inherit;"><path d="M8.184.35c1.76 0 2.519 2.946 3.154 4.888.335-1.396.159-1.696.519-1.696.133 0 .269.091.269.256l-.009.085-.026.175c-.071.464-.246 1.436-.437 2.086 1.544 4.047 2.691-1.283 2.82-2.372a.25.25 0 0 1 .257-.23c.16 0 .291.12.266.301-.277 1.762-.702 4.507-2.45 4.507-.965 0-1.507-.755-1.936-1.62C9.54 4.626 9.047 1.093 7.997 1.093c-.337 0-.586.351-.603.351-.032 0-.057-.143-.371-.535C7.322.567 7.734.35 8.184.35M2.458.354c2.753 0 2.998 7.264 4.556 7.264.183 0 .38-.111.596-.362q.178.303.368.54c-.311.355-.698.554-1.183.554-1.741-.001-2.489-2.916-3.132-4.884a13 13 0 0 0-.261 1.459.254.254 0 0 1-.259.238c-.134 0-.269-.092-.269-.255l.003-.038c.089-.647.269-1.627.47-2.31-.268-.702-.602-1.469-1.095-1.469-.995 0-1.565 2.5-1.725 3.834a.253.253 0 0 1-.259.238C.135 5.163 0 5.071 0 4.908l.002-.038C.283 2.836.808.354 2.458.354M5.315.35c.494 0 1.024.258 1.482.861.025.03.281.428.362.566 1.118 2.025 1.659 5.85 2.722 5.85.184 0 .383-.114.603-.371q.18.303.368.54c-.31.354-.697.554-1.182.554-2.737-.001-3.034-7.26-4.542-7.26-.34 0-.592.354-.609.354-.032 0-.057-.143-.371-.535C4.455.558 4.87.35 5.315.35"></path></svg>Lossless`;
                 } else {
                     statusEl.textContent = '';
                 }
@@ -10854,11 +10920,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (playerHandle) {
             playerHandle.addEventListener('click', (e) => {
                 e.stopPropagation(); // Prevent triggering other touch events
-                if (isPanelVisible) {
-                    closePanel();
-                } else {
-                    setView(lastMainView); // Minimize player
-                }
+                setView(lastMainView); // Minimize player
             });
         }
     } catch (error) {
